@@ -1805,7 +1805,7 @@ function WatchlistPane({ watchlist, onRemove, onRescan }) {
 /* ─────────────────────────────────────────────
    ROOT APP
 ───────────────────────────────────────────── */
-export default function App() {
+function App() {
   const [page, setPage] = useState("landing");
   const [address, setAddress] = useState("");
   const [addrInfo, setAddrInfo] = useState(null);
@@ -1907,3 +1907,5 @@ export default function App() {
     </>
   );
 }
+
+ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(App));
