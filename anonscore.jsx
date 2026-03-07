@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+const { useState, useEffect, useCallback, useRef, useMemo } = React;
 
 /* ─────────────────────────────────────────────
    GLOBAL CSS — dark + violet
