@@ -1271,11 +1271,11 @@ function AiAssistant({ checks, recommendations, score, grade, onClose }) {
           <div style={{ width: 28, height: 28, background: T.cyan + "22", border: `1px solid ${T.cyan}44`, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14 }}>✦</div>
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: 13, fontWeight: 700, color: T.text }}>Privacy Assistant</div>
-            <div style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim, letterSpacing: 1 }}>Powered by Claude · Address never shared</div>
+            <div style={{ fontFamily: T.mono, fontSize: 9, color: T.textMid, letterSpacing: 1, whiteSpace: "nowrap" }}>Powered by Claude · Address never shared</div>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             {!exhausted && !rateLimited && (
-              <span style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim }}>
+              <span style={{ fontFamily: T.mono, fontSize: 9, color: T.textMid, whiteSpace: "nowrap" }}>
                 {MAX_MSGS - msgCount} msg{MAX_MSGS - msgCount !== 1 ? "s" : ""} left
               </span>
             )}
