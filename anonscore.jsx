@@ -375,6 +375,90 @@ const fmt = {
   addr: a => a === "DEMO" ? "Demo Wallet" : a ? `${a.slice(0,10)}…${a.slice(-6)}` : "—",
 };
 
+/* ─────────────────────────────────────────────
+   PLAIN-ENGLISH TRANSLATIONS
+   Used when simpleMode is enabled on the dashboard
+───────────────────────────────────────────── */
+const SIMPLE = {
+  checks: {
+    reuse: {
+      name: "Same Address Used Multiple Times",
+      fail_detail: "Every time you reuse an address, it's like telling the world 'these transactions are all mine.' Anyone can click your address on a public tracker and see everything.",
+      warn_detail: "You've used this address more than once. Get a fresh address from your wallet next time you receive Bitcoin — it takes one tap.",
+      pass_detail: "Great — this address was only used once, so your transactions aren't linked together.",
+    },
+    dust: {
+      name: "Tiny Tracking Coins",
+      fail_detail: "Companies that track Bitcoin sent you microscopic amounts to tag your wallet. If you spend them, they can follow where your money goes. Freeze them — they're traps.",
+      warn_detail: "A tiny amount was sent to your address. It might be a tracking beacon. Don't spend it — just ignore it.",
+      pass_detail: "No tracking coins found. You're clean.",
+    },
+    round: {
+      name: "Round Withdrawal Amounts",
+      fail_detail: "You withdrew a nice round number like 0.1 BTC. Bitcoin trackers use this to identify withdrawals from exchanges. Next time, withdraw 0.10743 BTC instead of 0.1.",
+      warn_detail: "One round amount spotted. Minor issue — just use odd amounts when withdrawing next time.",
+      pass_detail: "Your amounts are non-round — harder to fingerprint.",
+    },
+    cj: {
+      name: "Privacy Mixing",
+      fail_detail: "Your full transaction history is visible to anyone. Privacy mixing blends your coins with others in a single transaction so no one can tell which coins are yours.",
+      warn_detail: "You've mixed your coins once. More rounds make it much harder to trace.",
+      pass_detail: "You've used privacy mixing — this breaks the trail of your transactions. Well done.",
+    },
+    cons: {
+      name: "Combining Coins from Different Sources",
+      fail_detail: "You combined coins that came from different places (like an exchange and a peer-to-peer trade). This links those two separate histories together — permanently, on-chain.",
+      warn_detail: "One instance of combining different coins. Avoid mixing exchange coins with privately-bought coins.",
+      pass_detail: "Your coins from different sources are kept separate.",
+    },
+    utxo_n: {
+      name: "Number of Coin Pieces",
+      fail_detail: "You have a lot of small coin pieces in your wallet. This creates pressure to combine them all together, which links your transaction history.",
+      warn_detail: "Slightly high number of coin pieces. No urgent action needed.",
+      pass_detail: "Your wallet has a healthy number of coin pieces.",
+    },
+    fee: {
+      name: "Transaction Fee Pattern",
+      warn_detail: "You always pay the same fee amount. Bitcoin trackers can use this to identify which wallet app you use. Just vary it a little each time.",
+      pass_detail: "Your fees vary — no wallet fingerprint detected.",
+    },
+    change: {
+      name: "Change Sent Back to Same Address",
+      fail_detail: "When you sent Bitcoin, your leftover change went back to the same address. This tells anyone watching exactly how much Bitcoin you still have.",
+      pass_detail: "Your change goes to fresh addresses each time. Good practice.",
+    },
+    conc: {
+      name: "All Bitcoin in One Chunk",
+      warn_detail: "Almost all your Bitcoin is in a single coin piece. Every time you send any amount, the person receiving it can see roughly how much total Bitcoin you own.",
+      pass_detail: "Your balance is spread across multiple coin pieces.",
+    },
+    script: {
+      name: "Mixed Address Formats",
+      warn_detail: "You're using old and new Bitcoin address formats together. Trackers can use this pattern to link your transactions.",
+      pass_detail: "You're using a consistent address format.",
+    },
+  },
+  recs: {
+    cj:      { action: "Mix your coins for privacy",          plain: "Privacy mixing pools your Bitcoin with other people in one transaction, so no one can tell whose coins are whose. It's the single most powerful thing you can do." },
+    reuse:   { action: "Use a fresh address every time",      plain: "Your wallet can make unlimited new addresses for free. Tap 'Receive' and get a new one every time someone sends you Bitcoin. Never reuse an old one." },
+    lightning:{ action: "Pay small amounts over Lightning",   plain: "Lightning lets you send Bitcoin instantly without any record on the public blockchain. Perfect for everyday spending — like cash, but digital." },
+    cons:    { action: "Keep your coins separate",            plain: "Don't mix coins from your exchange with coins you bought privately. Use separate wallets, and never send between them directly." },
+    dust:    { action: "Freeze your tracking coins",          plain: "Find those tiny amounts in your wallet and mark them as 'frozen' or 'do not spend.' They're traps — spending them tags your entire wallet." },
+    round:   { action: "Withdraw odd amounts from exchanges", plain: "Instead of withdrawing exactly 0.1 BTC, withdraw 0.10743. Round numbers are a dead giveaway that coins came from an exchange." },
+    change:  { action: "Make sure change goes to new addresses", plain: "When you send Bitcoin, your leftover change should go to a brand new address — not back to one you've used before. Most modern wallets do this automatically." },
+    node:    { action: "Connect to your own Bitcoin server",  plain: "When you look up your wallet, a public server sees your address and your IP address. Running your own server means only you see your own lookups." },
+    fee:     { action: "Vary how much you pay in fees",       plain: "Paying the exact same fee every time lets trackers identify your wallet app. Just change it by a little each time you send." },
+    conc:    { action: "Spread your Bitcoin across pieces",   plain: "Having all your Bitcoin in one chunk means every transaction reveals your total holdings. Split it into smaller pieces using privacy mixing or manual sends." },
+  },
+  grades: {
+    A: "Very Private",
+    B: "Mostly Private",
+    C: "Moderate Risk",
+    D: "High Risk",
+    F: "Fully Traceable",
+  },
+};
+
 function isValidBitcoinAddress(addr) {
   if (!addr || addr.length < 26 || addr.length > 90) return false;
   return /^(bc1|[13])[a-zA-HJ-NP-Z0-9]{25,87}$/.test(addr);
@@ -539,9 +623,14 @@ function ShareCard({ score, grade, issueCount, address, onClose }) {
   const [didCopy, setDidCopy] = useState(false);
   const [nostrSent, setNostrSent] = useState(false);
   const shareText = `My Bitcoin privacy score: Grade ${grade} (${score}/100)\n${issueCount} issue${issueCount !== 1 ? "s" : ""} found.\nCheck yours free → anonscore.com`;
+  const xText = `My Bitcoin privacy score: Grade ${grade} (${score}/100) — ${issueCount} issue${issueCount !== 1 ? "s" : ""} found.\n\nMost wallets score 38/100. Check yours free 👇\nanonscore.com`;
   const badgeMd = `\`Privacy: ${score}/100 · Grade ${grade}\` — [AnonScore](https://anonscore.com)`;
   const nostrNote = `🔒 Bitcoin privacy score: Grade ${grade} (${score}/100)\n\n${issueCount} issue${issueCount !== 1 ? "s" : ""} detected via AnonScore — a free open-source tool that runs 10 heuristics against your on-chain history.\n\nMost wallets score 38/100. How does yours compare?\n\nhttps://anonscore.com\n\n#Bitcoin #Privacy`;
   const copy = (text) => { navigator.clipboard?.writeText(text).catch(()=>{}); setDidCopy(true); setTimeout(()=>setDidCopy(false),2000); };
+  const shareToX = () => {
+    const url = `https://x.com/intent/tweet?text=${encodeURIComponent(xText)}`;
+    window.open(url, "_blank", "noopener,noreferrer");
+  };
   const shareToNostr = async () => {
     if (window.nostr) {
       try { await window.nostr.signEvent({kind:1,content:nostrNote,tags:[],created_at:Math.floor(Date.now()/1000)}); setNostrSent(true); setTimeout(()=>setNostrSent(false),3000); return; } catch {}
@@ -570,7 +659,7 @@ function ShareCard({ score, grade, issueCount, address, onClose }) {
           </div>
         </div>
         <div style={{ display: "flex", gap: 6, marginBottom: 14 }}>
-          {[["share","📤 Share"],["nostr","🟣 Nostr"],["badge","🏷 Badge"]].map(([m,label]) => (
+          {[["share","📤 Copy"],["x","𝕏 Post"],["nostr","🟣 Nostr"],["badge","🏷 Badge"]].map(([m,label]) => (
             <button key={m} onClick={()=>setMode(m)} style={{ flex:1, padding:"7px 4px", background:mode===m?T.cyanLo:"transparent", border:`1.5px solid ${mode===m?T.cyan:T.border}`, borderRadius:8, color:mode===m?T.cyan:T.textMid, fontSize:11, cursor:"pointer", fontFamily:T.sans, transition:"all .15s" }}>{label}</button>
           ))}
         </div>
@@ -580,6 +669,18 @@ function ShareCard({ score, grade, issueCount, address, onClose }) {
           </div>
           <div style={{ display:"flex", gap:10 }}>
             <button onClick={()=>copy(shareText)} style={{ flex:1, padding:"12px", background:didCopy?T.green:T.cyan, border:"none", borderRadius:10, color:T.bg, fontFamily:T.sans, fontWeight:700, fontSize:14, cursor:"pointer", transition:"background .2s" }}>{didCopy?"✓ Copied!":"Copy to share"}</button>
+            <button onClick={onClose} style={{ padding:"12px 14px", background:"transparent", border:`1px solid ${T.border}`, borderRadius:10, color:T.textMid, cursor:"pointer" }}>✕</button>
+          </div>
+        </>}
+        {mode==="x" && <>
+          <div style={{ background:T.surface, borderRadius:10, padding:14, marginBottom:14, border:`1px solid ${T.borderLo}` }}>
+            <pre style={{ fontFamily:T.sans, fontSize:13, color:T.textMid, lineHeight:1.6, whiteSpace:"pre-wrap" }}>{xText}</pre>
+          </div>
+          <div style={{ display:"flex", gap:10 }}>
+            <button onClick={shareToX} style={{ flex:1, padding:"12px", background:"#000", border:"none", borderRadius:10, color:"#fff", fontFamily:T.sans, fontWeight:700, fontSize:14, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", gap:8 }}>
+              <span style={{ fontSize:16 }}>𝕏</span> Post on X
+            </button>
+            <button onClick={()=>copy(xText)} style={{ padding:"12px 14px", background:"transparent", border:`1px solid ${T.border}`, borderRadius:10, color:T.textMid, cursor:"pointer", fontSize:12 }}>{didCopy?"✓":"Copy"}</button>
             <button onClick={onClose} style={{ padding:"12px 14px", background:"transparent", border:`1px solid ${T.border}`, borderRadius:10, color:T.textMid, cursor:"pointer" }}>✕</button>
           </div>
         </>}
@@ -646,7 +747,7 @@ function TrustBox() {
             ))}
           </div>
           <div style={{ marginTop: 12, paddingTop: 10, borderTop: `1px solid ${T.borderLo}` }}>
-            <a href="https://github.com/anonscore/anonscore" target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, color: T.cyan, textDecoration: "none", fontFamily: T.mono }}>Don't take our word for it — audit the source on GitHub ↗</a>
+            <a href="https://github.com/netasset/anonscore" target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, color: T.cyan, textDecoration: "none", fontFamily: T.mono }}>Don't take our word for it — audit the source on GitHub ↗</a>
           </div>
         </div>
       )}
@@ -657,12 +758,12 @@ function TrustBox() {
 /* ─────────────────────────────────────────────
    LANDING PAGE — v4
 ───────────────────────────────────────────── */
-function Landing({ onAnalyze, watchlist, isMobile }) {
+function Landing({ onAnalyze, isMobile }) {
   const [input, setInput] = useState("");
   const [error, setError] = useState("");
   const inputRef = useRef();
 
-  const submit = (val) => {
+  const submit = (val, plain = false) => {
     const v = (val || input).trim();
     if (!v) { setError("Please enter a Bitcoin address."); return; }
     if (!isValidBitcoinAddress(v) && v !== "DEMO") {
@@ -670,7 +771,7 @@ function Landing({ onAnalyze, watchlist, isMobile }) {
       return;
     }
     setError("");
-    onAnalyze(v);
+    onAnalyze(v, plain);
   };
 
   return (
@@ -691,7 +792,7 @@ function Landing({ onAnalyze, watchlist, isMobile }) {
             <span style={{ fontFamily: T.mono, fontSize: 10, color: T.textDim }}>✓ Tor compatible</span>
             <span style={{ color: T.borderLo, margin: "0 4px" }}>|</span>
           </>}
-          <a href="https://github.com/anonscore/anonscore" target="_blank" rel="noopener noreferrer"
+          <a href="https://github.com/netasset/anonscore" target="_blank" rel="noopener noreferrer"
             style={{ display: "flex", alignItems: "center", gap: 5, padding: "5px 10px", background: T.surface, border: `1px solid ${T.border}`, borderRadius: 7, color: T.textMid, textDecoration: "none", fontSize: 11, fontFamily: T.mono, transition: "border-color .15s" }}
             onMouseOver={e => e.currentTarget.style.borderColor = T.cyan}
             onMouseOut={e => e.currentTarget.style.borderColor = T.border}>
@@ -704,126 +805,128 @@ function Landing({ onAnalyze, watchlist, isMobile }) {
       {/* ── HERO ── */}
       <div style={{ position: "relative", overflow: "hidden" }}>
         <div className="dot-grid" style={{ position: "absolute", inset: 0, pointerEvents: "none" }} />
-        <div style={{ position: "absolute", top: "10%", left: "-10%", width: 520, height: 520, borderRadius: "50%", background: "radial-gradient(circle,#22D3EE22 0%,transparent 70%)", animation: "orb 8s ease-in-out infinite", pointerEvents: "none", filter: "blur(2px)" }} />
-        <div style={{ position: "absolute", bottom: "5%", right: "-5%", width: 380, height: 380, borderRadius: "50%", background: "radial-gradient(circle,#22D3EE0f 0%,transparent 70%)", animation: "orb 11s ease-in-out infinite reverse", pointerEvents: "none" }} />
+        <div style={{ position: "absolute", top: "10%", left: "-10%", width: 520, height: 520, borderRadius: "50%", background: "radial-gradient(circle,#22D3EE18 0%,transparent 70%)", animation: "orb 8s ease-in-out infinite", pointerEvents: "none", filter: "blur(2px)" }} />
 
-        <section style={{ position: "relative", padding: isMobile ? "48px 20px 44px" : "72px 48px 60px", maxWidth: 1100, margin: "0 auto", width: "100%", display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1.05fr 0.95fr", gap: isMobile ? 40 : 60, alignItems: "start" }}>
-          <div>
-            {/* Eyebrow */}
-            <div style={{ fontFamily: T.mono, fontSize: 10, letterSpacing: 2.5, marginBottom: 14, animation: "fadeUp .5s ease both", display: "flex", gap: 8, alignItems: "center" }}>
-              <span style={{ color: T.btc }}>₿</span>
-              <span style={{ color: T.cyan }}>FREE BITCOIN PRIVACY AUDIT — 60 SECONDS</span>
+        <section style={{ position: "relative", padding: isMobile ? "56px 20px 48px" : "80px 48px 64px", maxWidth: 860, margin: "0 auto", width: "100%", textAlign: "center" }}>
+          {/* Eyebrow */}
+          <div style={{ fontFamily: T.mono, fontSize: 10, letterSpacing: 2.5, marginBottom: 18, animation: "fadeUp .5s ease both", display: "flex", gap: 8, alignItems: "center", justifyContent: "center" }}>
+            <span style={{ color: T.btc }}>₿</span>
+            <span style={{ color: T.cyan }}>FREE BITCOIN PRIVACY AUDIT</span>
+          </div>
+
+          {/* Headline */}
+          <h1 style={{ fontFamily: T.serif, fontSize: isMobile ? 38 : 56, lineHeight: 1.06, color: T.text, marginBottom: 20, animation: "fadeUp .5s ease .08s both", fontWeight: 400 }}>
+            Is your Bitcoin<br />wallet leaking?<br /><em style={{ color: T.cyan }}>Find out in 60 seconds.</em>
+          </h1>
+
+          <p style={{ fontSize: isMobile ? 15 : 18, color: T.textMid, lineHeight: 1.7, marginBottom: 32, fontWeight: 300, animation: "fadeUp .5s ease .14s both", maxWidth: 560, margin: "0 auto 32px" }}>
+            Paste any Bitcoin address. Get a privacy score, see every issue, and get a ranked plan to fix it — free, open source, nothing stored.
+          </p>
+
+          {/* Score spectrum — slim, inline */}
+          <div style={{ maxWidth: 480, margin: "0 auto 28px", animation: "fadeUp .5s ease .16s both" }}>
+            <div style={{ position: "relative", height: 6, borderRadius: 6, background: `linear-gradient(90deg, ${T.red} 0%, ${T.btc} 40%, ${T.amber} 60%, ${T.green} 100%)`, marginBottom: 6 }}>
+              <div style={{ position: "absolute", top: "50%", left: "38%", transform: "translate(-50%,-50%)", width: 12, height: 12, borderRadius: "50%", background: T.bg, border: `2px solid ${T.btc}`, boxShadow: `0 0 8px ${T.btc}` }} />
             </div>
-
-            {/* Headline — clear to non-technical visitors */}
-            <h1 style={{ fontFamily: T.serif, fontSize: isMobile ? 36 : 50, lineHeight: 1.08, color: T.text, marginBottom: 18, animation: "fadeUp .5s ease .08s both", fontWeight: 400 }}>
-              Is your Bitcoin<br />wallet leaking?<br /><em style={{ color: T.cyan }}>Find out in 60 seconds.</em>
-            </h1>
-
-            <p style={{ fontSize: isMobile ? 15 : 17, color: T.textMid, lineHeight: 1.75, marginBottom: 28, fontWeight: 300, animation: "fadeUp .5s ease .14s both" }}>
-              Paste any Bitcoin address. We run 10 checks — the same patterns blockchain surveillance firms use — and show you exactly how exposed you are, with a ranked plan to fix it.
-            </p>
-
-            {/* Score spectrum — moved up from bottom of page */}
-            <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 12, padding: "14px 18px", marginBottom: 22, animation: "fadeUp .5s ease .16s both" }}>
-              <div style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim, letterSpacing: 2, marginBottom: 10 }}>PRIVACY SCORE SPECTRUM</div>
-              <div style={{ position: "relative", height: 8, borderRadius: 6, background: `linear-gradient(90deg, ${T.red} 0%, ${T.btc} 40%, ${T.amber} 60%, ${T.green} 100%)`, marginBottom: 8 }}>
-                <div style={{ position: "absolute", top: "50%", left: "38%", transform: "translate(-50%,-50%)", width: 13, height: 13, borderRadius: "50%", background: T.bg, border: `2px solid ${T.btc}`, boxShadow: `0 0 8px ${T.btc}` }} />
-              </div>
-              <div style={{ display: "flex", justifyContent: "space-between" }}>
-                <span style={{ fontFamily: T.mono, fontSize: 9, color: T.red }}>0 · Fully traceable</span>
-                <span style={{ fontFamily: T.mono, fontSize: 9, color: T.btc }}>← avg wallet: 38</span>
-                <span style={{ fontFamily: T.mono, fontSize: 9, color: T.green }}>100 · Invisible</span>
-              </div>
-            </div>
-
-            {/* CTAs — demo PRIMARY, address secondary */}
-            <div style={{ display: "flex", flexDirection: "column", gap: 10, animation: "fadeUp .5s ease .22s both" }}>
-              {/* Primary: demo — lowest friction, no commitment */}
-              <button onClick={() => onAnalyze("DEMO")}
-                style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10, background: T.cyan, border: "none", borderRadius: 12, padding: "17px 28px", color: T.bg, fontFamily: T.sans, fontSize: 16, fontWeight: 700, cursor: "pointer", transition: "all .18s", boxShadow: `0 4px 24px ${T.cyanMid}` }}
-                onMouseOver={e => e.currentTarget.style.opacity = ".88"}
-                onMouseOut={e => e.currentTarget.style.opacity = "1"}>
-                ▶ See a sample scan — no address needed
-              </button>
-
-              {/* Divider */}
-              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <div style={{ flex: 1, height: 1, background: T.borderLo }} />
-                <span style={{ fontFamily: T.mono, fontSize: 10, color: T.textDim }}>or scan your own</span>
-                <div style={{ flex: 1, height: 1, background: T.borderLo }} />
-              </div>
-
-              {/* Secondary: address input */}
-              <div>
-                <div style={{ display: "flex", gap: 8 }}>
-                  <input ref={inputRef} value={input} onChange={e => { setInput(e.target.value); setError(""); }}
-                    onKeyDown={e => e.key === "Enter" && submit()}
-                    placeholder="bc1q… or 1… or 3…"
-                    style={{ flex: 1, background: T.surface, border: `1.5px solid ${error ? T.red : T.border}`, borderRadius: 10, padding: "13px 16px", color: T.text, fontFamily: T.mono, fontSize: 13, outline: "none", transition: "border .18s", minWidth: 0 }}
-                    onFocus={e => e.target.style.borderColor = T.cyan}
-                    onBlur={e => e.target.style.borderColor = error ? T.red : T.border} />
-                  <button onClick={() => submit()} style={{ background: T.surface, border: `1.5px solid ${T.border}`, borderRadius: 10, padding: "13px 18px", color: T.text, fontFamily: T.sans, fontWeight: 600, fontSize: 14, cursor: "pointer", whiteSpace: "nowrap", transition: "all .15s" }}
-                    onMouseOver={e => e.currentTarget.style.borderColor = T.cyan}
-                    onMouseOut={e => e.currentTarget.style.borderColor = T.border}>
-                    Analyze →
-                  </button>
-                </div>
-                {error && <div style={{ fontSize: 12, color: T.red, marginTop: 6, animation: "slideDown .2s ease" }}>⚠ {error}</div>}
-              </div>
-
-              {/* Single, confident trust line — not repeated */}
-              <div style={{ display: "flex", alignItems: "center", gap: 6, paddingLeft: 2 }}>
-                <a href="https://github.com/anonscore/anonscore" target="_blank" rel="noopener noreferrer"
-                  style={{ fontFamily: T.mono, fontSize: 10, color: T.cyan, textDecoration: "none" }}>Open source</a>
-                <span style={{ color: T.textDim, fontSize: 10 }}>· read-only blockchain access · scoring runs in your browser</span>
-              </div>
+            <div style={{ display: "flex", justifyContent: "space-between" }}>
+              <span style={{ fontFamily: T.mono, fontSize: 9, color: T.red }}>0 · Fully traceable</span>
+              <span style={{ fontFamily: T.mono, fontSize: 9, color: T.btc }}>avg wallet: 38</span>
+              <span style={{ fontFamily: T.mono, fontSize: 9, color: T.green }}>100 · Invisible</span>
             </div>
           </div>
 
-          {/* Right: rotating demo preview */}
-          <div style={{ animation: "fadeUp .6s ease .15s both", display: "flex", flexDirection: "column", gap: 14 }}>
-            <DemoPreview />
-            {/* Transaction graph */}
-            {!isMobile && (
-              <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: 14, padding: "18px 22px" }}>
-                <div style={{ fontFamily: T.mono, fontSize: 9, color: T.cyan, letterSpacing: 1.5, marginBottom: 12 }}>TRANSACTION GRAPH — WHAT ANALYSTS SEE</div>
-                <svg width="100%" height="100" viewBox="0 0 320 100" fill="none" preserveAspectRatio="xMidYMid meet">
-                  {[
-                    [20,50,80,20,"#22D3EE55"],[20,50,80,50,"#22D3EE55"],[20,50,80,80,"#f8514933"],
-                    [80,20,160,10,"#22D3EE30"],[80,20,160,35,"#22D3EE40"],[80,50,160,35,"#22D3EE40"],
-                    [80,50,160,65,"#f8514933"],[80,80,160,65,"#f8514933"],[80,80,160,90,"#f8514933"],
-                    [160,35,240,25,"#3fb95033"],[160,35,240,50,"#22D3EE40"],[160,65,240,50,"#22D3EE40"],
-                    [160,65,240,75,"#f8514933"],[240,50,300,40,"#3fb95044"],[240,50,300,62,"#3fb95044"],
-                  ].map(([x1,y1,x2,y2,stroke],i) => (
-                    <line key={i} x1={x1} y1={y1} x2={x2} y2={y2} stroke={stroke} strokeWidth="1.5" strokeDasharray="5 3"
-                      style={{strokeDashoffset:200, animation:`lineIn 1s ease ${i*.06}s both`}} />
-                  ))}
-                  {[
-                    [20,50,"#22D3EE",5,"ROOT"],[80,20,"#22D3EE",4,""],[80,50,"#22D3EE",4,""],[80,80,"#f85149",4,"DUST"],
-                    [160,10,"#58a6ff",3,""],[160,35,"#22D3EE",3,""],[160,65,"#f85149",3,""],[160,90,"#f85149",3,""],
-                    [240,25,"#3fb950",3,""],[240,50,"#22D3EE",3,""],[240,75,"#f85149",3,""],
-                    [300,40,"#3fb950",2,""],[300,62,"#3fb950",2,""],
-                  ].map(([cx,cy,col,r,label],i) => (
-                    <g key={i}>
-                      <circle cx={cx} cy={cy} r={r+3} fill={col} opacity=".07" />
-                      <circle cx={cx} cy={cy} r={r} fill={col} opacity=".85" style={{animation:`nodePulse 2.5s ease ${i*.2}s infinite`}} />
-                      {label && <text x={cx} y={cy-r-4} textAnchor="middle" fill={col} fontSize="6" fontFamily="JetBrains Mono, monospace" opacity=".7">{label}</text>}
-                    </g>
-                  ))}
-                </svg>
-                <div style={{ fontSize: 11, color: T.textDim, marginTop: 8, lineHeight: 1.5 }}>Every node is an address. Every edge is a permanent traceable link. Red nodes = dust attacks and risky consolidations.</div>
+          {/* CTAs */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 10, maxWidth: 480, margin: "0 auto", animation: "fadeUp .5s ease .22s both" }}>
+            <div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <input ref={inputRef} value={input} onChange={e => { setInput(e.target.value); setError(""); }}
+                  onKeyDown={e => e.key === "Enter" && submit(null, true)}
+                  placeholder="bc1q… or 1… or 3…"
+                  style={{ flex: 1, background: T.surface, border: `1.5px solid ${error ? T.red : T.border}`, borderRadius: 10, padding: "13px 16px", color: T.text, fontFamily: T.mono, fontSize: 13, outline: "none", transition: "border .18s", minWidth: 0 }}
+                  onFocus={e => e.target.style.borderColor = T.cyan}
+                  onBlur={e => e.target.style.borderColor = error ? T.red : T.border} />
+                <button onClick={() => submit(null, true)} style={{ background: T.btc, border: `1.5px solid ${T.btc}`, borderRadius: 10, padding: "13px 20px", color: T.bg, fontFamily: T.sans, fontWeight: 700, fontSize: 14, cursor: "pointer", whiteSpace: "nowrap", transition: "all .15s" }}
+                  onMouseOver={e => e.currentTarget.style.opacity = ".88"}
+                  onMouseOut={e => e.currentTarget.style.opacity = "1"}>
+                  Analyze →
+                </button>
               </div>
-            )}
+              <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 5 }}>
+                <button onClick={() => submit(null, false)} style={{ background: "none", border: "none", cursor: "pointer", fontFamily: T.mono, fontSize: 10, color: T.textDim, padding: 0 }}
+                  onMouseOver={e => e.currentTarget.style.color = T.textMid}
+                  onMouseOut={e => e.currentTarget.style.color = T.textDim}>
+                  prefer technical mode →
+                </button>
+              </div>
+              {error && <div style={{ fontSize: 12, color: T.red, marginTop: 6, animation: "slideDown .2s ease" }}>⚠ {error}</div>}
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <div style={{ flex: 1, height: 1, background: T.borderLo }} />
+              <span style={{ fontFamily: T.mono, fontSize: 10, color: T.textDim }}>or try a sample</span>
+              <div style={{ flex: 1, height: 1, background: T.borderLo }} />
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={() => onAnalyze("DEMO", false)}
+                style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, background: T.surface, border: `1.5px solid ${T.border}`, borderRadius: 12, padding: "11px 16px", color: T.textMid, fontFamily: T.sans, fontSize: 13, fontWeight: 600, cursor: "pointer", transition: "all .18s" }}
+                onMouseOver={e => e.currentTarget.style.borderColor = T.cyan}
+                onMouseOut={e => e.currentTarget.style.borderColor = T.border}>
+                ▶ Sample scan
+              </button>
+              <div style={{ flex: 2, display: "flex", flexDirection: "column", gap: 4 }}>
+                <button onClick={() => onAnalyze("DEMO", true)}
+                  style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, background: T.cyan, border: "none", borderRadius: 12, padding: "11px 16px", color: T.bg, fontFamily: T.sans, fontSize: 13, fontWeight: 700, cursor: "pointer", transition: "all .18s", boxShadow: `0 2px 14px ${T.cyanMid}` }}
+                  onMouseOver={e => e.currentTarget.style.opacity = ".88"}
+                  onMouseOut={e => e.currentTarget.style.opacity = "1"}>
+                  💬 Sample in Plain English
+                </button>
+                <div style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim, textAlign: "center" }}>no jargon — good if you're new to Bitcoin</div>
+              </div>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+              <a href="https://github.com/netasset/anonscore" target="_blank" rel="noopener noreferrer"
+                style={{ fontFamily: T.mono, fontSize: 10, color: T.cyan, textDecoration: "none" }}>Open source</a>
+              <span style={{ color: T.textDim, fontSize: 10 }}>· read-only · nothing stored</span>
+            </div>
           </div>
         </section>
       </div>{/* end hero wrapper */}
+
+      {/* ── HOW IT WORKS — compact strip ── */}
+      <div style={{ borderTop: `1px solid ${T.border}`, borderBottom: `1px solid ${T.border}`, background: T.surface, padding: isMobile ? "28px 20px" : "32px 48px" }}>
+        <div style={{ maxWidth: 860, margin: "0 auto" }}>
+          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(3, 1fr)", gap: isMobile ? 20 : 0 }}>
+            {[
+              { n:"01", icon:"📋", title:"Paste an address", desc:"Any Bitcoin address — yours or anyone's. No account, no email, nothing saved." },
+              { n:"02", icon:"🔍", title:"We run 10 checks",  desc:"We scan the public blockchain for the same patterns surveillance firms use — read-only, in your browser." },
+              { n:"03", icon:"🎯", title:"Score + fix plan",  desc:"A score from 0–100, every issue explained, fixes ranked by impact. Hit 💬 Plain English if you want jargon-free." },
+            ].map((s, i) => (
+              <div key={i} style={{ display: "flex", gap: 14, alignItems: "flex-start", padding: isMobile ? 0 : "0 28px", borderLeft: !isMobile && i > 0 ? `1px solid ${T.border}` : "none" }}>
+                <div style={{ fontSize: 22, flexShrink: 0, marginTop: 2 }}>{s.icon}</div>
+                <div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                    <span style={{ fontFamily: T.mono, fontSize: 9, color: T.cyan }}>{s.n}</span>
+                    <span style={{ fontSize: 14, fontWeight: 600, color: T.text }}>{s.title}</span>
+                  </div>
+                  <div style={{ fontSize: 13, color: T.textMid, lineHeight: 1.6 }}>{s.desc}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* ── DEMO PREVIEW — first scroll reveal ── */}
+      {!isMobile && (
+        <div style={{ padding: "48px 48px 0", maxWidth: 860, margin: "0 auto", width: "100%" }}>
+          <div style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim, letterSpacing: 2, marginBottom: 14, textAlign: "center" }}>LIVE EXAMPLE — WHAT YOUR RESULTS LOOK LIKE</div>
+          <DemoPreview />
+        </div>
+      )}
 
       <Divider />
 
       {/* ── CITED STATS ── */}
       <section style={{ background: T.surface, padding: isMobile ? "48px 20px" : "64px 48px", position: "relative", overflow: "hidden" }}>
-        {/* bg texture */}
         <div className="dot-grid" style={{ position: "absolute", inset: 0, opacity: .4, pointerEvents: "none" }} />
         <div style={{ maxWidth: 900, margin: "0 auto", position: "relative" }}>
           <div style={{ fontFamily: T.mono, fontSize: 10, color: T.textDim, letterSpacing: 2.5, textAlign: "center", marginBottom: 36 }}>BY THE NUMBERS</div>
@@ -833,11 +936,9 @@ function Landing({ onAnalyze, watchlist, isMobile }) {
               const col = barColors[i];
               return (
                 <div key={i} style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 14, padding: "22px 18px", animation: `fadeUp .4s ease ${i * .07}s both`, position: "relative", overflow: "hidden" }}>
-                  {/* Accent bar top */}
                   <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 2, background: col, opacity: .7 }} />
                   <div style={{ fontFamily: T.serif, fontSize: isMobile ? 30 : 36, color: col, lineHeight: 1, marginBottom: 10 }}>{f.stat}</div>
                   <div style={{ fontSize: 13, color: T.textMid, lineHeight: 1.55, marginBottom: 12 }}>{f.desc}</div>
-                  {/* Mini progress bar */}
                   <div style={{ height: 3, background: T.surface, borderRadius: 4, marginBottom: 8, overflow: "hidden" }}>
                     <div style={{ height: "100%", width: `${barWidths[i]}%`, background: col, borderRadius: 4, opacity: .6 }} />
                   </div>
@@ -845,44 +946,6 @@ function Landing({ onAnalyze, watchlist, isMobile }) {
                 </div>
               );
             })}
-          </div>
-        </div>
-      </section>
-
-      <Divider />
-
-      {/* ── HOW IT WORKS ── */}
-      <section style={{ padding: isMobile ? "56px 20px" : "72px 48px" }}>
-        <div style={{ maxWidth: 900, margin: "0 auto" }}>
-          <div style={{ textAlign: "center", marginBottom: 44 }}>
-            <div style={{ fontFamily: T.mono, fontSize: 10, color: T.textDim, letterSpacing: 2.5, marginBottom: 12 }}>HOW IT WORKS</div>
-            <h2 style={{ fontFamily: T.serif, fontSize: isMobile ? 30 : 42, color: T.text, fontWeight: 400 }}>Three steps. Sixty seconds.</h2>
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(3, 1fr)", gap: isMobile ? 12 : 0, position: "relative", alignItems: "stretch" }}>
-            {[
-              { n:"01", title:"Paste your address",      desc:"Any Bitcoin address: bc1…, 1…, or 3… No account. No email. Nothing saved.", icon:"📋" },
-              { n:"02", title:"We run 10 checks",        desc:"We scan the public blockchain for the same patterns blockchain surveillance firms use — read-only, in your browser.", icon:"🔍" },
-              { n:"03", title:"Score + ranked fix plan",  desc:"A score from 0–100, plain-English breakdown of every issue, and a ranked action list. Most impactful fixes first.", icon:"🎯" },
-            ].map((s, i) => (
-              <div key={i} style={{
-                background: T.surface,
-                border: `1px solid ${T.border}`,
-                borderRight: !isMobile && i < 2 ? "none" : `1px solid ${T.border}`,
-                borderRadius: isMobile ? 16 : i === 0 ? "16px 0 0 16px" : i === 2 ? "0 16px 16px 0" : 0,
-                padding: 28,
-                position: "relative",
-                overflow: "hidden",
-              }}>
-                {/* Step connector arrow */}
-                {!isMobile && i < 2 && (
-                  <div style={{ position: "absolute", right: -10, top: "50%", transform: "translateY(-50%)", width: 20, height: 20, background: T.surface, border: `1px solid ${T.border}`, borderLeft: "none", borderBottom: "none", rotate: "45deg", zIndex: 2 }} />
-                )}
-                <div style={{ fontFamily: T.mono, fontSize: 48, fontWeight: 700, color: T.cyanMid, position: "absolute", top: 8, right: 14, lineHeight: 1 }}>{s.n}</div>
-                <div style={{ fontSize: 26, marginBottom: 14 }}>{s.icon}</div>
-                <div style={{ fontFamily: T.serif, fontSize: 20, color: T.text, marginBottom: 10, fontWeight: 400 }}>{s.title}</div>
-                <div style={{ fontSize: 14, color: T.textMid, lineHeight: 1.7 }}>{s.desc}</div>
-              </div>
-            ))}
           </div>
         </div>
       </section>
@@ -923,11 +986,17 @@ function Landing({ onAnalyze, watchlist, isMobile }) {
             Free, open source, nothing stored. Takes 60 seconds.
           </p>
           <div style={{ display: "flex", flexDirection: isMobile ? "column" : "row", gap: 10, justifyContent: "center" }}>
-            <button onClick={() => onAnalyze("DEMO")}
+            <button onClick={() => onAnalyze("DEMO", false)}
+              style={{ background: T.surface, border: `1.5px solid ${T.border}`, borderRadius: 12, padding: "15px 28px", color: T.text, fontFamily: T.sans, fontSize: 15, fontWeight: 600, cursor: "pointer", transition: "all .18s" }}
+              onMouseOver={e => e.currentTarget.style.borderColor = T.cyan}
+              onMouseOut={e => e.currentTarget.style.borderColor = T.border}>
+              ▶ Try the demo
+            </button>
+            <button onClick={() => onAnalyze("DEMO", true)}
               style={{ background: T.cyan, border: "none", borderRadius: 12, padding: "15px 28px", color: T.bg, fontFamily: T.sans, fontSize: 15, fontWeight: 700, cursor: "pointer", transition: "all .18s", boxShadow: `0 4px 24px ${T.cyanMid}` }}
               onMouseOver={e => e.currentTarget.style.opacity = ".88"}
               onMouseOut={e => e.currentTarget.style.opacity = "1"}>
-              ▶ Try the demo
+              💬 Try in Plain English
             </button>
             <button onClick={() => inputRef.current?.focus()}
               style={{ background: "transparent", border: `1.5px solid ${T.border}`, borderRadius: 12, padding: "15px 28px", color: T.textMid, fontFamily: T.sans, fontSize: 15, fontWeight: 500, cursor: "pointer", transition: "all .18s" }}
@@ -939,36 +1008,11 @@ function Landing({ onAnalyze, watchlist, isMobile }) {
         </div>
       </section>
 
-      {/* ── RECENT WATCHLIST ── */}
-      {watchlist.length > 0 && (
-        <section style={{ padding: isMobile ? "40px 20px" : "48px 48px", background: T.surface, borderTop: `1px solid ${T.border}` }}>
-          <div style={{ maxWidth: 900, margin: "0 auto" }}>
-            <div style={{ fontFamily: T.mono, fontSize: 10, color: T.textDim, letterSpacing: 2.5, marginBottom: 16 }}>RECENTLY WATCHED</div>
-            <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(2, 1fr)", gap: 12 }}>
-              {watchlist.slice(0, 4).map(w => (
-                <div key={w.address} onClick={() => onAnalyze(w.address)}
-                  style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 12, padding: "16px 18px", cursor: "pointer", display: "flex", gap: 14, alignItems: "center", transition: "all .15s" }}
-                  onMouseEnter={e => e.currentTarget.style.borderColor = T.cyan + "66"}
-                  onMouseLeave={e => e.currentTarget.style.borderColor = T.border}>
-                  <ScoreRing score={w.score} size={48} animate={false} />
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontFamily: T.mono, fontSize: 11, color: T.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{fmt.addr(w.address)}</div>
-                    {w.label && <div style={{ fontSize: 12, color: T.cyan, marginTop: 2 }}>{w.label}</div>}
-                    <div style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim, marginTop: 4 }}>Grade {w.grade} · {fmt.age(w.updatedAt / 1000)}</div>
-                  </div>
-                  <span style={{ color: T.textDim, fontSize: 18 }}>›</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
-      )}
-
       {/* Footer */}
       <footer style={{ borderTop: `1px solid ${T.border}`, padding: isMobile ? "18px 20px" : "16px 48px", display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
           <span style={{ fontFamily: T.display, fontSize: 10, color: T.textDim, letterSpacing: 3 }}>ANONSCORE · MIT</span>
-          <a href="https://github.com/anonscore/anonscore" target="_blank" rel="noopener noreferrer"
+          <a href="https://github.com/netasset/anonscore" target="_blank" rel="noopener noreferrer"
             style={{ fontFamily: T.mono, fontSize: 10, color: T.cyan, textDecoration: "none" }}>GitHub ↗</a>
         </div>
         <span style={{ fontFamily: T.mono, fontSize: 10, color: T.textDim }}>Open source · no cookies · no analytics · Tor compatible</span>
@@ -1133,9 +1177,16 @@ function AiConsentGate({ score, grade, checks, recommendations, onAccept, onDecl
           ))}
         </div>
 
-        <div style={{ fontSize: 12, color: T.textDim, lineHeight: 1.7, marginBottom: 22 }}>
+        <div style={{ fontSize: 12, color: T.textDim, lineHeight: 1.7, marginBottom: 14 }}>
           Anthropic does not train on API data. Each session is independent — no history persists between conversations.{" "}
           <a href="https://www.anthropic.com/privacy" target="_blank" rel="noopener noreferrer" style={{ color: T.cyan, textDecoration: "none" }}>Anthropic privacy policy →</a>
+        </div>
+
+        <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: 12, padding: "12px 16px", marginBottom: 18 }}>
+          <div style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim, letterSpacing: 1.5, marginBottom: 8 }}>USAGE LIMITS</div>
+          <div style={{ fontSize: 12, color: T.textMid, lineHeight: 1.7 }}>
+            <strong style={{ color: T.text }}>5 messages per conversation.</strong> To prevent abuse, a temporary anonymous counter is stored for 24 hours against a hashed version of your IP — never linked to you or your address. Resets daily.
+          </div>
         </div>
 
         <div style={{ display: "flex", gap: 10 }}>
@@ -1157,12 +1208,17 @@ function AiAssistant({ checks, recommendations, score, grade, onClose }) {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [started, setStarted] = useState(false);
+  const [msgCount, setMsgCount] = useState(0); // user messages sent this session
+  const [rateLimited, setRateLimited] = useState(false);
   const bottomRef = useRef(null);
   const inputRef = useRef(null);
 
+  const MAX_MSGS = 5;
+  const WORKER_URL = "https://anonscore-ai.YOUR-SUBDOMAIN.workers.dev"; // ← replace after deploying Worker
+
   const issues = checks.filter(c => c.status !== "pass");
-  // Address intentionally omitted — only analysis results are sent
   const { systemPrompt } = buildAiContext(checks, recommendations, score, grade);
+  const exhausted = msgCount >= MAX_MSGS;
 
   const STARTERS = [
     "How do I freeze dust UTXOs in Sparrow?",
@@ -1173,26 +1229,28 @@ function AiAssistant({ checks, recommendations, score, grade, onClose }) {
 
   const send = async (text) => {
     const msg = text || input.trim();
-    if (!msg || loading) return;
+    if (!msg || loading || exhausted) return;
     setInput("");
     setStarted(true);
+    const newCount = msgCount + 1;
+    setMsgCount(newCount);
     const next = [...messages, { role: "user", content: msg }];
     setMessages(next);
     setLoading(true);
     try {
-      const res = await fetch("https://api.anthropic.com/v1/messages", {
+      const res = await fetch(WORKER_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model: "claude-sonnet-4-20250514",
-          max_tokens: 1000,
-          system: systemPrompt,
-          messages: next,
-        }),
+        body: JSON.stringify({ messages: next, systemPrompt }),
       });
       const data = await res.json();
-      const reply = data.content?.[0]?.text || "Sorry, I couldn't get a response. Try again.";
-      setMessages(m => [...m, { role: "assistant", content: reply }]);
+      if (res.status === 429) {
+        setRateLimited(true);
+        setMessages(m => [...m, { role: "assistant", content: "You've reached the daily limit for the Privacy Assistant. It resets at midnight UTC — come back tomorrow." }]);
+      } else {
+        const reply = data.reply || "Sorry, I couldn't get a response. Try again.";
+        setMessages(m => [...m, { role: "assistant", content: reply }]);
+      }
     } catch {
       setMessages(m => [...m, { role: "assistant", content: "Connection error. Please try again." }]);
     }
@@ -1202,6 +1260,8 @@ function AiAssistant({ checks, recommendations, score, grade, onClose }) {
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, loading]);
+
+  const inputDisabled = exhausted || rateLimited || loading;
 
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 900, display: "flex", alignItems: "flex-end", justifyContent: "flex-end", padding: 16, pointerEvents: "none" }}>
@@ -1213,7 +1273,14 @@ function AiAssistant({ checks, recommendations, score, grade, onClose }) {
             <div style={{ fontSize: 13, fontWeight: 700, color: T.text }}>Privacy Assistant</div>
             <div style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim, letterSpacing: 1 }}>Powered by Claude · Address never shared</div>
           </div>
-          <button onClick={onClose} style={{ background: "transparent", border: "none", color: T.textDim, fontSize: 18, cursor: "pointer", lineHeight: 1 }}>✕</button>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            {!exhausted && !rateLimited && (
+              <span style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim }}>
+                {MAX_MSGS - msgCount} msg{MAX_MSGS - msgCount !== 1 ? "s" : ""} left
+              </span>
+            )}
+            <button onClick={onClose} style={{ background: "transparent", border: "none", color: T.textDim, fontSize: 18, cursor: "pointer", lineHeight: 1 }}>✕</button>
+          </div>
         </div>
 
         {/* Messages */}
@@ -1253,6 +1320,14 @@ function AiAssistant({ checks, recommendations, score, grade, onClose }) {
               </div>
             </div>
           )}
+          {exhausted && !rateLimited && (
+            <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: 12, padding: "12px 16px", textAlign: "center" }}>
+              <div style={{ fontSize: 12, color: T.textDim, lineHeight: 1.6 }}>
+                5-message limit reached for this conversation.<br />
+                <span style={{ color: T.textMid }}>Start a new scan to open a fresh session.</span>
+              </div>
+            </div>
+          )}
           <div ref={bottomRef} />
         </div>
 
@@ -1260,12 +1335,13 @@ function AiAssistant({ checks, recommendations, score, grade, onClose }) {
         <div style={{ padding: "12px 14px", borderTop: `1px solid ${T.border}`, display: "flex", gap: 8 }}>
           <input ref={inputRef} value={input} onChange={e => setInput(e.target.value)}
             onKeyDown={e => e.key === "Enter" && !e.shiftKey && send()}
-            placeholder="Ask about your privacy issues…"
-            style={{ flex: 1, background: T.surface, border: `1.5px solid ${T.border}`, borderRadius: 10, padding: "10px 14px", color: T.text, fontSize: 13, outline: "none", transition: "border .15s" }}
-            onFocus={e => e.target.style.borderColor = T.cyan}
+            placeholder={inputDisabled ? (exhausted ? "Limit reached — start a new scan" : "Rate limited — try tomorrow") : "Ask about your privacy issues…"}
+            disabled={inputDisabled}
+            style={{ flex: 1, background: inputDisabled ? T.bg : T.surface, border: `1.5px solid ${T.border}`, borderRadius: 10, padding: "10px 14px", color: inputDisabled ? T.textDim : T.text, fontSize: 13, outline: "none", transition: "border .15s", cursor: inputDisabled ? "not-allowed" : "text" }}
+            onFocus={e => !inputDisabled && (e.target.style.borderColor = T.cyan)}
             onBlur={e => e.target.style.borderColor = T.border} />
-          <button onClick={() => send()} disabled={!input.trim() || loading}
-            style={{ background: input.trim() && !loading ? T.cyan : T.surface, border: `1.5px solid ${input.trim() && !loading ? T.cyan : T.border}`, borderRadius: 10, padding: "10px 14px", color: input.trim() && !loading ? T.bg : T.textDim, fontSize: 13, cursor: input.trim() && !loading ? "pointer" : "not-allowed", transition: "all .2s", fontWeight: 700 }}>
+          <button onClick={() => send()} disabled={!input.trim() || inputDisabled}
+            style={{ background: input.trim() && !inputDisabled ? T.cyan : T.surface, border: `1.5px solid ${input.trim() && !inputDisabled ? T.cyan : T.border}`, borderRadius: 10, padding: "10px 14px", color: input.trim() && !inputDisabled ? T.bg : T.textDim, fontSize: 13, cursor: input.trim() && !inputDisabled ? "pointer" : "not-allowed", transition: "all .2s", fontWeight: 700 }}>
             →
           </button>
         </div>
@@ -1277,11 +1353,10 @@ function AiAssistant({ checks, recommendations, score, grade, onClose }) {
 /* ─────────────────────────────────────────────
    DASHBOARD
 ───────────────────────────────────────────── */
-function Dashboard({ address, addrInfo, utxos, txs, isMobile, onBack, onRescan, watchlist, onSaveToWatchlist, toast, autoShare, scanAt }) {
+function Dashboard({ address, addrInfo, utxos, txs, isMobile, onBack, onRescan, toast, autoShare, scanAt, defaultSimple }) {
   const [tab, setTab] = useState("Fix It");
+  const [simpleMode, setSimpleMode] = useState(defaultSimple || false);
   const [shareOpen, setShareOpen] = useState(false);
-  const [labelOpen, setLabelOpen] = useState(false);
-  const [labelVal, setLabelVal] = useState("");
   const [selectedUtxo, setSelectedUtxo] = useState(null);
   const [doneFixes, setDoneFixes] = useState(new Set());
   // AI assistant: null | "consent" | "chat"
@@ -1292,11 +1367,10 @@ function Dashboard({ address, addrInfo, utxos, txs, isMobile, onBack, onRescan, 
   const analysis = useMemo(() => runEngine(utxos, txs, txCount), [utxos, txs, txCount]);
   const { score, grade, riskLabel, riskColor, checks, recommendations } = analysis;
   const totalSats = useMemo(() => utxos.reduce((s, u) => s + u.value, 0), [utxos]);
-  const isWatched = watchlist.some(w => w.address === address);
   const issueCount = checks.filter(c => c.status !== "pass").length;
   const TABS = isMobile
-    ? ["Fix It","Overview","UTXOs","Watchlist"]
-    : ["Fix It","Overview","UTXOs","Transactions","Methodology","Watchlist"];
+    ? ["Fix It","Overview","UTXOs"]
+    : ["Fix It","Overview","UTXOs","Transactions","Methodology"];
 
   const toggleDone = (key) => setDoneFixes(prev => {
     const next = new Set(prev);
@@ -1311,13 +1385,6 @@ function Dashboard({ address, addrInfo, utxos, txs, isMobile, onBack, onRescan, 
     }, 8000);
     return () => clearTimeout(t);
   }, [autoShare, grade, toast]);
-
-  const handleWatch = () => {
-    const entry = { address, score, grade, label: labelVal, updatedAt: Date.now() };
-    onSaveToWatchlist(entry);
-    setLabelOpen(false);
-    toast.show("Added to watchlist", { icon: "✅", color: T.green });
-  };
 
   const handleRescan = () => onRescan(address);
 
@@ -1379,44 +1446,86 @@ function Dashboard({ address, addrInfo, utxos, txs, isMobile, onBack, onRescan, 
               <button onClick={() => setShareOpen(true)} style={{ background: "transparent", border: `1.5px solid ${T.border}`, borderRadius: 8, padding: "6px 12px", color: T.textMid, fontSize: 13, cursor: "pointer", transition: "all .15s" }}
                 onMouseOver={e => e.currentTarget.style.borderColor = T.cyan}
                 onMouseOut={e => e.currentTarget.style.borderColor = T.border}>Share</button>
-              {!isWatched
-                ? <button onClick={() => setLabelOpen(true)} style={{ background: T.cyan, border: "none", borderRadius: 8, padding: "7px 14px", color: T.bg, fontFamily: T.sans, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>+ Watch</button>
-                : <Tag label="Watching" color={T.green} size={10} />}
-              <button onClick={exportReport} style={{ background: "transparent", border: `1.5px solid ${T.border}`, borderRadius: 8, padding: "6px 12px", color: T.textMid, fontSize: 13, cursor: "pointer" }}>Export</button>
+              <div style={{ position: "relative" }} onMouseEnter={e => e.currentTarget.querySelector(".export-tip").style.opacity = 1} onMouseLeave={e => e.currentTarget.querySelector(".export-tip").style.opacity = 0}>
+                <button onClick={exportReport} style={{ background: "transparent", border: `1.5px solid ${T.border}`, borderRadius: 8, padding: "6px 12px", color: T.textMid, fontSize: 13, cursor: "pointer", transition: "all .15s" }}
+                  onMouseOver={e => e.currentTarget.style.borderColor = T.cyan}
+                  onMouseOut={e => e.currentTarget.style.borderColor = T.border}>Export</button>
+                <div className="export-tip" style={{ position: "absolute", bottom: "calc(100% + 8px)", right: 0, background: T.card, border: `1px solid ${T.border}`, borderRadius: 8, padding: "8px 12px", fontSize: 11, color: T.textMid, whiteSpace: "nowrap", pointerEvents: "none", opacity: 0, transition: "opacity .15s", zIndex: 50 }}>
+                  Downloads a .txt file of your full results
+                  <div style={{ position: "absolute", bottom: -4, right: 16, width: 8, height: 8, background: T.card, border: `1px solid ${T.border}`, borderRight: "none", borderTop: "none", transform: "rotate(-45deg)" }} />
+                </div>
+              </div>
             </>
           )}
         </div>
       </nav>
 
-      <div style={{ flex: 1, padding: isMobile ? "16px 12px" : "20px 32px", maxWidth: 1100, margin: "0 auto", width: "100%" }}>
-        {/* Header stat cards */}
-        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "160px 1fr 1fr 1fr 1fr", gap: 10, marginBottom: 14, animation: "fadeUp .35s ease both" }}>
-          {/* Score ring card */}
-          <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 16, padding: isMobile ? "16px 12px" : 22, display: "flex", flexDirection: "column", alignItems: "center", gap: 8, gridColumn: isMobile ? "1/3" : "auto" }}>
-            <ScoreRing score={score} size={isMobile ? 96 : 110} />
-            <div style={{ textAlign: "center" }}>
-              <div style={{ fontFamily: T.serif, fontSize: isMobile ? 22 : 26, color: riskColor, fontWeight: 400 }}>Grade {grade}</div>
-              <div style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim, letterSpacing: 1.5, marginTop: 3 }}>{riskLabel.toUpperCase()}</div>
+      <div style={{ flex: 1, padding: isMobile ? "12px 12px" : "16px 32px", maxWidth: 1100, margin: "0 auto", width: "100%" }}>
+        {/* ── Compact summary bar ── */}
+        <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 14, padding: isMobile ? "12px 14px" : "12px 20px", marginBottom: 12, display: "flex", alignItems: "center", gap: isMobile ? 12 : 20, flexWrap: "wrap", animation: "fadeUp .35s ease both" }}>
+          {/* Score ring — smaller */}
+          <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
+            <ScoreRing score={score} size={52} />
+            <div>
+              <div style={{ fontFamily: T.serif, fontSize: 20, color: riskColor, lineHeight: 1 }}>Grade {grade}</div>
+              <div style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim, letterSpacing: 1, marginTop: 2 }}>{score}/100</div>
             </div>
           </div>
-          {/* Stat cards */}
-          {[
-            { label:"BALANCE",    val:`₿${(totalSats/1e8).toFixed(4)}`, sub:`${utxos.length} UTXOs`,                   color:T.blue },
-            { label:"ISSUES",     val:checks.filter(c=>c.status==="fail").length, sub:`${checks.filter(c=>c.status==="warn").length} warnings`, color:T.red },
-            { label:"TXS",        val:txCount,                           sub:"on this address",                         color:T.cyan },
-            { label:"VS AVERAGE", val:score>38?`+${score-38}`:`${score-38}`, sub:"Avg wallet scores 38",               color:score>38?T.green:T.red },
-          ].map((s, i) => (
-            <div key={s.label} style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 16, padding: isMobile ? "14px 12px" : "18px 20px", animation: `fadeUp .35s ease ${.05+i*.05}s both`, opacity: 0 }}>
-              <div style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim, letterSpacing: 2, marginBottom: 8 }}>{s.label}</div>
-              <div style={{ fontFamily: T.serif, fontSize: isMobile ? 26 : 30, color: s.color, lineHeight: 1 }}>{s.val}</div>
-              <div style={{ fontSize: 11, color: T.textDim, marginTop: 6 }}>{s.sub}</div>
+
+          <div style={{ width: 1, height: 36, background: T.border, flexShrink: 0 }} />
+
+          {/* Issues — most important, highlighted */}
+          <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+            <div style={{ background: T.red + "18", border: `1px solid ${T.red}44`, borderRadius: 8, padding: "4px 10px", display: "flex", alignItems: "center", gap: 5 }}>
+              <span style={{ fontFamily: T.mono, fontSize: 16, fontWeight: 700, color: T.red, lineHeight: 1 }}>{checks.filter(c => c.status === "fail").length}</span>
+              <span style={{ fontFamily: T.mono, fontSize: 9, color: T.red, letterSpacing: 0.5 }}>FAIL</span>
             </div>
-          ))}
+            <div style={{ background: T.amber + "18", border: `1px solid ${T.amber}44`, borderRadius: 8, padding: "4px 10px", display: "flex", alignItems: "center", gap: 5 }}>
+              <span style={{ fontFamily: T.mono, fontSize: 16, fontWeight: 700, color: T.amber, lineHeight: 1 }}>{checks.filter(c => c.status === "warn").length}</span>
+              <span style={{ fontFamily: T.mono, fontSize: 9, color: T.amber, letterSpacing: 0.5 }}>WARN</span>
+            </div>
+            <div style={{ background: T.green + "18", border: `1px solid ${T.green}44`, borderRadius: 8, padding: "4px 10px", display: "flex", alignItems: "center", gap: 5 }}>
+              <span style={{ fontFamily: T.mono, fontSize: 16, fontWeight: 700, color: T.green, lineHeight: 1 }}>{checks.filter(c => c.status === "pass").length}</span>
+              <span style={{ fontFamily: T.mono, fontSize: 9, color: T.green, letterSpacing: 0.5 }}>PASS</span>
+            </div>
+          </div>
+
+          <div style={{ width: 1, height: 36, background: T.border, flexShrink: 0 }} />
+
+          {/* Other stats — slim */}
+          <div style={{ display: "flex", gap: isMobile ? 14 : 24, flexWrap: "wrap" }}>
+            {[
+              { label: "BALANCE", val: `₿${(totalSats/1e8).toFixed(4)}`, sub: `${utxos.length} UTXOs`, color: T.blue },
+              { label: "TXS", val: txCount, sub: "total", color: T.cyan },
+              { label: "VS AVG", val: score > 38 ? `+${score-38}` : `${score-38}`, sub: "avg is 38", color: score > 38 ? T.green : T.red },
+            ].map(s => (
+              <div key={s.label}>
+                <div style={{ fontFamily: T.mono, fontSize: 8, color: T.textDim, letterSpacing: 1.5, marginBottom: 2 }}>{s.label}</div>
+                <div style={{ fontFamily: T.serif, fontSize: 18, color: s.color, lineHeight: 1 }}>{s.val}</div>
+                <div style={{ fontSize: 10, color: T.textDim, marginTop: 1 }}>{s.sub}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Fix potential — right-aligned */}
+          <div style={{ marginLeft: "auto", flexShrink: 0, textAlign: "right" }}>
+            <div style={{ fontFamily: T.mono, fontSize: 8, color: T.textDim, letterSpacing: 1.5, marginBottom: 2 }}>TOP 3 FIXES</div>
+            <div style={{ fontFamily: T.serif, fontSize: 18, color: T.green, lineHeight: 1 }}>+{recommendations.slice(0, 3).reduce((a, r) => a + r.impact, 0)} pts</div>
+            <div style={{ fontSize: 10, color: T.textDim, marginTop: 1 }}>potential gain</div>
+          </div>
         </div>
 
-        {/* Tabs */}
-        <div style={{ display: "flex", gap: 8, marginBottom: 14, overflowX: "auto", paddingBottom: 2 }}>
-          {TABS.map(t => <Pill key={t} active={tab === t} onClick={() => setTab(t)}>{t}</Pill>)}
+        {/* Tabs + Simple Mode toggle */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 14 }}>
+          <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 2 }}>
+            {TABS.map(t => <Pill key={t} active={tab === t} onClick={() => setTab(t)}>{t}</Pill>)}
+          </div>
+          <button onClick={() => setSimpleMode(m => !m)} style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 7, background: simpleMode ? T.cyan : T.surface, border: `1.5px solid ${simpleMode ? T.cyan : T.border}`, borderRadius: 20, padding: "8px 16px", cursor: "pointer", transition: "all .2s", boxShadow: simpleMode ? `0 0 12px ${T.cyanMid}` : "none" }}
+            onMouseOver={e => { e.currentTarget.style.borderColor = T.cyan; if (!simpleMode) e.currentTarget.style.background = T.cyan + "18"; }}
+            onMouseOut={e => { e.currentTarget.style.borderColor = simpleMode ? T.cyan : T.border; if (!simpleMode) e.currentTarget.style.background = T.surface; }}>
+            <span style={{ fontSize: 14 }}>💬</span>
+            <span style={{ fontSize: 12, fontFamily: T.sans, fontWeight: 700, color: simpleMode ? T.bg : T.textMid, whiteSpace: "nowrap" }}>{simpleMode ? "✓ Plain English ON" : "Plain English"}</span>
+          </button>
         </div>
 
         {/* ── FIX IT — default tab ── */}
@@ -1458,19 +1567,22 @@ function Dashboard({ address, addrInfo, utxos, txs, isMobile, onBack, onRescan, 
             </div>
             {recommendations.map((r, i) => {
               const done = doneFixes.has(r.key);
+              const simple = SIMPLE.recs[r.key];
+              const displayAction = simpleMode && simple ? simple.action : r.action;
+              const displayPlain  = simpleMode && simple ? simple.plain  : r.plain;
               return (
-              <div key={r.key || i} style={{ background: done ? T.greenLo : T.card, border: `1px solid ${done ? T.green + "44" : T.border}`, borderRadius: 16, padding: isMobile ? "18px 16px" : "20px 24px", display: "flex", gap: isMobile ? 12 : 20, animation: `fadeUp .35s ease ${i * .06}s both`, flexDirection: isMobile ? "column" : "row", transition: "border-color .2s, background-color .2s, filter .2s", filter: done ? "opacity(0.65)" : "none" }}
+              <div key={r.key || i} style={{ background: done ? T.greenLo : T.card, border: `1px solid ${done ? T.green + "44" : T.border}`, borderLeft: done ? undefined : `3px solid ${r.status === "fail" ? T.red : r.status === "warn" ? T.amber : T.green}`, borderRadius: 16, padding: isMobile ? "18px 16px" : "20px 24px", display: "flex", gap: isMobile ? 12 : 20, animation: `fadeUp .35s ease ${i * .06}s both`, flexDirection: isMobile ? "column" : "row", transition: "border-color .2s, background-color .2s, filter .2s", filter: done ? "opacity(0.65)" : "none" }}
                 onMouseEnter={e => !done && (e.currentTarget.style.borderColor = T.cyan + "55")}
                 onMouseLeave={e => !done && (e.currentTarget.style.borderColor = T.border)}>
                 <div style={{ fontFamily: T.mono, fontSize: 11, color: T.textDim, flexShrink: 0, paddingTop: 2, minWidth: 28 }}>0{i + 1}</div>
                 <div style={{ flex: 1 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
                     <span style={{ fontSize: 18 }}>{done ? "✅" : r.icon}</span>
-                    <div style={{ fontFamily: T.serif, fontSize: isMobile ? 17 : 20, color: done ? T.green : T.text, fontWeight: 400, textDecoration: done ? "line-through" : "none" }}>{r.action}</div>
+                    <div style={{ fontFamily: T.serif, fontSize: isMobile ? 17 : 20, color: done ? T.green : T.text, fontWeight: 400, textDecoration: done ? "line-through" : "none" }}>{displayAction}</div>
                   </div>
                   {!done && <>
-                    <div style={{ fontSize: 14, color: T.textMid, lineHeight: 1.7, marginBottom: 10 }}>{r.plain}</div>
-                    <div style={{ fontSize: 12, color: T.textDim, lineHeight: 1.6, background: T.surface, borderRadius: 8, padding: "10px 14px" }}><strong style={{ color: T.textMid }}>How:</strong> {r.detail}</div>
+                    <div style={{ fontSize: 14, color: T.textMid, lineHeight: 1.7, marginBottom: 10 }}>{displayPlain}</div>
+                    {!simpleMode && <div style={{ fontSize: 12, color: T.textDim, lineHeight: 1.6, background: T.surface, borderRadius: 8, padding: "10px 14px" }}><strong style={{ color: T.textMid }}>How:</strong> {r.detail}</div>}
                     <div style={{ marginTop: 10, display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
                       <span style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim, letterSpacing: 1 }}>OPTIONS:</span>
                       {(r.tools || [{ name: r.tool, note: "" }]).map((t, ti) => (
@@ -1479,7 +1591,7 @@ function Dashboard({ address, addrInfo, utxos, txs, isMobile, onBack, onRescan, 
                         </span>
                       ))}
                     </div>
-                    {(r.tools || []).length > 0 && (
+                    {!simpleMode && (r.tools || []).length > 0 && (
                       <div style={{ marginTop: 6, fontSize: 11, color: T.textDim, lineHeight: 1.55 }}>
                         {(r.tools || []).map((t, ti) => t.note ? <span key={ti}><span style={{ color: T.textMid }}>{t.name}</span> — {t.note}{ti < r.tools.length - 1 ? " · " : ""}</span> : null)}
                       </div>
@@ -1520,16 +1632,23 @@ function Dashboard({ address, addrInfo, utxos, txs, isMobile, onBack, onRescan, 
             {/* Checks list */}
             <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 16, padding: 22 }}>
               <div style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim, letterSpacing: 2, marginBottom: 16 }}>PRIVACY CHECKS</div>
-              {checks.map((c, i) => (
+              {checks.map((c, i) => {
+                const s = SIMPLE.checks[c.key];
+                const displayName  = simpleMode && s ? s.name : c.name;
+                const displayPlain = simpleMode && s
+                  ? (c.status === "fail" ? s.fail_detail : c.status === "warn" ? s.warn_detail : s.pass_detail) || c.plain
+                  : c.plain;
+                return (
                 <div key={c.key} style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "10px 0", borderBottom: i < checks.length - 1 ? `1px solid ${T.borderLo}` : undefined, animation: `fadeUp .3s ease ${i * .04}s both`, opacity: 0 }}>
                   <div style={{ width: 7, height: 7, borderRadius: "50%", background: c.status === "pass" ? T.green : c.status === "warn" ? T.btc : T.red, flexShrink: 0, marginTop: 5 }} />
                   <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: T.text }}>{c.name}</div>
-                    <div style={{ fontSize: 12, color: T.textMid, marginTop: 3, lineHeight: 1.55 }}>{c.plain}</div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: T.text }}>{displayName}</div>
+                    <div style={{ fontSize: 12, color: T.textMid, marginTop: 3, lineHeight: 1.55 }}>{displayPlain}</div>
                   </div>
                   <Tag label={c.status === "pass" ? "Pass" : c.status === "warn" ? "Warn" : "Fail"} color={c.status === "pass" ? T.green : c.status === "warn" ? T.btc : T.red} size={9} />
                 </div>
-              ))}
+                );
+              })}
             </div>
             {/* Right column */}
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
@@ -1709,26 +1828,20 @@ function Dashboard({ address, addrInfo, utxos, txs, isMobile, onBack, onRescan, 
               </div>
             </div>
             <div style={{ background: T.cyanLo, border: `1px solid ${T.cyanMid}`, borderRadius: 14, padding: "16px 20px", fontSize: 13, color: T.textMid, lineHeight: 1.65 }}>
-              <strong style={{ color: T.cyan }}>Open source:</strong> All 10 heuristics are implemented in plain JavaScript in this tool's source. No black box. View and audit the full scoring logic at <a href="https://github.com/anonscore/anonscore" target="_blank" rel="noopener noreferrer" style={{ color: T.cyan }}>github.com/anonscore/anonscore</a>.
+              <strong style={{ color: T.cyan }}>Open source:</strong> All 10 heuristics are implemented in plain JavaScript in this tool's source. No black box. View and audit the full scoring logic at <a href="https://github.com/netasset/anonscore" target="_blank" rel="noopener noreferrer" style={{ color: T.cyan }}>github.com/netasset/anonscore</a>.
             </div>
           </div>
         )}
 
-        {/* ── WATCHLIST ── */}
-        {tab === "Watchlist" && (
-          <WatchlistPane watchlist={watchlist} onRescan={onRescan} onRemove={(addr) => {
-            onSaveToWatchlist({ address: addr, _remove: true });
-            toast.show("Removed", { icon: "🗑", color: T.textMid });
-          }} />
-        )}
+        {/* ── WATCHLIST removed ── */}
       </div>
 
       {/* Mobile bottom nav */}
       {isMobile && (
         <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, background: T.card, borderTop: `1px solid ${T.border}`, display: "flex", zIndex: 200 }}>
-          {["Fix It","Overview","UTXOs","Watchlist"].map(t => (
+          {["Fix It","Overview","UTXOs"].map(t => (
             <button key={t} onClick={() => setTab(t)} style={{ flex: 1, padding: "10px 0 8px", background: "transparent", border: "none", borderTop: `2px solid ${tab === t ? T.cyan : "transparent"}`, color: tab === t ? T.cyan : T.textDim, fontFamily: T.mono, fontSize: 8, letterSpacing: .5, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 3 }}>
-              <span style={{ fontSize: 15 }}>{t === "Fix It" ? "★" : t === "Overview" ? "◎" : t === "UTXOs" ? "⬡" : "👁"}</span>
+              <span style={{ fontSize: 15 }}>{t === "Fix It" ? "★" : t === "Overview" ? "◎" : "⬡"}</span>
               {t}
             </button>
           ))}
@@ -1738,70 +1851,10 @@ function Dashboard({ address, addrInfo, utxos, txs, isMobile, onBack, onRescan, 
       {shareOpen && <ShareCard score={score} grade={grade} issueCount={issueCount} address={address} onClose={() => setShareOpen(false)} />}
       {aiStage === "consent" && <AiConsentGate score={score} grade={grade} checks={checks} recommendations={recommendations} onAccept={() => setAiStage("chat")} onDecline={() => setAiStage(null)} />}
       {aiStage === "chat" && <AiAssistant checks={checks} recommendations={recommendations} score={score} grade={grade} onClose={() => setAiStage(null)} />}
-
-      {labelOpen && (
-        <div style={{ position: "fixed", inset: 0, zIndex: 700, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
-          <div onClick={() => setLabelOpen(false)} style={{ position: "absolute", inset: 0, background: "#00000066" }} />
-          <div style={{ position: "relative", background: T.card, border: `1px solid ${T.border}`, borderRadius: 16, padding: 28, width: "min(360px,94vw)", animation: "fadeUp .3s ease both" }}>
-            <div style={{ fontFamily: T.serif, fontSize: 20, color: T.text, marginBottom: 6, fontWeight: 400 }}>Watch this address</div>
-            <div style={{ fontFamily: T.mono, fontSize: 11, color: T.textDim, marginBottom: 20 }}>{fmt.addr(address)}</div>
-            <input value={labelVal} onChange={e => setLabelVal(e.target.value)} placeholder="Label (e.g. Cold Storage, Savings…)"
-              style={{ width: "100%", background: T.surface, border: `1.5px solid ${T.border}`, borderRadius: 10, padding: "12px 14px", color: T.text, fontSize: 14, outline: "none", marginBottom: 14 }}
-              onFocus={e => e.target.style.borderColor = T.cyan}
-              onBlur={e => e.target.style.borderColor = T.border}
-              autoFocus onKeyDown={e => e.key === "Enter" && handleWatch()} />
-            <div style={{ display: "flex", gap: 10 }}>
-              <button onClick={() => setLabelOpen(false)} style={{ flex: 1, padding: 12, background: "transparent", border: `1.5px solid ${T.border}`, borderRadius: 10, color: T.textMid, fontSize: 14, cursor: "pointer" }}>Cancel</button>
-              <button onClick={handleWatch} style={{ flex: 1, padding: 12, background: T.cyan, border: "none", borderRadius: 10, color: T.bg, fontSize: 14, fontWeight: 700, cursor: "pointer" }}>Add to watchlist</button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
 
-/* ─────────────────────────────────────────────
-   WATCHLIST PANE
-───────────────────────────────────────────── */
-function WatchlistPane({ watchlist, onRemove, onRescan }) {
-  if (watchlist.length === 0) return (
-    <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 16, padding: "56px 32px", textAlign: "center" }}>
-      <div style={{ fontSize: 44, marginBottom: 16 }}>👁</div>
-      <div style={{ fontFamily: T.serif, fontSize: 22, color: T.text, marginBottom: 10, fontWeight: 400 }}>No addresses watched yet</div>
-      <div style={{ fontSize: 14, color: T.textMid, maxWidth: 320, margin: "0 auto" }}>Use the "+ Watch" button at the top of any analysis to track privacy scores over time.</div>
-    </div>
-  );
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-      <div style={{ fontSize: 13, color: T.textMid }}>{watchlist.length} address{watchlist.length !== 1 ? "es" : ""} monitored</div>
-      {watchlist.map((w, i) => {
-        const delta = w.prevScore != null ? w.score - w.prevScore : null;
-        return (
-          <div key={w.address} style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 14, padding: "16px 18px", display: "flex", gap: 14, alignItems: "center", animation: `fadeUp .3s ease ${i * .06}s both`, opacity: 0 }}>
-            <ScoreRing score={w.score} size={50} animate={false} />
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontFamily: T.mono, fontSize: 11, color: T.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{fmt.addr(w.address)}</div>
-              {w.label && <div style={{ fontSize: 12, color: T.textMid, marginTop: 2 }}>{w.label}</div>}
-              <div style={{ display: "flex", gap: 8, marginTop: 5, alignItems: "center", flexWrap: "wrap" }}>
-                <Tag label={`Grade ${w.grade}`} color={scoreColor(w.score)} size={9} />
-                {delta != null && <Tag label={delta > 0 ? `↑ +${delta}` : delta < 0 ? `↓ ${delta}` : "↔ same"} color={delta > 0 ? T.green : delta < 0 ? T.red : T.textDim} size={9} />}
-                <span style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim }}>Scanned {fmt.age(w.updatedAt / 1000)}</span>
-              </div>
-            </div>
-            <Sparkline history={w.scoreHistory} width={72} height={26} />
-            <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
-              <button onClick={() => onRescan(w.address)} title="Re-scan" style={{ background: "transparent", border: `1px solid ${T.border}`, borderRadius: 7, padding: "6px 10px", color: T.textMid, fontSize: 12, cursor: "pointer", transition: "border-color .15s" }}
-                onMouseOver={e => e.currentTarget.style.borderColor = T.cyan}
-                onMouseOut={e => e.currentTarget.style.borderColor = T.border}>↻</button>
-              <button onClick={() => onRemove(w.address)} title="Remove" style={{ background: "transparent", border: `1px solid ${T.border}`, borderRadius: 7, padding: "6px 10px", color: T.textDim, fontSize: 12, cursor: "pointer" }}>✕</button>
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
 /* ─────────────────────────────────────────────
    ROOT APP
 ───────────────────────────────────────────── */
@@ -1811,9 +1864,9 @@ function App() {
   const [addrInfo, setAddrInfo] = useState(null);
   const [utxos, setUtxos] = useState([]);
   const [txs, setTxs] = useState([]);
-  const [watchlist, setWatchlist] = useState([]);
   const [autoShare, setAutoShare] = useState(false);
   const [scanAt, setScanAt] = useState(null);
+  const [defaultSimple, setDefaultSimple] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const toast = useToast();
 
@@ -1823,46 +1876,11 @@ function App() {
     return () => window.removeEventListener("resize", h);
   }, []);
 
-  // Load watchlist from storage
-  useEffect(() => {
-    (async () => {
-      try {
-        const r = await window.storage.get("as_wl_v1");
-        if (r?.value) setWatchlist(JSON.parse(r.value));
-      } catch {}
-    })();
-  }, []);
-
-  const saveWatchlist = useCallback(async (list) => {
-    try { await window.storage.set("as_wl_v1", JSON.stringify(list)); } catch {}
-  }, []);
-
-  // FIX: readable if/else for watchlist update, no nested ternary
-  const onSaveToWatchlist = useCallback(async (entry) => {
-    setWatchlist(prev => {
-      let next;
-      if (entry._remove) {
-        next = prev.filter(w => w.address !== entry.address);
-      } else {
-        const idx = prev.findIndex(w => w.address === entry.address);
-        if (idx >= 0) {
-          next = [...prev];
-          const prev_entry = prev[idx];
-          const history = [...(prev_entry.scoreHistory || [prev_entry.score]), entry.score].slice(-12);
-          next[idx] = { ...prev_entry, prevScore: prev_entry.score, scoreHistory: history, ...entry };
-        } else {
-          next = [{ ...entry, scoreHistory: [entry.score] }, ...prev];
-        }
-      }
-      saveWatchlist(next);
-      return next;
-    });
-  }, [saveWatchlist]);
-
-  const analyze = useCallback(async (addr) => {
+  const analyze = useCallback(async (addr, plain = false) => {
     setAddress(addr);
     setPage("scanning");
     setAutoShare(false);
+    setDefaultSimple(plain);
 
     try {
       if (addr === "DEMO") {
@@ -1901,11 +1919,11 @@ function App() {
     <>
       <style>{CSS}</style>
       <Toast toasts={toast.toasts} />
-      {page === "landing"   && <Landing onAnalyze={analyze} watchlist={watchlist} isMobile={isMobile} />}
+      {page === "landing"   && <Landing onAnalyze={analyze} isMobile={isMobile} />}
       {page === "scanning"  && <Scanning address={address} />}
-      {page === "dashboard" && <Dashboard address={address} addrInfo={addrInfo} utxos={utxos} txs={txs} isMobile={isMobile} onBack={() => setPage("landing")} onRescan={analyze} watchlist={watchlist} onSaveToWatchlist={onSaveToWatchlist} toast={toast} autoShare={autoShare} scanAt={scanAt} />}
+      {page === "dashboard" && <Dashboard address={address} addrInfo={addrInfo} utxos={utxos} txs={txs} isMobile={isMobile} onBack={() => setPage("landing")} onRescan={analyze} toast={toast} autoShare={autoShare} scanAt={scanAt} defaultSimple={defaultSimple} />}
     </>
   );
 }
 
-ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(App));
+ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(App));
