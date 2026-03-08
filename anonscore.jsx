@@ -18,6 +18,7 @@ input,button,select,textarea{font-family:'Outfit',sans-serif;-webkit-tap-highlig
 @keyframes slideDown{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:translateY(0)}}
 @keyframes spin{to{transform:rotate(360deg)}}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+@keyframes pulseGlow{0%,100%{box-shadow:0 4px 24px #000000aa, 0 0 0 0 rgba(0,210,200,0)}50%{box-shadow:0 4px 32px #000000cc, 0 0 0 6px rgba(0,210,200,0.18)}}
 @keyframes toastIn{from{opacity:0;transform:translateY(10px) scale(.96)}to{opacity:1;transform:none}}
 @keyframes toastOut{to{opacity:0;transform:translateY(6px)}}
 @keyframes factIn{from{opacity:0;transform:translateX(-10px)}to{opacity:1;transform:none}}
@@ -1830,13 +1831,13 @@ function Dashboard({ address, addrInfo, utxos, txs, isMobile, onBack, onRescan, 
       {/* Floating AI bar — collapsed, expands on click */}
       {aiStage !== "chat" && aiStage !== "consent" && (
         <button onClick={openAi}
-          style={{ position: "fixed", bottom: isMobile ? 72 : 24, right: 24, zIndex: 850, display: "flex", alignItems: "center", gap: 10, background: T.card, border: `1px solid ${T.cyan}55`, borderRadius: 16, padding: "12px 18px", cursor: "pointer", boxShadow: `0 4px 24px #00000077`, transition: "all .2s" }}
-          onMouseOver={e => { e.currentTarget.style.borderColor = T.cyan; e.currentTarget.style.boxShadow = `0 6px 32px #000000aa`; }}
-          onMouseOut={e => { e.currentTarget.style.borderColor = T.cyan + "55"; e.currentTarget.style.boxShadow = `0 4px 24px #00000077`; }}>
-          <div style={{ width: 26, height: 26, background: T.cyan + "22", border: `1px solid ${T.cyan}44`, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, flexShrink: 0 }}>✦</div>
+          style={{ position: "fixed", bottom: isMobile ? 76 : 28, right: 28, zIndex: 850, display: "flex", alignItems: "center", gap: 14, background: T.card, border: `1.5px solid ${T.cyan}77`, borderRadius: 18, padding: "16px 22px", cursor: "pointer", animation: "pulseGlow 2.5s ease 1s 4", boxShadow: `0 4px 24px #000000aa, 0 0 0 0 ${T.cyan}00`, transition: "border-color .2s, box-shadow .2s" }}
+          onMouseOver={e => { e.currentTarget.style.borderColor = T.cyan; e.currentTarget.style.boxShadow = `0 8px 40px #000000cc, 0 0 20px ${T.cyan}33`; e.currentTarget.style.animation = "none"; }}
+          onMouseOut={e => { e.currentTarget.style.borderColor = T.cyan + "77"; e.currentTarget.style.boxShadow = `0 4px 24px #000000aa`; }}>
+          <div style={{ width: 32, height: 32, background: T.cyan + "22", border: `1px solid ${T.cyan}55`, borderRadius: 9, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, flexShrink: 0 }}>✦</div>
           <div style={{ textAlign: "left" }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: T.text, lineHeight: 1 }}>Privacy Assistant</div>
-            <div style={{ fontSize: 11, color: T.cyan, marginTop: 3 }}>Ask about your {issueCount} issue{issueCount !== 1 ? "s" : ""} →</div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: T.text, lineHeight: 1 }}>Privacy Assistant</div>
+            <div style={{ fontSize: 12, color: T.cyan, marginTop: 4 }}>Ask about your {issueCount} issue{issueCount !== 1 ? "s" : ""} →</div>
           </div>
         </button>
       )}
