@@ -1361,7 +1361,8 @@ function Dashboard({ address, addrInfo, utxos, txs, isMobile, onBack, onRescan, 
   const [doneFixes, setDoneFixes] = useState(new Set());
   // AI assistant: null | "consent" | "chat"
   const [aiStage, setAiStage] = useState(null);
-  const openAi = () => setAiStage("consent");
+  const [aiConsented, setAiConsented] = useState(false);
+  const openAi = () => setAiStage(aiConsented ? "chat" : "consent");
 
   const txCount = addrInfo?.chain_stats?.tx_count || txs.length;
   const analysis = useMemo(() => runEngine(utxos, txs, txCount), [utxos, txs, txCount]);
@@ -1437,9 +1438,6 @@ function Dashboard({ address, addrInfo, utxos, txs, isMobile, onBack, onRescan, 
           )}
           {!isMobile && (
             <>
-              <button onClick={openAi} style={{ background: T.cyan + "18", border: `1.5px solid ${T.cyan}55`, borderRadius: 8, padding: "6px 12px", color: T.cyan, fontSize: 13, cursor: "pointer", fontWeight: 600, transition: "all .15s" }}
-                onMouseOver={e => e.currentTarget.style.background = T.cyan + "28"}
-                onMouseOut={e => e.currentTarget.style.background = T.cyan + "18"}>✦ Ask AI</button>
               <button onClick={handleRescan} style={{ background: "transparent", border: `1.5px solid ${T.border}`, borderRadius: 8, padding: "6px 12px", color: T.textMid, fontSize: 13, cursor: "pointer", transition: "all .15s" }}
                 onMouseOver={e => e.currentTarget.style.borderColor = T.cyan}
                 onMouseOut={e => e.currentTarget.style.borderColor = T.border}>↻ Re-scan</button>
@@ -1534,37 +1532,6 @@ function Dashboard({ address, addrInfo, utxos, txs, isMobile, onBack, onRescan, 
             <div style={{ fontSize: 13, color: T.textMid, marginBottom: 4 }}>
               Sorted by impact. Fixing the top 3 alone could raise your score by <strong style={{ color: T.cyan }}>{recommendations.slice(0, 3).reduce((a, r) => a + r.impact, 0)} points</strong>.
             </div>
-            {/* AI assistant card — privacy guarantees shown before clicking */}
-            <div style={{ background: T.card, border: `1px solid ${T.cyan}33`, borderRadius: 16, overflow: "hidden", marginBottom: 2 }}>
-              {/* Privacy badges — visible without any interaction */}
-              <div style={{ display: "flex", gap: 0, borderBottom: `1px solid ${T.borderLo}` }}>
-                {[
-                  { icon: "✕", label: "Address never sent" },
-                  { icon: "✕", label: "No data stored" },
-                  { icon: "✕", label: "Not used for training" },
-                ].map((badge, i) => (
-                  <div key={i} style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 5, padding: "7px 8px", borderRight: i < 2 ? `1px solid ${T.borderLo}` : undefined, background: T.greenLo }}>
-                    <span style={{ fontFamily: T.mono, fontSize: 9, color: T.green, fontWeight: 700 }}>{badge.icon}</span>
-                    <span style={{ fontFamily: T.mono, fontSize: 9, color: T.green, letterSpacing: 0.3, whiteSpace: "nowrap" }}>{badge.label}</span>
-                  </div>
-                ))}
-              </div>
-              {/* Main clickable area */}
-              <button onClick={openAi} style={{ display: "flex", alignItems: "center", gap: 14, padding: "16px 18px", cursor: "pointer", textAlign: "left", width: "100%", background: "transparent", border: "none", transition: "background .15s" }}
-                onMouseOver={e => e.currentTarget.style.background = T.cyan + "0a"}
-                onMouseOut={e => e.currentTarget.style.background = "transparent"}>
-                <div style={{ width: 36, height: 36, background: T.cyan + "18", border: `1px solid ${T.cyan}33`, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, flexShrink: 0 }}>✦</div>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: T.text, marginBottom: 3 }}>Ask the Privacy Assistant</div>
-                  <div style={{ fontSize: 12, color: T.textMid, lineHeight: 1.55 }}>
-                    Get step-by-step guidance for your {checks.filter(c => c.status !== "pass").length} specific issues. Only your score and issue names are shared — never your address.
-                  </div>
-                </div>
-                <div style={{ flexShrink: 0, textAlign: "center" }}>
-                  <div style={{ background: T.cyan, borderRadius: 8, padding: "7px 14px", color: T.bg, fontSize: 12, fontWeight: 700, whiteSpace: "nowrap" }}>Ask now →</div>
-                </div>
-              </button>
-            </div>
             {recommendations.map((r, i) => {
               const done = doneFixes.has(r.key);
               const simple = SIMPLE.recs[r.key];
@@ -1618,6 +1585,14 @@ function Dashboard({ address, addrInfo, utxos, txs, isMobile, onBack, onRescan, 
             </div>
             <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: 14, padding: "18px 22px", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
               <div>
+            {/* Slim AI nudge */}
+            <button onClick={openAi} style={{ display: "flex", alignItems: "center", gap: 12, background: T.surface, border: `1px solid ${T.border}`, borderRadius: 12, padding: "12px 16px", cursor: "pointer", width: "100%", textAlign: "left", transition: "border-color .15s, background .15s" }}
+              onMouseOver={e => { e.currentTarget.style.borderColor = T.cyan + "66"; e.currentTarget.style.background = T.cyan + "08"; }}
+              onMouseOut={e => { e.currentTarget.style.borderColor = T.border; e.currentTarget.style.background = T.surface; }}>
+              <span style={{ fontSize: 16 }}>✦</span>
+              <span style={{ fontSize: 13, color: T.textMid, flex: 1 }}>Questions about your results? <span style={{ color: T.cyan }}>Ask the Privacy Assistant →</span></span>
+              <span style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim }}>Address never shared</span>
+            </button>
                 <div style={{ fontFamily: T.serif, fontSize: 17, color: T.text, fontWeight: 400 }}>Share your privacy score</div>
                 <div style={{ fontSize: 13, color: T.textMid, marginTop: 3 }}>Let your Nostr or Twitter followers check theirs.</div>
               </div>
@@ -1849,8 +1824,18 @@ function Dashboard({ address, addrInfo, utxos, txs, isMobile, onBack, onRescan, 
       )}
 
       {shareOpen && <ShareCard score={score} grade={grade} issueCount={issueCount} address={address} onClose={() => setShareOpen(false)} />}
-      {aiStage === "consent" && <AiConsentGate score={score} grade={grade} checks={checks} recommendations={recommendations} onAccept={() => setAiStage("chat")} onDecline={() => setAiStage(null)} />}
+      {aiStage === "consent" && <AiConsentGate score={score} grade={grade} checks={checks} recommendations={recommendations} onAccept={() => { setAiConsented(true); setAiStage("chat"); }} onDecline={() => setAiStage(null)} />}
       {aiStage === "chat" && <AiAssistant checks={checks} recommendations={recommendations} score={score} grade={grade} onClose={() => setAiStage(null)} />}
+
+      {/* Floating AI button — bottom right, visible when chat is closed */}
+      {aiStage !== "chat" && aiStage !== "consent" && (
+        <button onClick={openAi} title="Ask the Privacy Assistant"
+          style={{ position: "fixed", bottom: isMobile ? 72 : 24, right: 24, zIndex: 850, width: 48, height: 48, borderRadius: "50%", background: T.cyan, border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, boxShadow: `0 4px 24px ${T.cyan}55`, transition: "transform .15s, box-shadow .15s" }}
+          onMouseOver={e => { e.currentTarget.style.transform = "scale(1.1)"; e.currentTarget.style.boxShadow = `0 6px 32px ${T.cyan}77`; }}
+          onMouseOut={e => { e.currentTarget.style.transform = "scale(1)"; e.currentTarget.style.boxShadow = `0 4px 24px ${T.cyan}55`; }}>
+          ✦
+        </button>
+      )}
     </div>
   );
 }
