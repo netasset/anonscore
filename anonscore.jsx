@@ -18,7 +18,6 @@ input,button,select,textarea{font-family:'Outfit',sans-serif;-webkit-tap-highlig
 @keyframes slideDown{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:translateY(0)}}
 @keyframes spin{to{transform:rotate(360deg)}}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
-@keyframes pulseGlow{0%,100%{box-shadow:0 4px 24px #000000aa, 0 0 0 0 rgba(0,210,200,0)}50%{box-shadow:0 4px 32px #000000cc, 0 0 0 6px rgba(0,210,200,0.18)}}
 @keyframes toastIn{from{opacity:0;transform:translateY(10px) scale(.96)}to{opacity:1;transform:none}}
 @keyframes toastOut{to{opacity:0;transform:translateY(6px)}}
 @keyframes factIn{from{opacity:0;transform:translateX(-10px)}to{opacity:1;transform:none}}
@@ -1272,11 +1271,12 @@ function AiAssistant({ checks, recommendations, score, grade, onClose }) {
           <div style={{ width: 28, height: 28, background: T.cyan + "22", border: `1px solid ${T.cyan}44`, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14 }}>✦</div>
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: 13, fontWeight: 700, color: T.text }}>Privacy Assistant</div>
-            <div style={{ fontFamily: T.mono, fontSize: 9, color: T.textMid, letterSpacing: 1, whiteSpace: "nowrap" }}>Powered by Claude · Address never shared</div>
+            <div style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim, letterSpacing: 1 }}>Powered by Claude</div>
+            <div style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim, letterSpacing: 1 }}>Address never shared</div>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             {!exhausted && !rateLimited && (
-              <span style={{ fontFamily: T.mono, fontSize: 9, color: T.textMid, whiteSpace: "nowrap" }}>
+              <span style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim }}>
                 {MAX_MSGS - msgCount} msg{MAX_MSGS - msgCount !== 1 ? "s" : ""} left
               </span>
             )}
@@ -1362,8 +1362,8 @@ function Dashboard({ address, addrInfo, utxos, txs, isMobile, onBack, onRescan, 
   const [doneFixes, setDoneFixes] = useState(new Set());
   // AI assistant: null | "consent" | "chat"
   const [aiStage, setAiStage] = useState(null);
-  const [aiConsented, setAiConsented] = useState(false);
-  const openAi = () => setAiStage(aiConsented ? "chat" : "consent");
+  const [aiWidgetMin, setAiWidgetMin] = useState(false);
+  const openAi = () => setAiStage("consent");
 
   const txCount = addrInfo?.chain_stats?.tx_count || txs.length;
   const analysis = useMemo(() => runEngine(utxos, txs, txCount), [utxos, txs, txCount]);
@@ -1533,6 +1533,37 @@ function Dashboard({ address, addrInfo, utxos, txs, isMobile, onBack, onRescan, 
             <div style={{ fontSize: 13, color: T.textMid, marginBottom: 4 }}>
               Sorted by impact. Fixing the top 3 alone could raise your score by <strong style={{ color: T.cyan }}>{recommendations.slice(0, 3).reduce((a, r) => a + r.impact, 0)} points</strong>.
             </div>
+            {/* AI assistant card — privacy guarantees shown before clicking */}
+            <div style={{ background: T.card, border: `1px solid ${T.cyan}33`, borderRadius: 16, overflow: "hidden", marginBottom: 2 }}>
+              {/* Privacy badges — visible without any interaction */}
+              <div style={{ display: "flex", gap: 0, borderBottom: `1px solid ${T.borderLo}` }}>
+                {[
+                  { icon: "✕", label: "Address never sent" },
+                  { icon: "✕", label: "No data stored" },
+                  { icon: "✕", label: "Not used for training" },
+                ].map((badge, i) => (
+                  <div key={i} style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 5, padding: "7px 8px", borderRight: i < 2 ? `1px solid ${T.borderLo}` : undefined, background: T.greenLo }}>
+                    <span style={{ fontFamily: T.mono, fontSize: 9, color: T.green, fontWeight: 700 }}>{badge.icon}</span>
+                    <span style={{ fontFamily: T.mono, fontSize: 9, color: T.green, letterSpacing: 0.3, whiteSpace: "nowrap" }}>{badge.label}</span>
+                  </div>
+                ))}
+              </div>
+              {/* Main clickable area */}
+              <button onClick={openAi} style={{ display: "flex", alignItems: "center", gap: 14, padding: "16px 18px", cursor: "pointer", textAlign: "left", width: "100%", background: "transparent", border: "none", transition: "background .15s" }}
+                onMouseOver={e => e.currentTarget.style.background = T.cyan + "0a"}
+                onMouseOut={e => e.currentTarget.style.background = "transparent"}>
+                <div style={{ width: 36, height: 36, background: T.cyan + "18", border: `1px solid ${T.cyan}33`, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, flexShrink: 0 }}>✦</div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: T.text, marginBottom: 3 }}>Ask the Privacy Assistant</div>
+                  <div style={{ fontSize: 12, color: T.textMid, lineHeight: 1.55 }}>
+                    Get step-by-step guidance for your {checks.filter(c => c.status !== "pass").length} specific issues. Only your score and issue names are shared — never your address.
+                  </div>
+                </div>
+                <div style={{ flexShrink: 0, textAlign: "center" }}>
+                  <div style={{ background: T.cyan, borderRadius: 8, padding: "7px 14px", color: T.bg, fontSize: 12, fontWeight: 700, whiteSpace: "nowrap" }}>Ask now →</div>
+                </div>
+              </button>
+            </div>
             {recommendations.map((r, i) => {
               const done = doneFixes.has(r.key);
               const simple = SIMPLE.recs[r.key];
@@ -1586,14 +1617,6 @@ function Dashboard({ address, addrInfo, utxos, txs, isMobile, onBack, onRescan, 
             </div>
             <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: 14, padding: "18px 22px", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
               <div>
-            {/* Slim AI nudge */}
-            <button onClick={openAi} style={{ display: "flex", alignItems: "center", gap: 12, background: T.surface, border: `1px solid ${T.border}`, borderRadius: 12, padding: "12px 16px", cursor: "pointer", width: "100%", textAlign: "left", transition: "border-color .15s, background .15s" }}
-              onMouseOver={e => { e.currentTarget.style.borderColor = T.cyan + "66"; e.currentTarget.style.background = T.cyan + "08"; }}
-              onMouseOut={e => { e.currentTarget.style.borderColor = T.border; e.currentTarget.style.background = T.surface; }}>
-              <span style={{ fontSize: 16 }}>✦</span>
-              <span style={{ fontSize: 13, color: T.textMid, flex: 1 }}>Questions about your results? <span style={{ color: T.cyan }}>Ask the Privacy Assistant →</span></span>
-              <span style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim }}>Address never shared</span>
-            </button>
                 <div style={{ fontFamily: T.serif, fontSize: 17, color: T.text, fontWeight: 400 }}>Share your privacy score</div>
                 <div style={{ fontSize: 13, color: T.textMid, marginTop: 3 }}>Let your Nostr or Twitter followers check theirs.</div>
               </div>
@@ -1825,21 +1848,95 @@ function Dashboard({ address, addrInfo, utxos, txs, isMobile, onBack, onRescan, 
       )}
 
       {shareOpen && <ShareCard score={score} grade={grade} issueCount={issueCount} address={address} onClose={() => setShareOpen(false)} />}
-      {aiStage === "consent" && <AiConsentGate score={score} grade={grade} checks={checks} recommendations={recommendations} onAccept={() => { setAiConsented(true); setAiStage("chat"); }} onDecline={() => setAiStage(null)} />}
+      {aiStage === "consent" && <AiConsentGate score={score} grade={grade} checks={checks} recommendations={recommendations} onAccept={() => setAiStage("chat")} onDecline={() => setAiStage(null)} />}
       {aiStage === "chat" && <AiAssistant checks={checks} recommendations={recommendations} score={score} grade={grade} onClose={() => setAiStage(null)} />}
 
-      {/* Floating AI bar — collapsed, expands on click */}
-      {aiStage !== "chat" && aiStage !== "consent" && (
-        <button onClick={openAi}
-          style={{ position: "fixed", bottom: isMobile ? 76 : 28, right: 28, zIndex: 850, display: "flex", alignItems: "center", gap: 16, background: `linear-gradient(135deg, ${T.cyan}22, ${T.cyan}0e)`, border: `1.5px solid ${T.cyan}`, borderRadius: 20, padding: "20px 28px", cursor: "pointer", animation: "pulseGlow 2.5s ease 1s 4", boxShadow: `0 4px 32px #000000bb, 0 0 24px ${T.cyan}22`, transition: "all .2s" }}
-          onMouseOver={e => { e.currentTarget.style.background = `linear-gradient(135deg, ${T.cyan}33, ${T.cyan}18)`; e.currentTarget.style.boxShadow = `0 8px 40px #000000cc, 0 0 32px ${T.cyan}44`; e.currentTarget.style.animation = "none"; }}
-          onMouseOut={e => { e.currentTarget.style.background = `linear-gradient(135deg, ${T.cyan}22, ${T.cyan}0e)`; e.currentTarget.style.boxShadow = `0 4px 32px #000000bb, 0 0 24px ${T.cyan}22`; }}>
-          <div style={{ width: 40, height: 40, background: T.cyan + "33", border: `1px solid ${T.cyan}88`, borderRadius: 11, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, flexShrink: 0, color: T.cyan }}>✦</div>
-          <div style={{ textAlign: "left" }}>
-            <div style={{ fontSize: 16, fontWeight: 700, color: T.text, lineHeight: 1 }}>Privacy Assistant</div>
-            <div style={{ fontSize: 13, color: T.cyan, marginTop: 5 }}>Ask about your {issueCount} issue{issueCount !== 1 ? "s" : ""} →</div>
-          </div>
-        </button>
+      {/* ── Floating AI widget — visible on all tabs, prominent CTA ── */}
+      {aiStage === null && (
+        <div style={{
+          position: "fixed",
+          bottom: isMobile ? 72 : 28,
+          right: isMobile ? 12 : 28,
+          zIndex: 500,
+          width: aiWidgetMin ? "auto" : "min(340px, calc(100vw - 24px))",
+          animation: "fadeUp .4s ease both",
+          filter: "drop-shadow(0 8px 32px #000000aa)",
+        }}>
+          {aiWidgetMin ? (
+            /* ── Minimized pill ── */
+            <button onClick={() => setAiWidgetMin(false)} style={{
+              display: "flex", alignItems: "center", gap: 10,
+              background: T.card, border: `1.5px solid ${T.cyan}55`,
+              borderRadius: 99, padding: "10px 18px 10px 14px",
+              cursor: "pointer", transition: "all .2s",
+              boxShadow: `0 0 24px ${T.cyan}22`,
+            }}
+              onMouseOver={e => e.currentTarget.style.borderColor = T.cyan}
+              onMouseOut={e => e.currentTarget.style.borderColor = T.cyan + "55"}>
+              <div style={{ width: 28, height: 28, background: T.cyan + "22", border: `1px solid ${T.cyan}44`, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, flexShrink: 0 }}>✦</div>
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: T.text, lineHeight: 1 }}>Privacy Assistant</div>
+                <div style={{ fontSize: 11, color: T.cyan, marginTop: 2 }}>Ask about your {issueCount} issues →</div>
+              </div>
+            </button>
+          ) : (
+            /* ── Expanded card ── */
+            <div style={{
+              background: T.card,
+              border: `1.5px solid ${T.cyan}44`,
+              borderRadius: 20,
+              overflow: "hidden",
+              boxShadow: `0 0 0 1px ${T.cyan}11, 0 24px 64px #000000bb`,
+            }}>
+              {/* Privacy guarantee strip */}
+              <div style={{ display: "flex", borderBottom: `1px solid ${T.borderLo}`, background: T.greenLo }}>
+                {["✕ Address never sent", "✕ Nothing stored", "✕ Not for training"].map((t, i) => (
+                  <div key={i} style={{ flex: 1, textAlign: "center", padding: "6px 4px", borderRight: i < 2 ? `1px solid ${T.borderLo}` : undefined }}>
+                    <span style={{ fontFamily: T.mono, fontSize: 9, color: T.green, letterSpacing: 0.2 }}>{t}</span>
+                  </div>
+                ))}
+              </div>
+
+              {/* Main content */}
+              <div style={{ padding: "20px 22px 22px" }}>
+                {/* Header row */}
+                <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 14 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                    <div style={{ width: 44, height: 44, background: T.cyan + "18", border: `1.5px solid ${T.cyan}44`, borderRadius: 13, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, flexShrink: 0, boxShadow: `0 0 16px ${T.cyan}22` }}>✦</div>
+                    <div>
+                      <div style={{ fontSize: 15, fontWeight: 700, color: T.text, lineHeight: 1 }}>Privacy Assistant</div>
+                      <div style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim, letterSpacing: 1, marginTop: 3 }}>POWERED BY CLAUDE · FREE</div>
+                    </div>
+                  </div>
+                  <button onClick={() => setAiWidgetMin(true)} style={{ background: "transparent", border: `1px solid #ffffff44`, borderRadius: 7, padding: "4px 9px", color: "#ffffff", fontSize: 12, cursor: "pointer", lineHeight: 1, transition: "all .15s", flexShrink: 0 }}
+                    onMouseOver={e => e.currentTarget.style.borderColor = "#ffffff88"}
+                    onMouseOut={e => e.currentTarget.style.borderColor = "#ffffff44"}>
+                    — minimize
+                  </button>
+                </div>
+
+                <div style={{ fontSize: 13, color: T.textMid, lineHeight: 1.6, marginBottom: 16 }}>
+                  Get step-by-step instructions for your <strong style={{ color: T.text }}>{issueCount} specific issue{issueCount !== 1 ? "s" : ""}</strong> — which wallet to use, what to click, in plain English.
+                </div>
+
+                <button onClick={openAi} style={{
+                  width: "100%", padding: "14px 20px",
+                  background: `linear-gradient(135deg, ${T.cyan}, #0ea5e9)`,
+                  border: "none", borderRadius: 12,
+                  color: T.bg, fontFamily: T.sans, fontWeight: 700, fontSize: 15,
+                  cursor: "pointer", transition: "opacity .15s",
+                  display: "flex", alignItems: "center", justifyContent: "center", gap: 10,
+                  boxShadow: `0 4px 20px ${T.cyan}44`,
+                }}
+                  onMouseOver={e => e.currentTarget.style.opacity = ".88"}
+                  onMouseOut={e => e.currentTarget.style.opacity = "1"}>
+                  <span>✦</span>
+                  <span>Ask about your {issueCount} issues →</span>
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
       )}
     </div>
   );
