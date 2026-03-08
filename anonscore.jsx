@@ -1214,7 +1214,7 @@ function AiAssistant({ checks, recommendations, score, grade, onClose }) {
   const inputRef = useRef(null);
 
   const MAX_MSGS = 5;
-  const WORKER_URL = "https://anonscore-ai.YOUR-SUBDOMAIN.workers.dev"; // ← replace after deploying Worker
+  const WORKER_URL = "https://anonscore-ai.netassetpremium.workers.dev";
 
   const issues = checks.filter(c => c.status !== "pass");
   const { systemPrompt } = buildAiContext(checks, recommendations, score, grade);
