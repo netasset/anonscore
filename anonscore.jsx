@@ -1831,13 +1831,13 @@ function Dashboard({ address, addrInfo, utxos, txs, isMobile, onBack, onRescan, 
       {/* Floating AI bar — collapsed, expands on click */}
       {aiStage !== "chat" && aiStage !== "consent" && (
         <button onClick={openAi}
-          style={{ position: "fixed", bottom: isMobile ? 76 : 28, right: 28, zIndex: 850, display: "flex", alignItems: "center", gap: 14, background: T.card, border: `1.5px solid ${T.cyan}77`, borderRadius: 18, padding: "16px 22px", cursor: "pointer", animation: "pulseGlow 2.5s ease 1s 4", boxShadow: `0 4px 24px #000000aa, 0 0 0 0 ${T.cyan}00`, transition: "border-color .2s, box-shadow .2s" }}
+          style={{ position: "fixed", bottom: isMobile ? 76 : 28, right: 28, zIndex: 850, display: "flex", alignItems: "center", gap: 16, background: T.card, border: `1.5px solid ${T.cyan}77`, borderRadius: 20, padding: "20px 28px", cursor: "pointer", animation: "pulseGlow 2.5s ease 1s 4", boxShadow: `0 4px 24px #000000aa`, transition: "border-color .2s, box-shadow .2s" }}
           onMouseOver={e => { e.currentTarget.style.borderColor = T.cyan; e.currentTarget.style.boxShadow = `0 8px 40px #000000cc, 0 0 20px ${T.cyan}33`; e.currentTarget.style.animation = "none"; }}
           onMouseOut={e => { e.currentTarget.style.borderColor = T.cyan + "77"; e.currentTarget.style.boxShadow = `0 4px 24px #000000aa`; }}>
-          <div style={{ width: 32, height: 32, background: T.cyan + "22", border: `1px solid ${T.cyan}55`, borderRadius: 9, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, flexShrink: 0 }}>✦</div>
+          <div style={{ width: 40, height: 40, background: T.cyan + "22", border: `1px solid ${T.cyan}55`, borderRadius: 11, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, flexShrink: 0 }}>✦</div>
           <div style={{ textAlign: "left" }}>
-            <div style={{ fontSize: 14, fontWeight: 700, color: T.text, lineHeight: 1 }}>Privacy Assistant</div>
-            <div style={{ fontSize: 12, color: T.cyan, marginTop: 4 }}>Ask about your {issueCount} issue{issueCount !== 1 ? "s" : ""} →</div>
+            <div style={{ fontSize: 16, fontWeight: 700, color: T.text, lineHeight: 1 }}>Privacy Assistant</div>
+            <div style={{ fontSize: 13, color: T.cyan, marginTop: 5 }}>Ask about your {issueCount} issue{issueCount !== 1 ? "s" : ""} →</div>
           </div>
         </button>
       )}
