@@ -1827,13 +1827,17 @@ function Dashboard({ address, addrInfo, utxos, txs, isMobile, onBack, onRescan, 
       {aiStage === "consent" && <AiConsentGate score={score} grade={grade} checks={checks} recommendations={recommendations} onAccept={() => { setAiConsented(true); setAiStage("chat"); }} onDecline={() => setAiStage(null)} />}
       {aiStage === "chat" && <AiAssistant checks={checks} recommendations={recommendations} score={score} grade={grade} onClose={() => setAiStage(null)} />}
 
-      {/* Floating AI button — bottom right, visible when chat is closed */}
+      {/* Floating AI bar — collapsed, expands on click */}
       {aiStage !== "chat" && aiStage !== "consent" && (
-        <button onClick={openAi} title="Ask the Privacy Assistant"
-          style={{ position: "fixed", bottom: isMobile ? 72 : 24, right: 24, zIndex: 850, width: 48, height: 48, borderRadius: "50%", background: T.cyan, border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, boxShadow: `0 4px 24px ${T.cyan}55`, transition: "transform .15s, box-shadow .15s" }}
-          onMouseOver={e => { e.currentTarget.style.transform = "scale(1.1)"; e.currentTarget.style.boxShadow = `0 6px 32px ${T.cyan}77`; }}
-          onMouseOut={e => { e.currentTarget.style.transform = "scale(1)"; e.currentTarget.style.boxShadow = `0 4px 24px ${T.cyan}55`; }}>
-          ✦
+        <button onClick={openAi}
+          style={{ position: "fixed", bottom: isMobile ? 72 : 24, right: 24, zIndex: 850, display: "flex", alignItems: "center", gap: 10, background: T.card, border: `1px solid ${T.cyan}55`, borderRadius: 16, padding: "12px 18px", cursor: "pointer", boxShadow: `0 4px 24px #00000077`, transition: "all .2s" }}
+          onMouseOver={e => { e.currentTarget.style.borderColor = T.cyan; e.currentTarget.style.boxShadow = `0 6px 32px #000000aa`; }}
+          onMouseOut={e => { e.currentTarget.style.borderColor = T.cyan + "55"; e.currentTarget.style.boxShadow = `0 4px 24px #00000077`; }}>
+          <div style={{ width: 26, height: 26, background: T.cyan + "22", border: `1px solid ${T.cyan}44`, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, flexShrink: 0 }}>✦</div>
+          <div style={{ textAlign: "left" }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: T.text, lineHeight: 1 }}>Privacy Assistant</div>
+            <div style={{ fontSize: 11, color: T.cyan, marginTop: 3 }}>Ask about your {issueCount} issue{issueCount !== 1 ? "s" : ""} →</div>
+          </div>
         </button>
       )}
     </div>
