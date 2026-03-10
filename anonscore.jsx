@@ -835,6 +835,11 @@ function Landing({ onAnalyze, isMobile }) {
             </div>
           </div>
 
+          {/* Trust callout */}
+          <div style={{ maxWidth: 480, margin: "0 auto 12px", animation: "fadeUp .5s ease .20s both", background: T.surface, border: "1px solid " + T.border, borderRadius: 10, padding: "10px 14px", fontFamily: T.sans, fontSize: 12, color: T.textMid, lineHeight: 1.5, textAlign: "left" }}>
+            Bitcoin addresses are public by design - we read the blockchain like a block explorer. Your address is never logged or stored.
+          </div>
+
           {/* CTAs */}
           <div style={{ display: "flex", flexDirection: "column", gap: 10, maxWidth: 480, margin: "0 auto", animation: "fadeUp .5s ease .22s both" }}>
             <div>
@@ -1532,6 +1537,37 @@ function Dashboard({ address, addrInfo, utxos, txs, isMobile, onBack, onRescan, 
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             <div style={{ fontSize: 13, color: T.textMid, marginBottom: 4 }}>
               Sorted by impact. Fixing the top 3 alone could raise your score by <strong style={{ color: T.cyan }}>{recommendations.slice(0, 3).reduce((a, r) => a + r.impact, 0)} points</strong>.
+            </div>
+            {/* AI assistant card — privacy guarantees shown before clicking */}
+            <div style={{ background: T.card, border: `1px solid ${T.cyan}33`, borderRadius: 16, overflow: "hidden", marginBottom: 2 }}>
+              {/* Privacy badges — visible without any interaction */}
+              <div style={{ display: "flex", gap: 0, borderBottom: `1px solid ${T.borderLo}` }}>
+                {[
+                  { icon: "✕", label: "Address never sent" },
+                  { icon: "✕", label: "No data stored" },
+                  { icon: "✕", label: "Not used for training" },
+                ].map((badge, i) => (
+                  <div key={i} style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 5, padding: "7px 8px", borderRight: i < 2 ? `1px solid ${T.borderLo}` : undefined, background: T.greenLo }}>
+                    <span style={{ fontFamily: T.mono, fontSize: 9, color: T.green, fontWeight: 700 }}>{badge.icon}</span>
+                    <span style={{ fontFamily: T.mono, fontSize: 9, color: T.green, letterSpacing: 0.3, whiteSpace: "nowrap" }}>{badge.label}</span>
+                  </div>
+                ))}
+              </div>
+              {/* Main clickable area */}
+              <button onClick={openAi} style={{ display: "flex", alignItems: "center", gap: 14, padding: "16px 18px", cursor: "pointer", textAlign: "left", width: "100%", background: "transparent", border: "none", transition: "background .15s" }}
+                onMouseOver={e => e.currentTarget.style.background = T.cyan + "0a"}
+                onMouseOut={e => e.currentTarget.style.background = "transparent"}>
+                <div style={{ width: 36, height: 36, background: T.cyan + "18", border: `1px solid ${T.cyan}33`, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, flexShrink: 0 }}>✦</div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: T.text, marginBottom: 3 }}>Ask the Privacy Assistant</div>
+                  <div style={{ fontSize: 12, color: T.textMid, lineHeight: 1.55 }}>
+                    Get step-by-step guidance for your {checks.filter(c => c.status !== "pass").length} specific issues. Only your score and issue names are shared — never your address.
+                  </div>
+                </div>
+                <div style={{ flexShrink: 0, textAlign: "center" }}>
+                  <div style={{ background: T.cyan, borderRadius: 8, padding: "7px 14px", color: T.bg, fontSize: 12, fontWeight: 700, whiteSpace: "nowrap" }}>Ask now →</div>
+                </div>
+              </button>
             </div>
             {recommendations.map((r, i) => {
               const done = doneFixes.has(r.key);
