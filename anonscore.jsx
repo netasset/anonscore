@@ -1,7 +1,7 @@
 const { useState, useEffect, useCallback, useRef, useMemo } = React;
 
 /* ─────────────────────────────────────────────
-   GLOBAL CSS — dark + violet
+   GLOBAL CSS
 ───────────────────────────────────────────── */
 const CSS = `
 @import url('https://fonts.googleapis.com/css2?family=Oxanium:wght@400;600;700;800&family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,600;1,9..144,300;1,9..144,400&family=JetBrains+Mono:wght@300;400;500;600&family=Outfit:wght@300;400;500;600;700&display=swap');
@@ -33,7 +33,7 @@ input,button,select,textarea{font-family:'Outfit',sans-serif;-webkit-tap-highlig
 `;
 
 /* ─────────────────────────────────────────────
-   DESIGN TOKENS — dark void + violet + btc orange
+   DESIGN TOKENS
 ───────────────────────────────────────────── */
 const T = {
   bg:       "#0b0d14",
@@ -1020,7 +1020,16 @@ function Landing({ onAnalyze, isMobile }) {
           <a href="https://github.com/netasset/anonscore" target="_blank" rel="noopener noreferrer"
             style={{ fontFamily: T.mono, fontSize: 10, color: T.cyan, textDecoration: "none" }}>GitHub ↗</a>
         </div>
-        <span style={{ fontFamily: T.mono, fontSize: 10, color: T.textDim }}>Open source · no cookies · no analytics · Tor compatible</span>
+        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+          <span style={{ fontFamily: T.mono, fontSize: 10, color: T.textDim }}>Open source · no cookies · no analytics · Tor compatible</span>
+          <span style={{ color: T.borderLo }}>·</span>
+          <a href="https://opnorange.com" target="_blank" rel="noopener noreferrer"
+            style={{ fontFamily: T.mono, fontSize: 10, color: T.textDim, textDecoration: "none", transition: "color .15s" }}
+            onMouseOver={e => e.currentTarget.style.color = T.btc}
+            onMouseOut={e => e.currentTarget.style.color = T.textDim}>
+            by OPNorange ↗
+          </a>
+        </div>
       </footer>
     </div>
   );
@@ -1837,7 +1846,7 @@ function Dashboard({ address, addrInfo, utxos, txs, isMobile, onBack, onRescan, 
           </div>
         )}
 
-        {/* ── WATCHLIST removed ── */}
+
       </div>
 
       {/* Mobile bottom nav */}
