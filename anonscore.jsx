@@ -60,6 +60,9 @@ const T = {
   greenLo:  "#3fb95014",
   blue:     "#58a6ff",
   blueLo:   "#58a6ff14",
+  ln:       "#F59E0B",
+  lnLo:     "#F59E0B14",
+  lnMid:    "#F59E0B33",
   mono:     "'JetBrains Mono',monospace",
   serif:    "'Fraunces',serif",
   sans:     "'Outfit',sans-serif",
@@ -366,8 +369,170 @@ const DEMO = {
 };
 
 /* ─────────────────────────────────────────────
-   FORMATTERS
+   LIGHTNING FETCH + ENGINE
 ───────────────────────────────────────────── */
+const LN_API = "https://mempool.space/api/v1/lightning";
+
+async function fetchLightningNode(pubkey) {
+  const [node, channels] = await Promise.all([
+    fetch(`${LN_API}/nodes/${pubkey}`).then(r => { if (!r.ok) throw new Error("Node not found"); return r.json(); }),
+    fetch(`${LN_API}/nodes/${pubkey}/channels?status=open`).then(r => r.json()).catch(() => ({ channels: [] })),
+  ]);
+  return { node, channels: (channels.channels || []).slice(0, 30) };
+}
+
+// Known KYC/surveillance node pubkeys (abbreviated for matching)
+const KYC_NODES = [
+  "03864ef025fde8fb587d989186ce6a4a186895ee44a926bfc370e2c366597a3f8f", // Strike
+  "03abf6f44c355dec0d5aa155bdbdd6e0c8fefe318eff402de65c6eb2e1be55dc3e", // Bitfinex
+  "03a503d8e30d6c93311c96de6b69cfe6b4a0f2f05f5703fca2a8a1e4e1b5b5b5b5", // River
+];
+
+function runLightningEngine(node = {}, channels = []) {
+  let score = 100;
+  const checks = [];
+  const add = (key, name, status, detail, sev, pts) => {
+    checks.push({ key, name, status, detail, sev: sev || "medium" });
+    score += pts;
+  };
+
+  // 1. Public node announcement
+  const isPublic = node.public !== false;
+  if (isPublic)
+    add("announced", "Public Node Announcement", "fail",
+      "Your node is publicly announced on the Lightning gossip network. Your IP or Tor address is visible to every peer.", "high", -18);
+  else
+    add("announced", "Public Node Announcement", "pass",
+      "Your node is not publicly announced — it operates privately.", "clean", 0);
+
+  // 2. KYC exchange peers
+  const kycPeers = channels.filter(ch =>
+    KYC_NODES.some(k => ch.node1_pub === k || ch.node2_pub === k)
+  );
+  if (kycPeers.length >= 2)
+    add("kyc_peers", "KYC Exchange Peer Channels", "fail",
+      `${kycPeers.length} channels connect to known KYC exchanges. These entities log routing metadata and can correlate your activity.`, "critical", -22);
+  else if (kycPeers.length === 1)
+    add("kyc_peers", "KYC Exchange Peer Channels", "warn",
+      "1 channel connects to a known KYC exchange. Their logs can correlate payment routing through your node.", "high", -10);
+  else
+    add("kyc_peers", "KYC Exchange Peer Channels", "pass",
+      "No channels detected to known KYC surveillance entities.", "clean", 0);
+
+  // 3. Tor usage
+  const hasTorAddr = node.addresses?.some(a => a.addr?.includes(".onion"));
+  const hasClearnet = node.addresses?.some(a => !a.addr?.includes(".onion") && a.addr);
+  if (hasClearnet && !hasTorAddr)
+    add("tor", "Tor / Clearnet Exposure", "fail",
+      "Your node only accepts clearnet connections. Your IP address is directly visible to all peers.", "high", -15);
+  else if (hasClearnet && hasTorAddr)
+    add("tor", "Tor / Clearnet Exposure", "warn",
+      "Your node accepts both Tor and clearnet. Clearnet peers can correlate your IP with your node pubkey.", "medium", -7);
+  else
+    add("tor", "Tor / Clearnet Exposure", "pass",
+      "Your node is Tor-only — no IP exposure to peers.", "clean", 0);
+
+  // 4. Channel count (too few = low routing privacy)
+  const chCount = channels.length;
+  if (chCount === 0)
+    add("channels", "Channel Diversity", "warn",
+      "No open channels found. A node with no channels has limited routing privacy and cannot receive spontaneous payments.", "medium", -6);
+  else if (chCount < 3)
+    add("channels", "Channel Diversity", "warn",
+      `Only ${chCount} channel${chCount > 1 ? "s" : ""}. Low channel count limits routing path diversity, making payment flows easier to trace.`, "medium", -4);
+  else
+    add("channels", "Channel Diversity", "pass",
+      `${chCount} channels — good routing diversity makes payment flows harder to trace.`, "clean", 0);
+
+  // 5. Large single channel dominance
+  const totalCap = channels.reduce((s, c) => s + (c.capacity || 0), 0);
+  const maxCap = channels.length ? Math.max(...channels.map(c => c.capacity || 0)) : 0;
+  if (totalCap > 0 && maxCap / totalCap > 0.8)
+    add("cap_conc", "Channel Capacity Concentration", "warn",
+      "Over 80% of your node capacity is in one channel. This makes your routing patterns highly predictable.", "medium", -6);
+  else
+    add("cap_conc", "Channel Capacity Concentration", "pass",
+      "Your capacity is distributed across channels — good for routing privacy.", "clean", 0);
+
+  // 6. Node alias (using real identity)
+  const alias = node.alias || "";
+  const suspiciousAlias = alias.length > 0 && /^[A-Z][a-z]/.test(alias) && alias.includes(" ");
+  if (suspiciousAlias)
+    add("alias", "Node Alias Privacy", "warn",
+      `Your alias "${alias}" looks like a real name. Node aliases are publicly visible to the entire Lightning network.`, "low", -4);
+  else if (alias.length === 0)
+    add("alias", "Node Alias Privacy", "pass",
+      "No alias set — your node is identified only by its pubkey.", "clean", 0);
+  else
+    add("alias", "Node Alias Privacy", "pass",
+      `Alias "${alias}" appears pseudonymous.`, "clean", 0);
+
+  // 7. Node age (new nodes get less scrutiny pattern)
+  const firstSeen = node.first_seen || 0;
+  const ageDays = firstSeen ? Math.floor((Date.now() / 1000 - firstSeen) / 86400) : 0;
+  if (ageDays > 0 && ageDays < 30)
+    add("age", "Node Establishment", "warn",
+      "Your node is less than 30 days old. New nodes are more easily tracked as their channel history is limited.", "low", -3);
+  else
+    add("age", "Node Establishment", "pass",
+      ageDays > 0 ? `Node active for ${Math.floor(ageDays / 30)} months — established routing history.` : "Node age unknown.", "clean", 0);
+
+  // 8. Channel closing pattern (on-chain footprint)
+  add("onchain", "On-Chain Channel Footprint", "warn",
+    "Every channel open and close leaves an on-chain trace. Using UTXOs from KYC exchanges to fund channels links your Lightning activity to your on-chain identity.",
+    "medium", -5);
+
+  score = Math.max(0, Math.min(100, Math.round(score)));
+
+  const recs = [];
+  const failed = checks.filter(c => c.status !== "pass");
+  if (failed.find(f => f.key === "kyc_peers"))
+    recs.push({ key: "kyc_peers", icon: "⚡", action: "Close channels with KYC exchange nodes", impact: 22, effort: "Medium",
+      detail: "Open replacement channels with privacy-focused or anonymous peers. Look for Tor-only nodes with no identifiable alias.",
+      tools: [{ name: "Amboss.space", note: "Find privacy-respecting nodes to peer with" }, { name: "LNRouter", note: "Routing analysis, find good private peers" }] });
+  if (failed.find(f => f.key === "announced"))
+    recs.push({ key: "announced", icon: "📡", action: "Switch to an unannounced / private node", impact: 18, effort: "Hard",
+      detail: "An unannounced node is invisible to the gossip network. You can still open and use channels — they just won't be publicly listed.",
+      tools: [{ name: "CLN (Core Lightning)", note: "Supports unannounced channels natively" }, { name: "LND", note: "Use --unexported-channel flag" }] });
+  if (failed.find(f => f.key === "tor"))
+    recs.push({ key: "tor", icon: "🧅", action: "Enable Tor-only mode", impact: 15, effort: "Medium",
+      detail: "Disable clearnet listening entirely. Your IP will no longer be exposed to peers.",
+      tools: [{ name: "Umbrel", note: "Settings → Tor → Force Tor" }, { name: "Start9", note: "System → Tor → Enforce Tor" }, { name: "RaspiBlitz", note: "Main menu → CONNECT → TOR" }] });
+  if (failed.find(f => f.key === "onchain"))
+    recs.push({ key: "onchain", icon: "🔗", action: "Fund channels from non-KYC UTXOs only", impact: 8, effort: "Medium",
+      detail: "Use a separate wallet with no KYC history to open channels. Never open a channel directly from an exchange withdrawal.",
+      tools: [{ name: "Bisq", note: "Non-KYC bitcoin source" }, { name: "Sparrow Wallet", note: "Coin control before channel open" }] });
+
+  const grade = score >= 90 ? "A+" : score >= 80 ? "A" : score >= 70 ? "B" : score >= 55 ? "C" : score >= 40 ? "D" : "F";
+  return { score, grade, checks, recommendations: recs };
+}
+
+const DEMO_LN = {
+  node: {
+    public: true,
+    alias: "SatoshiNode 01",
+    addresses: [{ addr: "192.168.1.1:9735" }, { addr: "abcdef123456.onion:9735" }],
+    first_seen: Math.floor(Date.now() / 1000) - 86400 * 120,
+    capacity: 214000000,
+    channel_count: 12,
+  },
+  channels: [
+    { node1_pub: "03864ef025fde8fb587d989186ce6a4a186895ee44a926bfc370e2c366597a3f8f", node2_pub: "mynode", capacity: 42000000 },
+    { node1_pub: "03864ef025fde8fb587d989186ce6a4a186895ee44a926bfc370e2c366597a3f8f", node2_pub: "mynode", capacity: 18000000 },
+    { node1_pub: "mynode", node2_pub: "03abf6f44c355dec0d5aa155bdbdd6e0c8fefe318eff402de65c6eb2e1be55dc3e", capacity: 25000000 },
+    { node1_pub: "mynode", node2_pub: "anon1", capacity: 22000000 },
+    { node1_pub: "mynode", node2_pub: "anon2", capacity: 31000000 },
+    { node1_pub: "mynode", node2_pub: "anon3", capacity: 28000000 },
+    { node1_pub: "mynode", node2_pub: "anon4", capacity: 18000000 },
+    { node1_pub: "mynode", node2_pub: "anon5", capacity: 10000000 },
+    { node1_pub: "mynode", node2_pub: "anon6", capacity: 8000000 },
+    { node1_pub: "mynode", node2_pub: "anon7", capacity: 7000000 },
+    { node1_pub: "mynode", node2_pub: "anon8", capacity: 3000000 },
+    { node1_pub: "mynode", node2_pub: "anon9", capacity: 2000000 },
+  ],
+};
+
+
 const fmt = {
   btc:  v => v >= 1e8 ? `₿${(v / 1e8).toFixed(4)}` : `${v.toLocaleString()} sats`,
   age:  ts => { const d = Math.floor((Date.now()/1000 - ts) / 86400); return d < 1 ? "Today" : d === 1 ? "Yesterday" : d < 30 ? `${d}d ago` : d < 365 ? `${Math.floor(d/30)}mo ago` : `${Math.floor(d/365)}yr ago`; },
@@ -464,6 +629,23 @@ function isValidBitcoinAddress(addr) {
   return /^(bc1|[13])[a-zA-HJ-NP-Z0-9]{25,87}$/.test(addr);
 }
 
+function isValidLightningPubkey(str) {
+  return /^[0-9a-fA-F]{66}$/.test(str.trim());
+}
+
+function isLightningAddress(str) {
+  return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(str.trim()) && !str.includes("bitcoin");
+}
+
+function detectInputType(val) {
+  const v = (val || "").trim();
+  if (!v) return null;
+  if (isValidLightningPubkey(v)) return "ln_pubkey";
+  if (isLightningAddress(v)) return "ln_address";
+  if (isValidBitcoinAddress(v) || v === "DEMO") return "btc";
+  return null;
+}
+
 /* ─────────────────────────────────────────────
    MICRO COMPONENTS
 ───────────────────────────────────────────── */
@@ -516,12 +698,16 @@ function useToast() {
 }
 
 /* ─────────────────────────────────────────────
-   SCORE RING — FIX: useRef to prevent memory leak
+   SCORE RING — arc gauge matching logo
+   Partial arc (250° sweep), multicolor gradient
+   red → orange → cyan → green + glowing dot
 ───────────────────────────────────────────── */
+const _ringId = { n: 0 };
+
 function ScoreRing({ score, size = 130, animate = true }) {
   const [cur, setCur] = useState(animate ? 0 : score);
-  const timerRef = useRef(null); // FIX: track timer to clear on unmount
-  const r = size * 0.38, c = 2 * Math.PI * r, col = scoreColor(score);
+  const timerRef = useRef(null);
+  const uid = useRef(`sr${++_ringId.n}`).current;
 
   useEffect(() => {
     if (!animate) { setCur(score); return; }
@@ -529,25 +715,121 @@ function ScoreRing({ score, size = 130, animate = true }) {
     const tick = () => {
       v = Math.min(v + 1, score);
       setCur(v);
-      if (v < score) {
-        timerRef.current = setTimeout(tick, 12);
-      }
+      if (v < score) timerRef.current = setTimeout(tick, 12);
     };
     timerRef.current = setTimeout(tick, 400);
-    return () => { if (timerRef.current) clearTimeout(timerRef.current); }; // FIX: cleanup
+    return () => { if (timerRef.current) clearTimeout(timerRef.current); };
   }, [score, animate]);
+
+  const cx = size / 2, cy = size / 2;
+  const r = size * 0.37;
+  const sw = size * 0.075; // stroke width
+
+  // Arc geometry — 250° sweep, gap at bottom, matching logo
+  const START_DEG = 145;   // bottom-left (8 o'clock in SVG coords)
+  const SWEEP     = 250;   // degrees of total arc
+
+  const toRad = d => (d * Math.PI) / 180;
+  const pt    = d => ({ x: cx + r * Math.cos(toRad(d)), y: cy + r * Math.sin(toRad(d)) });
+  const arcD  = (d1, d2) => {
+    const p1 = pt(d1), p2 = pt(d2);
+    const large = ((d2 - d1) % 360 + 360) % 360 > 180 ? 1 : 0;
+    return `M ${p1.x.toFixed(2)} ${p1.y.toFixed(2)} A ${r} ${r} 0 ${large} 1 ${p2.x.toFixed(2)} ${p2.y.toFixed(2)}`;
+  };
+
+  // Color stops matching logo palette
+  const STOPS = [
+    { t: 0,    rgb: [248, 81,  73 ] }, // red
+    { t: 0.35, rgb: [247, 147, 26 ] }, // btc orange
+    { t: 0.65, rgb: [34,  211, 238] }, // cyan
+    { t: 1,    rgb: [63,  185, 80 ] }, // green
+  ];
+  const lerpColor = t => {
+    for (let i = 0; i < STOPS.length - 1; i++) {
+      if (t <= STOPS[i + 1].t) {
+        const f = (t - STOPS[i].t) / (STOPS[i + 1].t - STOPS[i].t);
+        return STOPS[i].rgb.map((a, j) => Math.round(a + (STOPS[i + 1].rgb[j] - a) * f));
+      }
+    }
+    return STOPS[STOPS.length - 1].rgb;
+  };
+  const toHex = ([r, g, b]) => `#${[r, g, b].map(v => v.toString(16).padStart(2, "0")).join("")}`;
+
+  const N      = 48;           // segments for smooth gradient
+  const filled = cur / 100;
+  const dotDeg = START_DEG + SWEEP * filled;
+  const dotPt  = pt(dotDeg);
+  const dotCol = toHex(lerpColor(filled));
+  const textCol = scoreColor(score);
 
   return (
     <div style={{ position: "relative", width: size, height: size, flexShrink: 0 }}>
-      <svg width={size} height={size} style={{ transform: "rotate(-90deg)", position: "absolute" }}>
-        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={T.surface} strokeWidth={size * .07} />
-        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={col} strokeWidth={size * .07}
-          strokeDasharray={c} strokeDashoffset={c * (1 - cur / 100)} strokeLinecap="round"
-          style={{ transition: "stroke-dashoffset .08s linear" }} />
+      <svg width={size} height={size} overflow="visible">
+        <defs>
+          {/* Glow for the filled arc */}
+          <filter id={`arcglow-${uid}`} x="-40%" y="-40%" width="180%" height="180%">
+            <feGaussianBlur stdDeviation={sw * 0.6} result="blur" />
+            <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+          </filter>
+          {/* Glow for the dot */}
+          <filter id={`dotglow-${uid}`} x="-150%" y="-150%" width="400%" height="400%">
+            <feGaussianBlur stdDeviation={sw * 0.9} result="blur" />
+            <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+          </filter>
+        </defs>
+
+        {/* ── Track (full dim arc) ── */}
+        <path d={arcD(START_DEG, START_DEG + SWEEP)}
+          fill="none" stroke={T.surface} strokeWidth={sw + 1}
+          strokeLinecap="round" />
+
+        {/* ── Filled colored segments ── */}
+        {cur > 0 && Array.from({ length: N }).map((_, i) => {
+          const t1 = i / N;
+          const t2 = (i + 1) / N;
+          if (t1 >= filled) return null;
+          const actualT2 = Math.min(t2, filled);
+          const d1 = START_DEG + SWEEP * t1;
+          const d2 = START_DEG + SWEEP * actualT2;
+          if (d2 - d1 < 0.05) return null;
+          const mid = (t1 + actualT2) / 2;
+          return (
+            <path key={i} d={arcD(d1, d2)}
+              fill="none"
+              stroke={toHex(lerpColor(mid))}
+              strokeWidth={sw}
+              strokeLinecap="butt"
+              filter={`url(#arcglow-${uid})`}
+            />
+          );
+        })}
+
+        {/* ── Glowing dot at the score position ── */}
+        {cur > 0 && (
+          <>
+            {/* outer glow halo */}
+            <circle cx={dotPt.x} cy={dotPt.y} r={sw * 1.1}
+              fill={dotCol} opacity="0.35"
+              filter={`url(#dotglow-${uid})`} />
+            {/* solid dot */}
+            <circle cx={dotPt.x} cy={dotPt.y} r={sw * 0.58}
+              fill={dotCol}
+              filter={`url(#dotglow-${uid})`} />
+            {/* bright white centre */}
+            <circle cx={dotPt.x} cy={dotPt.y} r={sw * 0.25} fill="#ffffff" />
+          </>
+        )}
       </svg>
-      <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
-        <span style={{ fontFamily: T.serif, fontSize: size * .28, color: col, lineHeight: 1, fontWeight: 400 }}>{cur}</span>
-        <span style={{ fontFamily: T.mono, fontSize: size * .07, color: T.textDim, letterSpacing: 1, marginTop: 2 }}>/100</span>
+
+      {/* ── Centre text — score + /100 ── */}
+      <div style={{
+        position: "absolute", inset: 0,
+        display: "flex", flexDirection: "column",
+        alignItems: "center", justifyContent: "center",
+        paddingTop: size * 0.06, // nudge up slightly inside the open-bottom arc
+      }}>
+        <span style={{ fontFamily: T.serif, fontSize: size * .29, color: textCol, lineHeight: 1, fontWeight: 400 }}>{cur}</span>
+        <span style={{ fontFamily: T.mono, fontSize: size * .075, color: T.textDim, letterSpacing: 1, marginTop: 2 }}>/100</span>
       </div>
     </div>
   );
@@ -763,15 +1045,19 @@ function Landing({ onAnalyze, isMobile }) {
   const [error, setError] = useState("");
   const inputRef = useRef();
 
+  const inputType = detectInputType(input);
+  const isLn = inputType === "ln_pubkey" || inputType === "ln_address";
+
   const submit = (val, plain = false) => {
     const v = (val || input).trim();
-    if (!v) { setError("Please enter a Bitcoin address."); return; }
-    if (!isValidBitcoinAddress(v) && v !== "DEMO") {
-      setError("That doesn't look like a valid address. Try one starting with bc1, 1, or 3.");
+    if (!v) { setError("Please enter a Bitcoin address or Lightning node pubkey."); return; }
+    const t = detectInputType(v);
+    if (!t) {
+      setError("Paste a Bitcoin address (bc1…, 1…, 3…) or a Lightning node pubkey (66-char hex).");
       return;
     }
     setError("");
-    onAnalyze(v, plain);
+    onAnalyze(v, plain, t);
   };
 
   return (
@@ -811,7 +1097,7 @@ function Landing({ onAnalyze, isMobile }) {
           {/* Eyebrow */}
           <div style={{ fontFamily: T.mono, fontSize: 10, letterSpacing: 2.5, marginBottom: 18, animation: "fadeUp .5s ease both", display: "flex", gap: 8, alignItems: "center", justifyContent: "center" }}>
             <span style={{ color: T.btc }}>₿</span>
-            <span style={{ color: T.cyan }}>FREE BITCOIN PRIVACY AUDIT</span>
+            <span style={{ color: T.cyan }}>FREE BITCOIN &amp; LIGHTNING PRIVACY AUDIT</span>
           </div>
 
           {/* Headline */}
@@ -820,7 +1106,7 @@ function Landing({ onAnalyze, isMobile }) {
           </h1>
 
           <p style={{ fontSize: isMobile ? 15 : 18, color: T.textMid, lineHeight: 1.7, marginBottom: 32, fontWeight: 300, animation: "fadeUp .5s ease .14s both", maxWidth: 560, margin: "0 auto 32px" }}>
-            Paste any Bitcoin address. Get a privacy score, see every issue, and get a ranked plan to fix it — free, open source, nothing stored.
+            Paste a Bitcoin address or a Lightning node pubkey. Get a privacy score, every issue explained, and a ranked fix plan — free, open source, nothing stored.
           </p>
 
           {/* Score spectrum — slim, inline */}
@@ -843,26 +1129,43 @@ function Landing({ onAnalyze, isMobile }) {
           {/* CTAs */}
           <div style={{ display: "flex", flexDirection: "column", gap: 10, maxWidth: 480, margin: "0 auto", animation: "fadeUp .5s ease .22s both" }}>
             <div>
+              {/* Type detection pill — appears when input is recognised */}
+              {inputType && (
+                <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8, animation: "slideDown .2s ease both" }}>
+                  <div style={{ width: 6, height: 6, borderRadius: "50%", background: isLn ? T.ln : T.btc, boxShadow: `0 0 6px ${isLn ? T.ln : T.btc}` }} />
+                  <span style={{ fontFamily: T.mono, fontSize: 10, color: isLn ? T.ln : T.btc }}>
+                    {inputType === "ln_pubkey" ? "⚡ Lightning node pubkey detected" :
+                     inputType === "ln_address" ? "⚡ Lightning address detected" :
+                     "₿ Bitcoin address detected"}
+                  </span>
+                </div>
+              )}
               <div style={{ display: "flex", gap: 8 }}>
                 <input ref={inputRef} value={input} onChange={e => { setInput(e.target.value); setError(""); }}
                   onKeyDown={e => e.key === "Enter" && submit(null, true)}
-                  placeholder="bc1q… or 1… or 3…"
-                  style={{ flex: 1, background: T.surface, border: `1.5px solid ${error ? T.red : T.border}`, borderRadius: 10, padding: "13px 16px", color: T.text, fontFamily: T.mono, fontSize: 13, outline: "none", transition: "border .18s", minWidth: 0 }}
-                  onFocus={e => e.target.style.borderColor = T.cyan}
-                  onBlur={e => e.target.style.borderColor = error ? T.red : T.border} />
-                <button onClick={() => submit(null, true)} style={{ background: T.btc, border: `1.5px solid ${T.btc}`, borderRadius: 10, padding: "13px 20px", color: T.bg, fontFamily: T.sans, fontWeight: 700, fontSize: 14, cursor: "pointer", whiteSpace: "nowrap", transition: "all .15s" }}
+                  placeholder={isLn ? "03abc… (66-char node pubkey)" : "bc1q… or 1… or 3…  ·  or Lightning 03…"}
+                  style={{ flex: 1, background: T.surface,
+                    border: `1.5px solid ${error ? T.red : inputType ? (isLn ? T.ln : T.btc) : T.border}`,
+                    borderRadius: 10, padding: "13px 16px", color: T.text, fontFamily: T.mono, fontSize: 13, outline: "none", transition: "border .18s", minWidth: 0 }}
+                  onFocus={e => e.target.style.borderColor = isLn ? T.ln : T.cyan}
+                  onBlur={e => e.target.style.borderColor = error ? T.red : inputType ? (isLn ? T.ln : T.btc) : T.border} />
+                <button onClick={() => submit(null, !isLn)}
+                  style={{ background: isLn ? T.ln : T.btc, border: "none", borderRadius: 10, padding: "13px 20px",
+                    color: T.bg, fontFamily: T.sans, fontWeight: 700, fontSize: 14, cursor: "pointer", whiteSpace: "nowrap", transition: "all .15s" }}
                   onMouseOver={e => e.currentTarget.style.opacity = ".88"}
                   onMouseOut={e => e.currentTarget.style.opacity = "1"}>
-                  Analyze →
+                  {isLn ? "⚡ Audit →" : "Analyze →"}
                 </button>
               </div>
-              <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 5 }}>
-                <button onClick={() => submit(null, false)} style={{ background: "none", border: "none", cursor: "pointer", fontFamily: T.mono, fontSize: 10, color: T.textDim, padding: 0 }}
-                  onMouseOver={e => e.currentTarget.style.color = T.textMid}
-                  onMouseOut={e => e.currentTarget.style.color = T.textDim}>
-                  prefer technical mode →
-                </button>
-              </div>
+              {!isLn && (
+                <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 5 }}>
+                  <button onClick={() => submit(null, false)} style={{ background: "none", border: "none", cursor: "pointer", fontFamily: T.mono, fontSize: 10, color: T.textDim, padding: 0 }}
+                    onMouseOver={e => e.currentTarget.style.color = T.textMid}
+                    onMouseOut={e => e.currentTarget.style.color = T.textDim}>
+                    prefer technical mode →
+                  </button>
+                </div>
+              )}
               {error && <div style={{ fontSize: 12, color: T.red, marginTop: 6, animation: "slideDown .2s ease" }}>⚠ {error}</div>}
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -871,20 +1174,26 @@ function Landing({ onAnalyze, isMobile }) {
               <div style={{ flex: 1, height: 1, background: T.borderLo }} />
             </div>
             <div style={{ display: "flex", gap: 8 }}>
-              <button onClick={() => onAnalyze("DEMO", false)}
+              <button onClick={() => onAnalyze("DEMO", false, "btc")}
                 style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, background: T.surface, border: `1.5px solid ${T.border}`, borderRadius: 12, padding: "11px 16px", color: T.textMid, fontFamily: T.sans, fontSize: 13, fontWeight: 600, cursor: "pointer", transition: "all .18s" }}
                 onMouseOver={e => e.currentTarget.style.borderColor = T.cyan}
                 onMouseOut={e => e.currentTarget.style.borderColor = T.border}>
-                ▶ Sample scan
+                ₿ Bitcoin sample
+              </button>
+              <button onClick={() => onAnalyze("DEMO_LN", false, "ln_pubkey")}
+                style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, background: T.surface, border: `1.5px solid ${T.border}`, borderRadius: 12, padding: "11px 16px", color: T.textMid, fontFamily: T.sans, fontSize: 13, fontWeight: 600, cursor: "pointer", transition: "all .18s" }}
+                onMouseOver={e => e.currentTarget.style.borderColor = T.ln}
+                onMouseOut={e => e.currentTarget.style.borderColor = T.border}>
+                ⚡ Lightning sample
               </button>
               <div style={{ flex: 2, display: "flex", flexDirection: "column", gap: 4 }}>
-                <button onClick={() => onAnalyze("DEMO", true)}
+                <button onClick={() => onAnalyze("DEMO", true, "btc")}
                   style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, background: T.cyan, border: "none", borderRadius: 12, padding: "11px 16px", color: T.bg, fontFamily: T.sans, fontSize: 13, fontWeight: 700, cursor: "pointer", transition: "all .18s", boxShadow: `0 2px 14px ${T.cyanMid}` }}
                   onMouseOver={e => e.currentTarget.style.opacity = ".88"}
                   onMouseOut={e => e.currentTarget.style.opacity = "1"}>
-                  💬 Sample in Plain English
+                  💬 Plain English
                 </button>
-                <div style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim, textAlign: "center" }}>no jargon — good if you're new to Bitcoin</div>
+                <div style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim, textAlign: "center" }}>no jargon · Bitcoin sample</div>
               </div>
             </div>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
@@ -901,9 +1210,9 @@ function Landing({ onAnalyze, isMobile }) {
         <div style={{ maxWidth: 860, margin: "0 auto" }}>
           <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(3, 1fr)", gap: isMobile ? 20 : 0 }}>
             {[
-              { n:"01", icon:"📋", title:"Paste an address", desc:"Any Bitcoin address — yours or anyone's. No account, no email, nothing saved." },
-              { n:"02", icon:"🔍", title:"We run 10 checks",  desc:"We scan the public blockchain for the same patterns surveillance firms use — read-only, in your browser." },
-              { n:"03", icon:"🎯", title:"Score + fix plan",  desc:"A score from 0–100, every issue explained, fixes ranked by impact. Hit 💬 Plain English if you want jargon-free." },
+              { n:"01", icon:"📋", title:"Paste an address or pubkey", desc:"Bitcoin address (bc1…, 1…, 3…) or Lightning node pubkey (66-char hex). No account, no email, nothing saved." },
+              { n:"02", icon:"🔍", title:"We run the checks",  desc:"Bitcoin: 10 on-chain heuristics. Lightning: 8 node privacy checks. Same patterns surveillance firms use — runs in your browser." },
+              { n:"03", icon:"🎯", title:"Score + fix plan",  desc:"A score from 0–100, every issue explained, fixes ranked by impact. Bitcoin scan also has a 💬 Plain English mode." },
             ].map((s, i) => (
               <div key={i} style={{ display: "flex", gap: 14, alignItems: "flex-start", padding: isMobile ? 0 : "0 28px", borderLeft: !isMobile && i > 0 ? `1px solid ${T.border}` : "none" }}>
                 <div style={{ fontSize: 22, flexShrink: 0, marginTop: 2 }}>{s.icon}</div>
@@ -1038,53 +1347,75 @@ function Landing({ onAnalyze, isMobile }) {
 /* ─────────────────────────────────────────────
    SCANNING — with educational facts
 ───────────────────────────────────────────── */
-function Scanning({ address }) {
+function Scanning({ address, isLightning }) {
   const [step, setStep] = useState(0);
   const intervalRef = useRef(null);
 
+  const LN_STEPS = [
+    { label: "Resolving node pubkey…",       fact: "Lightning node pubkeys are permanently public once announced to the gossip network." },
+    { label: "Fetching node metadata…",      fact: "Your node alias, IP address, and connection info are visible to every peer on the network." },
+    { label: "Loading open channels…",       fact: "Every channel open and close is recorded on-chain — permanently linking your Lightning and on-chain identities." },
+    { label: "Identifying peer nodes…",      fact: "KYC exchanges operate Lightning nodes that log routing metadata for all channels they peer with." },
+    { label: "Checking IP / Tor exposure…",  fact: "A clearnet Lightning node leaks your physical location and ISP to every peer you connect to." },
+    { label: "Analysing channel diversity…", fact: "Nodes with few channels are easier to surveil — payment paths are predictable and limited." },
+    { label: "Scoring capacity concentration…", fact: "If 80%+ of your capacity sits in one channel, your routing patterns are trivially predictable." },
+    { label: "Checking alias privacy…",      fact: "Your node alias is broadcast to the entire network — using a real name links your identity to every channel." },
+    { label: "Calculating privacy score…",   fact: "Score 0 = fully deanonymisable. Score 100 = anonymous-by-default node operation." },
+  ];
+
+  const steps = isLightning ? LN_STEPS : SCAN_STEPS;
+  const accentColor = isLightning ? T.ln : T.cyan;
+  const accentMid = isLightning ? T.lnMid : T.cyanMid;
+
   useEffect(() => {
     intervalRef.current = setInterval(() => {
-      setStep(s => Math.min(s + 1, SCAN_STEPS.length - 1));
+      setStep(s => Math.min(s + 1, steps.length - 1));
     }, 400);
     return () => clearInterval(intervalRef.current);
-  }, []);
+  }, [steps.length]);
 
-  const pct = Math.round((step / (SCAN_STEPS.length - 1)) * 100);
-  const currentFact = SCAN_STEPS[step].fact;
+  const pct = Math.round((step / (steps.length - 1)) * 100);
+  const currentFact = steps[step].fact;
 
   return (
     <div style={{ minHeight: "100vh", background: T.bg, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 32, gap: 28 }}>
       {/* Header */}
       <div style={{ textAlign: "center" }}>
-        <div style={{ fontFamily: T.mono, fontSize: 10, color: T.cyan, letterSpacing: 2, marginBottom: 12 }}>RUNNING 10 CHECKS</div>
-        <div style={{ fontFamily: T.serif, fontSize: 26, color: T.text, marginBottom: 8, fontWeight: 400 }}>Analyzing your wallet…</div>
-        <div style={{ fontFamily: T.mono, fontSize: 11, color: T.textDim, letterSpacing: 1 }}>{address === "DEMO" ? "Demo wallet" : fmt.addr(address)}</div>
+        <div style={{ fontFamily: T.mono, fontSize: 10, color: accentColor, letterSpacing: 2, marginBottom: 12 }}>
+          {isLightning ? "⚡ RUNNING 8 LIGHTNING CHECKS" : "RUNNING 10 CHECKS"}
+        </div>
+        <div style={{ fontFamily: T.serif, fontSize: 26, color: T.text, marginBottom: 8, fontWeight: 400 }}>
+          {isLightning ? "Auditing your node…" : "Analyzing your wallet…"}
+        </div>
+        <div style={{ fontFamily: T.mono, fontSize: 11, color: T.textDim, letterSpacing: 1 }}>
+          {address === "DEMO" || address === "DEMO_LN" ? (isLightning ? "Demo Lightning node" : "Demo wallet") : fmt.addr(address)}
+        </div>
       </div>
 
       {/* Progress */}
       <div style={{ width: "min(480px,90vw)" }}>
         <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 10 }}>
-          <span style={{ fontSize: 13, color: T.textMid }}>{SCAN_STEPS[step].label}</span>
-          <span style={{ fontFamily: T.mono, fontSize: 13, color: T.cyan, fontWeight: 500 }}>{pct}%</span>
+          <span style={{ fontSize: 13, color: T.textMid }}>{steps[step].label}</span>
+          <span style={{ fontFamily: T.mono, fontSize: 13, color: accentColor, fontWeight: 500 }}>{pct}%</span>
         </div>
         <div style={{ height: 3, background: T.surface, borderRadius: 4 }}>
-          <div style={{ height: "100%", background: T.cyan, borderRadius: 4, width: `${pct}%`, transition: "width .4s ease", boxShadow: `0 0 8px ${T.cyanMid}` }} />
+          <div style={{ height: "100%", background: accentColor, borderRadius: 4, width: `${pct}%`, transition: "width .4s ease", boxShadow: `0 0 8px ${accentMid}` }} />
         </div>
       </div>
 
       {/* Steps log */}
       <div style={{ display: "flex", flexDirection: "column", gap: 6, width: "min(480px,90vw)" }}>
-        {SCAN_STEPS.slice(0, step + 1).map((s, i) => (
+        {steps.slice(0, step + 1).map((s, i) => (
           <div key={i} style={{ display: "flex", gap: 10, alignItems: "center", animation: "fadeIn .25s ease" }}>
-            <span style={{ color: i < step ? T.green : T.cyan, fontFamily: T.mono, fontSize: 11 }}>{i < step ? "✓" : "›"}</span>
+            <span style={{ color: i < step ? T.green : accentColor, fontFamily: T.mono, fontSize: 11 }}>{i < step ? "✓" : "›"}</span>
             <span style={{ fontSize: 13, color: i < step ? T.textDim : T.text }}>{s.label}</span>
           </div>
         ))}
       </div>
 
-      {/* Did you know — animated per step */}
-      <div key={step} style={{ width: "min(480px,90vw)", background: T.surface, border: `1px solid ${T.border}`, borderLeft: `3px solid ${T.cyan}`, borderRadius: 10, padding: "14px 18px", animation: "factIn .4s ease both" }}>
-        <div style={{ fontFamily: T.mono, fontSize: 9, color: T.cyan, letterSpacing: 2, marginBottom: 6 }}>DID YOU KNOW</div>
+      {/* Did you know */}
+      <div key={step} style={{ width: "min(480px,90vw)", background: T.surface, border: `1px solid ${T.border}`, borderLeft: `3px solid ${accentColor}`, borderRadius: 10, padding: "14px 18px", animation: "factIn .4s ease both" }}>
+        <div style={{ fontFamily: T.mono, fontSize: 9, color: accentColor, letterSpacing: 2, marginBottom: 6 }}>DID YOU KNOW</div>
         <div style={{ fontSize: 13, color: T.textMid, lineHeight: 1.65 }}>{currentFact}</div>
       </div>
     </div>
@@ -1957,10 +2288,262 @@ function Dashboard({ address, addrInfo, utxos, txs, isMobile, onBack, onRescan, 
 }
 
 /* ─────────────────────────────────────────────
+   LIGHTNING DASHBOARD
+───────────────────────────────────────────── */
+function LightningDashboard({ nodeId, nodeData, channels, isMobile, onBack, toast }) {
+  const [tab, setTab] = useState("Fix It");
+  const { score, grade, checks, recommendations } = useMemo(
+    () => runLightningEngine(nodeData, channels), [nodeData, channels]
+  );
+  const col = scoreColor(score);
+  const fails = checks.filter(c => c.status === "fail").length;
+  const warns = checks.filter(c => c.status === "warn").length;
+  const passes = checks.filter(c => c.status === "pass").length;
+  const [expandedCheck, setExpandedCheck] = useState(null);
+  const [doneFixes, setDoneFixes] = useState(new Set());
+  const toggleDone = k => setDoneFixes(p => { const n = new Set(p); n.has(k) ? n.delete(k) : n.add(k); return n; });
+
+  const totalCap = channels.reduce((s, c) => s + (c.capacity || 0), 0);
+  const alias = nodeData.alias || "Unknown Node";
+  const pubkeyShort = nodeId ? `${nodeId.slice(0, 10)}…${nodeId.slice(-6)}` : "—";
+  const TABS = isMobile ? ["Fix It", "Checks", "Channels"] : ["Fix It", "Checks", "Channels", "Methodology"];
+
+  return (
+    <div style={{ minHeight: "100vh", background: T.bg, display: "flex", flexDirection: "column" }}>
+      {/* ── Nav — matches BTC nav ── */}
+      <nav style={{ display: "flex", alignItems: "center", gap: 10, padding: isMobile ? "12px 16px" : "12px 32px", borderBottom: `1px solid ${T.border}`, background: T.bg, position: "sticky", top: 0, zIndex: 100 }}>
+        <button onClick={onBack} style={{ background: "transparent", border: `1.5px solid ${T.border}`, borderRadius: 8, padding: "7px 12px", color: T.textMid, fontFamily: T.sans, fontSize: 13, cursor: "pointer", transition: "border .15s" }}
+          onMouseOver={e => e.currentTarget.style.borderColor = T.ln}
+          onMouseOut={e => e.currentTarget.style.borderColor = T.border}>← Back</button>
+        {!isMobile && <div style={{ fontFamily: T.display, fontSize: 15, letterSpacing: 4, fontWeight: 700 }}>ANON<span style={{ color: T.cyan }}>SCORE</span></div>}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontFamily: T.mono, fontSize: 11, color: T.textDim, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            ⚡ {alias !== "Unknown Node" ? alias : (nodeId ? `${nodeId.slice(0,10)}…${nodeId.slice(-6)}` : "Lightning Node")}
+          </div>
+          <div style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim, marginTop: 2 }}>Lightning node audit</div>
+        </div>
+        <div style={{ display: "flex", gap: 8, flexShrink: 0, alignItems: "center" }}>
+          <Tag label={grade} color={col} size={10} />
+        </div>
+      </nav>
+
+      <div style={{ flex: 1, padding: isMobile ? "12px 12px" : "16px 32px", maxWidth: 1100, margin: "0 auto", width: "100%" }}>
+
+        {/* ── Compact summary bar — matches BTC exactly ── */}
+        <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 14, padding: isMobile ? "12px 14px" : "12px 20px", marginBottom: 12, display: "flex", alignItems: "center", gap: isMobile ? 12 : 20, flexWrap: "wrap", animation: "fadeUp .35s ease both" }}>
+
+          {/* Score ring + grade */}
+          <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
+            <ScoreRing score={score} size={52} />
+            <div>
+              <div style={{ fontFamily: T.serif, fontSize: 20, color: col, lineHeight: 1 }}>Grade {grade}</div>
+              <div style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim, letterSpacing: 1, marginTop: 2 }}>{score}/100</div>
+            </div>
+          </div>
+
+          <div style={{ width: 1, height: 36, background: T.border, flexShrink: 0 }} />
+
+          {/* FAIL / WARN / PASS badges */}
+          <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+            <div style={{ background: T.red + "18", border: `1px solid ${T.red}44`, borderRadius: 8, padding: "4px 10px", display: "flex", alignItems: "center", gap: 5 }}>
+              <span style={{ fontFamily: T.mono, fontSize: 16, fontWeight: 700, color: T.red, lineHeight: 1 }}>{fails}</span>
+              <span style={{ fontFamily: T.mono, fontSize: 9, color: T.red, letterSpacing: 0.5 }}>FAIL</span>
+            </div>
+            <div style={{ background: T.amber + "18", border: `1px solid ${T.amber}44`, borderRadius: 8, padding: "4px 10px", display: "flex", alignItems: "center", gap: 5 }}>
+              <span style={{ fontFamily: T.mono, fontSize: 16, fontWeight: 700, color: T.amber, lineHeight: 1 }}>{warns}</span>
+              <span style={{ fontFamily: T.mono, fontSize: 9, color: T.amber, letterSpacing: 0.5 }}>WARN</span>
+            </div>
+            <div style={{ background: T.green + "18", border: `1px solid ${T.green}44`, borderRadius: 8, padding: "4px 10px", display: "flex", alignItems: "center", gap: 5 }}>
+              <span style={{ fontFamily: T.mono, fontSize: 16, fontWeight: 700, color: T.green, lineHeight: 1 }}>{passes}</span>
+              <span style={{ fontFamily: T.mono, fontSize: 9, color: T.green, letterSpacing: 0.5 }}>PASS</span>
+            </div>
+          </div>
+
+          <div style={{ width: 1, height: 36, background: T.border, flexShrink: 0 }} />
+
+          {/* Node stats */}
+          <div style={{ display: "flex", gap: isMobile ? 14 : 24, flexWrap: "wrap" }}>
+            {[
+              { label: "CHANNELS", val: channels.length,                           sub: "open",      color: T.blue  },
+              { label: "CAPACITY", val: `₿${(totalCap/1e8).toFixed(3)}`,           sub: "total",     color: T.btc   },
+              { label: "VS AVG",   val: score > 50 ? `+${score-50}` : `${score-50}`, sub: "avg is 50", color: score > 50 ? T.green : T.red },
+            ].map(s => (
+              <div key={s.label}>
+                <div style={{ fontFamily: T.mono, fontSize: 8, color: T.textDim, letterSpacing: 1.5, marginBottom: 2 }}>{s.label}</div>
+                <div style={{ fontFamily: T.serif, fontSize: 18, color: s.color, lineHeight: 1 }}>{s.val}</div>
+                <div style={{ fontSize: 10, color: T.textDim, marginTop: 1 }}>{s.sub}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Top fixes potential — right-aligned */}
+          <div style={{ marginLeft: "auto", flexShrink: 0, textAlign: "right" }}>
+            <div style={{ fontFamily: T.mono, fontSize: 8, color: T.textDim, letterSpacing: 1.5, marginBottom: 2 }}>TOP FIXES</div>
+            <div style={{ fontFamily: T.serif, fontSize: 18, color: T.green, lineHeight: 1 }}>+{recommendations.slice(0, 3).reduce((a, r) => a + r.impact, 0)} pts</div>
+            <div style={{ fontSize: 10, color: T.textDim, marginTop: 1 }}>potential gain</div>
+          </div>
+        </div>
+
+        {/* ── Tabs — Pill style matching BTC ── */}
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14, overflowX: "auto", paddingBottom: 2 }}>
+          {TABS.map(t => <Pill key={t} active={tab === t} onClick={() => setTab(t)} color={T.ln}>{t}</Pill>)}
+        </div>
+
+        {/* ── Fix It ── */}
+        {tab === "Fix It" && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+            {score >= 80 && (
+              <div style={{ background: T.greenLo, border: `1px solid ${T.green}44`, borderRadius: 14, padding: "18px 20px", textAlign: "center" }}>
+                <div style={{ fontFamily: T.serif, fontSize: 22, color: T.green, marginBottom: 4 }}>Strong privacy posture ⚡</div>
+                <div style={{ fontSize: 13, color: T.textMid }}>Your Lightning node is well-configured. Keep monitoring as your channel peers change.</div>
+              </div>
+            )}
+            {recommendations.length === 0 && score < 80 && (
+              <div style={{ fontSize: 13, color: T.textMid, padding: "12px 0" }}>No specific fixes generated. Check the Checks tab for detail.</div>
+            )}
+            {recommendations.map((r, i) => {
+              const done = doneFixes.has(r.key);
+              return (
+                <div key={r.key} style={{ background: done ? T.greenLo : T.card, border: `1px solid ${done ? T.green + "44" : T.border}`, borderRadius: 14, overflow: "hidden", transition: "all .2s" }}>
+                  <div style={{ display: "flex", alignItems: "flex-start", gap: 14, padding: "18px 20px" }}>
+                    <div style={{ fontFamily: T.mono, fontSize: 11, color: done ? T.green : T.ln, minWidth: 24, marginTop: 2 }}>{String(i+1).padStart(2,"0")}</div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
+                        <div style={{ fontSize: 14, fontWeight: 700, color: done ? T.textDim : T.text, textDecoration: done ? "line-through" : "none" }}>{r.action}</div>
+                        <span style={{ fontFamily: T.mono, fontSize: 10, color: T.green, background: T.greenLo, padding: "3px 8px", borderRadius: 5 }}>+{r.impact} pts</span>
+                        <Tag label={r.effort} color={r.effort === "Easy" ? T.green : r.effort === "Medium" ? T.amber : T.red} size={9} />
+                      </div>
+                      <div style={{ fontSize: 13, color: T.textMid, lineHeight: 1.6, marginBottom: r.tools?.length ? 12 : 0 }}>{r.detail}</div>
+                      {r.tools?.length > 0 && (
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                          {r.tools.map(t => (
+                            <div key={t.name} style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: 8, padding: "5px 10px" }}>
+                              <div style={{ fontSize: 11, fontWeight: 600, color: T.text }}>{t.name}</div>
+                              <div style={{ fontSize: 10, color: T.textDim }}>{t.note}</div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    <button onClick={() => toggleDone(r.key)}
+                      style={{ background: done ? T.green : "transparent", border: `1.5px solid ${done ? T.green : T.border}`, borderRadius: 8,
+                        padding: "6px 10px", color: done ? T.bg : T.textDim, fontSize: 11, cursor: "pointer", transition: "all .2s", whiteSpace: "nowrap" }}>
+                      {done ? "✓ Done" : "Mark done"}
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+            {/* Lightning privacy explainer */}
+            <div style={{ background: T.lnLo, border: `1px solid ${T.lnMid}`, borderRadius: 14, padding: "16px 20px", marginTop: 4 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: T.ln, marginBottom: 6 }}>⚡ What Lightning scores — and what it can't</div>
+              <div style={{ fontSize: 13, color: T.textMid, lineHeight: 1.7 }}>
+                Lightning <em>payments</em> are private by design — they don't appear on-chain. What we score is your <strong style={{ color: T.text }}>node's public footprint</strong>: IP exposure, KYC peer connections, on-chain channel history, and identity linkage. If you use a custodial wallet (Wallet of Satoshi, Strike), there's nothing to score — your provider sees everything.
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Checks ── */}
+        {tab === "Checks" && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            <div style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim, letterSpacing: 2, marginBottom: 8 }}>
+              {checks.length} CHECKS · LIGHTNING NODE PRIVACY
+            </div>
+            {checks.map(c => {
+              const statusColor = c.status === "pass" ? T.green : c.status === "warn" ? T.amber : T.red;
+              const sevColor = { critical: T.red, high: T.btc, medium: T.amber, low: T.blue, clean: T.green }[c.sev] || T.textDim;
+              const open = expandedCheck === c.key;
+              return (
+                <div key={c.key} style={{ borderRadius: 12, border: `1px solid ${open ? statusColor + "44" : T.border}`, overflow: "hidden", transition: "border-color .2s" }}>
+                  <div onClick={() => setExpandedCheck(open ? null : c.key)}
+                    style={{ display: "flex", alignItems: "center", gap: 12, padding: "13px 16px", cursor: "pointer", background: open ? statusColor + "0d" : "transparent" }}>
+                    <div style={{ width: 8, height: 8, borderRadius: "50%", background: statusColor, flexShrink: 0, boxShadow: `0 0 6px ${statusColor}` }} />
+                    <div style={{ flex: 1, fontSize: 13, fontWeight: 600, color: T.text }}>{c.name}</div>
+                    <Tag label={c.sev.toUpperCase()} color={sevColor} size={9} />
+                    <span style={{ color: T.textDim, fontSize: 11, marginLeft: 4 }}>{open ? "▲" : "▼"}</span>
+                  </div>
+                  {open && (
+                    <div style={{ padding: "0 16px 14px 36px", borderTop: `1px solid ${T.borderLo}` }}>
+                      <p style={{ fontSize: 13, color: T.textMid, lineHeight: 1.65, marginTop: 12, marginBottom: 0 }}>{c.detail}</p>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* ── Channels ── */}
+        {tab === "Channels" && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            <div style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim, letterSpacing: 2, marginBottom: 8 }}>
+              {channels.length} OPEN CHANNELS · PEER RISK ANALYSIS
+            </div>
+            {channels.length === 0 && (
+              <div style={{ fontSize: 13, color: T.textMid, padding: "20px 0" }}>No open channels found for this node.</div>
+            )}
+            {channels.map((ch, i) => {
+              const peerPub = ch.node1_pub === nodeId ? ch.node2_pub : ch.node1_pub;
+              const isKyc = KYC_NODES.some(k => k === ch.node1_pub || k === ch.node2_pub);
+              const pct = totalCap > 0 ? Math.round((ch.capacity / totalCap) * 100) : 0;
+              const riskColor = isKyc ? T.red : T.green;
+              const riskLabel = isKyc ? "KYC" : "OK";
+              return (
+                <div key={i} style={{ display: "flex", alignItems: "center", gap: 14, background: T.card, border: `1px solid ${isKyc ? T.red + "44" : T.border}`, borderRadius: 12, padding: "12px 16px" }}>
+                  <div style={{ width: 8, height: 8, borderRadius: "50%", background: riskColor, flexShrink: 0, boxShadow: `0 0 5px ${riskColor}` }} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontFamily: T.mono, fontSize: 11, color: T.textMid, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                      {peerPub ? `${peerPub.slice(0,14)}…` : `Channel ${i+1}`}
+                    </div>
+                    {/* Capacity bar */}
+                    <div style={{ height: 3, background: T.border, borderRadius: 2, marginTop: 6 }}>
+                      <div style={{ height: "100%", width: `${pct}%`, background: isKyc ? T.red : T.ln, borderRadius: 2 }} />
+                    </div>
+                  </div>
+                  <div style={{ fontFamily: T.mono, fontSize: 10, color: T.textDim, whiteSpace: "nowrap" }}>{pct}% · {(ch.capacity / 1e8).toFixed(4)} BTC</div>
+                  <Tag label={riskLabel} color={riskColor} size={9} />
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* ── Methodology ── */}
+        {tab === "Methodology" && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            <div style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim, letterSpacing: 2, marginBottom: 4 }}>8 HEURISTICS · LIGHTNING NODE PRIVACY SCORING</div>
+            {[
+              { n:"01", label:"Public Node Announcement", desc:"Whether your node is publicly gossiped on the Lightning network. Public nodes expose their IP or Tor address to every peer." },
+              { n:"02", label:"KYC Exchange Peer Channels", desc:"Channels to known KYC exchanges (Strike, Bitfinex, River). These entities log routing metadata and can correlate payment flows through your node." },
+              { n:"03", label:"Tor / Clearnet Exposure", desc:"Whether your node listens on clearnet (IP-visible) or Tor-only (anonymous). Clearnet nodes expose their physical location." },
+              { n:"04", label:"Channel Diversity", desc:"Number of open channels. Low channel count limits routing path diversity, making payment flows easier to correlate." },
+              { n:"05", label:"Channel Capacity Concentration", desc:"Whether one channel dominates your capacity. Heavy concentration makes routing patterns predictable." },
+              { n:"06", label:"Node Alias Privacy", desc:"Whether your node alias looks like a real name. Aliases are publicly visible on the Lightning gossip network." },
+              { n:"07", label:"Node Establishment", desc:"How long your node has been active. New nodes have limited routing history, making their activity more trackable." },
+              { n:"08", label:"On-Chain Channel Footprint", desc:"Every channel open/close is an on-chain transaction. Funding channels from KYC exchange UTXOs permanently links your Lightning activity to your on-chain identity." },
+            ].map(c => (
+              <div key={c.n} style={{ display: "flex", gap: 14, background: T.card, border: `1px solid ${T.border}`, borderRadius: 12, padding: "14px 18px" }}>
+                <div style={{ fontFamily: T.mono, fontSize: 10, color: T.ln, minWidth: 24, marginTop: 1 }}>{c.n}</div>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: T.text, marginBottom: 4 }}>{c.label}</div>
+                  <div style={{ fontSize: 13, color: T.textMid, lineHeight: 1.6 }}>{c.desc}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────────
    ROOT APP
 ───────────────────────────────────────────── */
 function App() {
   const [page, setPage] = useState("landing");
+  // Bitcoin state
   const [address, setAddress] = useState("");
   const [addrInfo, setAddrInfo] = useState(null);
   const [utxos, setUtxos] = useState([]);
@@ -1968,6 +2551,12 @@ function App() {
   const [autoShare, setAutoShare] = useState(false);
   const [scanAt, setScanAt] = useState(null);
   const [defaultSimple, setDefaultSimple] = useState(false);
+  // Lightning state
+  const [lnNodeId, setLnNodeId] = useState("");
+  const [lnNodeData, setLnNodeData] = useState(null);
+  const [lnChannels, setLnChannels] = useState([]);
+
+  const [isScanningLightning, setIsScanningLightning] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const toast = useToast();
 
@@ -1977,8 +2566,42 @@ function App() {
     return () => window.removeEventListener("resize", h);
   }, []);
 
-  const analyze = useCallback(async (addr, plain = false) => {
+  const analyze = useCallback(async (addr, plain = false, inputType = "btc") => {
+    const isLn = inputType === "ln_pubkey" || inputType === "ln_address";
+
+    if (isLn) {
+      // ── Lightning flow ──
+      setLnNodeId(addr);
+      setIsScanningLightning(true);
+      setPage("scanning");
+      try {
+        if (addr === "DEMO_LN") {
+          await new Promise(r => setTimeout(r, 1400));
+          setLnNodeData(DEMO_LN.node);
+          setLnChannels(DEMO_LN.channels);
+          setPage("ln_dashboard");
+          toast.show("Lightning demo loaded", { icon: "⚡", color: T.ln, msg: "Showing a sample node with privacy issues" });
+          return;
+        }
+        const data = await fetchLightningNode(addr);
+        const result = runLightningEngine(data.node, data.channels);
+        setLnNodeData(data.node);
+        setLnChannels(data.channels);
+        setPage("ln_dashboard");
+        toast.show("Node scan complete", { icon: "⚡", color: T.ln, msg: `Lightning privacy score: ${result.score}/100` });
+      } catch {
+        await new Promise(r => setTimeout(r, 1000));
+        setLnNodeData(DEMO_LN.node);
+        setLnChannels(DEMO_LN.channels);
+        setPage("ln_dashboard");
+        toast.show("Showing Lightning demo", { icon: "ℹ️", color: T.blue, msg: "Live node API unavailable — sample shown" });
+      }
+      return;
+    }
+
+    // ── Bitcoin flow ──
     setAddress(addr);
+    setIsScanningLightning(false);
     setPage("scanning");
     setAutoShare(false);
     setDefaultSimple(plain);
@@ -1996,14 +2619,13 @@ function App() {
       }
 
       const data = await fetchAddress(addr);
-      // no artificial delay;
       const analysis = runEngine(data.utxos, data.txs, data.addrInfo?.chain_stats?.tx_count || data.txs.length);
       setAddrInfo(data.addrInfo);
       setUtxos(data.utxos);
       setTxs(data.txs);
       setScanAt(Date.now());
       setPage("dashboard");
-      setAutoShare(true); // triggers share modal via useEffect in Dashboard
+      setAutoShare(true);
       toast.show("Scan complete", { icon: "✅", color: T.green, msg: `Privacy score: ${analysis.score}/100` });
     } catch {
       await new Promise(r => setTimeout(r, 1000));
@@ -2020,9 +2642,10 @@ function App() {
     <>
       <style>{CSS}</style>
       <Toast toasts={toast.toasts} />
-      {page === "landing"   && <Landing onAnalyze={analyze} isMobile={isMobile} />}
-      {page === "scanning"  && <Scanning address={address} />}
-      {page === "dashboard" && <Dashboard address={address} addrInfo={addrInfo} utxos={utxos} txs={txs} isMobile={isMobile} onBack={() => setPage("landing")} onRescan={analyze} toast={toast} autoShare={autoShare} scanAt={scanAt} defaultSimple={defaultSimple} />}
+      {page === "landing"      && <Landing onAnalyze={analyze} isMobile={isMobile} />}
+      {page === "scanning"     && <Scanning address={address || lnNodeId} isLightning={isScanningLightning} />}
+      {page === "dashboard"    && <Dashboard address={address} addrInfo={addrInfo} utxos={utxos} txs={txs} isMobile={isMobile} onBack={() => setPage("landing")} onRescan={analyze} toast={toast} autoShare={autoShare} scanAt={scanAt} defaultSimple={defaultSimple} />}
+      {page === "ln_dashboard" && <LightningDashboard nodeId={lnNodeId} nodeData={lnNodeData} channels={lnChannels} isMobile={isMobile} onBack={() => setPage("landing")} toast={toast} />}
     </>
   );
 }
