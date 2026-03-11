@@ -381,12 +381,16 @@ async function fetchLightningNode(pubkey) {
   return { node, channels: (channels.channels || []).slice(0, 30) };
 }
 
-// Known KYC/surveillance node pubkeys (abbreviated for matching)
-const KYC_NODES = [
-  "03864ef025fde8fb587d989186ce6a4a186895ee44a926bfc370e2c366597a3f8f", // Strike
-  "03abf6f44c355dec0d5aa155bdbdd6e0c8fefe318eff402de65c6eb2e1be55dc3e", // Bitfinex
-  "03a503d8e30d6c93311c96de6b69cfe6b4a0f2f05f5703fca2a8a1e4e1b5b5b5b5", // River
-];
+// Known KYC/custodial exchange node pubkeys — verified against 1ML/Amboss
+const KYC_NODES = new Set([
+  "033d8656219478701227199cbd6f670335c8d408a92ae88b176cad16f71555e072", // Bitfinex
+  "02f1a8c87607f415c8f22c00593002775941dea48869ce23096af27b0cfdcc0b69", // Kraken
+  "03037dc08e9ac63b82581f79b662a4d0ceca8a8ca162b1af3551595b8f2d97b70a", // River Financial
+  "035e4ff418fc8b5554c5d9eea66396c227bd429a3251c8cbc711002ba215bfc226", // Wallet of Satoshi (custodial)
+  "0279c22ed7a068d10dc1a38ae66d2d6461e269226c60258c021b1ddcdfe4b00bc4", // OKX
+  "03cde60a6323f7122d5178255766e38114b4722ede08f7c9e0c5df9b912cc201d6", // Binance
+]);
+const isKycNode = pub => KYC_NODES.has(pub);
 
 function runLightningEngine(node = {}, channels = []) {
   let score = 100;
@@ -407,7 +411,7 @@ function runLightningEngine(node = {}, channels = []) {
 
   // 2. KYC exchange peers
   const kycPeers = channels.filter(ch =>
-    KYC_NODES.some(k => ch.node1_pub === k || ch.node2_pub === k)
+    isKycNode(ch.node1_pub) || isKycNode(ch.node2_pub)
   );
   if (kycPeers.length >= 2)
     add("kyc_peers", "KYC Exchange Peer Channels", "fail",
@@ -477,10 +481,20 @@ function runLightningEngine(node = {}, channels = []) {
     add("age", "Node Establishment", "pass",
       ageDays > 0 ? `Node active for ${Math.floor(ageDays / 30)} months — established routing history.` : "Node age unknown.", "clean", 0);
 
-  // 8. Channel closing pattern (on-chain footprint)
-  add("onchain", "On-Chain Channel Footprint", "warn",
-    "Every channel open and close leaves an on-chain trace. Using UTXOs from KYC exchanges to fund channels links your Lightning activity to your on-chain identity.",
-    "medium", -5);
+  // 8. On-chain channel footprint — real check: channels opened = on-chain traces
+  const openedChannels = channels.length;
+  if (openedChannels > 10)
+    add("onchain", "On-Chain Channel Footprint", "warn",
+      `${openedChannels} channel opens/closes are recorded on-chain. Each one is a permanent trace linking your Lightning and on-chain identity. Funding channels directly from KYC exchange withdrawals is the riskiest pattern.`,
+      "medium", -5);
+  else if (openedChannels > 0)
+    add("onchain", "On-Chain Channel Footprint", "pass",
+      `${openedChannels} channel${openedChannels > 1 ? "s" : ""} — modest on-chain footprint. Ensure you fund channels from non-KYC UTXOs to avoid linking your identities.`,
+      "clean", 0);
+  else
+    add("onchain", "On-Chain Channel Footprint", "pass",
+      "No open channels found — no on-chain channel footprint to analyse.",
+      "clean", 0);
 
   score = Math.max(0, Math.min(100, Math.round(score)));
 
@@ -517,18 +531,18 @@ const DEMO_LN = {
     channel_count: 12,
   },
   channels: [
-    { node1_pub: "03864ef025fde8fb587d989186ce6a4a186895ee44a926bfc370e2c366597a3f8f", node2_pub: "mynode", capacity: 42000000 },
-    { node1_pub: "03864ef025fde8fb587d989186ce6a4a186895ee44a926bfc370e2c366597a3f8f", node2_pub: "mynode", capacity: 18000000 },
-    { node1_pub: "mynode", node2_pub: "03abf6f44c355dec0d5aa155bdbdd6e0c8fefe318eff402de65c6eb2e1be55dc3e", capacity: 25000000 },
-    { node1_pub: "mynode", node2_pub: "anon1", capacity: 22000000 },
-    { node1_pub: "mynode", node2_pub: "anon2", capacity: 31000000 },
-    { node1_pub: "mynode", node2_pub: "anon3", capacity: 28000000 },
-    { node1_pub: "mynode", node2_pub: "anon4", capacity: 18000000 },
-    { node1_pub: "mynode", node2_pub: "anon5", capacity: 10000000 },
-    { node1_pub: "mynode", node2_pub: "anon6", capacity: 8000000 },
-    { node1_pub: "mynode", node2_pub: "anon7", capacity: 7000000 },
-    { node1_pub: "mynode", node2_pub: "anon8", capacity: 3000000 },
-    { node1_pub: "mynode", node2_pub: "anon9", capacity: 2000000 },
+    { node1_pub: "033d8656219478701227199cbd6f670335c8d408a92ae88b176cad16f71555e072", node2_pub: "mynode", capacity: 42000000 }, // Bitfinex
+    { node1_pub: "033d8656219478701227199cbd6f670335c8d408a92ae88b176cad16f71555e072", node2_pub: "mynode", capacity: 18000000 }, // Bitfinex
+    { node1_pub: "mynode", node2_pub: "02f1a8c87607f415c8f22c00593002775941dea48869ce23096af27b0cfdcc0b69", capacity: 25000000 }, // Kraken
+    { node1_pub: "mynode", node2_pub: "anon1aabbccddeeff0011223344556677889900aabbccddeeff00112233445566", capacity: 22000000 },
+    { node1_pub: "mynode", node2_pub: "anon2aabbccddeeff0011223344556677889900aabbccddeeff00112233445566", capacity: 31000000 },
+    { node1_pub: "mynode", node2_pub: "anon3aabbccddeeff0011223344556677889900aabbccddeeff00112233445566", capacity: 28000000 },
+    { node1_pub: "mynode", node2_pub: "anon4aabbccddeeff0011223344556677889900aabbccddeeff00112233445566", capacity: 18000000 },
+    { node1_pub: "mynode", node2_pub: "anon5aabbccddeeff0011223344556677889900aabbccddeeff00112233445566", capacity: 10000000 },
+    { node1_pub: "mynode", node2_pub: "anon6aabbccddeeff0011223344556677889900aabbccddeeff00112233445566", capacity: 8000000 },
+    { node1_pub: "mynode", node2_pub: "anon7aabbccddeeff0011223344556677889900aabbccddeeff00112233445566", capacity: 7000000 },
+    { node1_pub: "mynode", node2_pub: "anon8aabbccddeeff0011223344556677889900aabbccddeeff00112233445566", capacity: 3000000 },
+    { node1_pub: "mynode", node2_pub: "anon9aabbccddeeff0011223344556677889900aabbccddeeff00112233445566", capacity: 2000000 },
   ],
 };
 
@@ -702,12 +716,12 @@ function useToast() {
    Partial arc (250° sweep), multicolor gradient
    red → orange → cyan → green + glowing dot
 ───────────────────────────────────────────── */
-const _ringId = { n: 0 };
+
 
 function ScoreRing({ score, size = 130, animate = true }) {
   const [cur, setCur] = useState(animate ? 0 : score);
   const timerRef = useRef(null);
-  const uid = useRef(`sr${++_ringId.n}`).current;
+  const uid = useRef(`sr${Math.random().toString(36).slice(2,7)}`).current;
 
   useEffect(() => {
     if (!animate) { setCur(score); return; }
@@ -899,91 +913,277 @@ function DemoPreview() {
 /* ─────────────────────────────────────────────
    SHARE CARD
 ───────────────────────────────────────────── */
-function ShareCard({ score, grade, issueCount, address, onClose }) {
+/* ─────────────────────────────────────────────
+   VISUAL SCORE CARD — rendered into share modal Card tab
+   Used for PNG export via dom-to-image-more
+───────────────────────────────────────────── */
+function VisualGaugeArc({ score, size = 120, uid }) {
   const col = scoreColor(score);
-  const [mode, setMode] = useState("share");
+  const cx = size / 2, cy = size * 0.62, R = size * 0.42;
+  const startAngle = -210, sweepTotal = 240;
+  const sweep = (score / 100) * sweepTotal;
+  const toRad = d => (d * Math.PI) / 180;
+  const pt = a => ({ x: cx + R * Math.cos(toRad(a)), y: cy + R * Math.sin(toRad(a)) });
+  const arcPath = (s, e) => {
+    const p = pt(s), q = pt(e), large = e - s > 180 ? 1 : 0;
+    return `M ${p.x} ${p.y} A ${R} ${R} 0 ${large} 1 ${q.x} ${q.y}`;
+  };
+  const dot = pt(startAngle + sweep);
+  const gid = `vg-${uid}`;
+  return (
+    <svg width={size} height={size * 0.78} viewBox={`0 0 ${size} ${size * 0.78}`} style={{ overflow: "visible" }}>
+      <defs>
+        <linearGradient id={gid} x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%"   stopColor={T.red} />
+          <stop offset="50%"  stopColor={T.amber} />
+          <stop offset="100%" stopColor={col} />
+        </linearGradient>
+      </defs>
+      <path d={arcPath(startAngle, startAngle + sweepTotal)} fill="none" stroke="#ffffff10" strokeWidth={size * 0.07} strokeLinecap="round" />
+      {score > 0 && <path d={arcPath(startAngle, startAngle + sweep)} fill="none" stroke={`url(#${gid})`} strokeWidth={size * 0.07} strokeLinecap="round" />}
+      <circle cx={dot.x} cy={dot.y} r={size * 0.055} fill={col} />
+      <text x={cx} y={cy + size * 0.06} textAnchor="middle" dominantBaseline="middle"
+        style={{ fontFamily: T.sans, fontWeight: 700, fontSize: size * 0.28, fill: T.btc }}>₿</text>
+    </svg>
+  );
+}
+
+function VisualScoreCard({ score, grade, checks, address, isLightning = false, cardRef }) {
+  const col = scoreColor(score);
+  const uid = useRef(`vsc${Math.random().toString(36).slice(2,6)}`).current;
+  const fails = checks.filter(c => c.status === "fail").length;
+  const warns  = checks.filter(c => c.status === "warn").length;
+  const passes = checks.filter(c => c.status === "pass").length;
+  const topIssues = checks.filter(c => c.status !== "pass").slice(0, 3);
+  const auditLabel = isLightning ? "LIGHTNING NODE AUDIT" : "BITCOIN PRIVACY AUDIT";
+  const symbol = isLightning ? "⚡" : "₿";
+  const dateStr = new Date().toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }).toUpperCase();
+
+  return (
+    <div ref={cardRef} style={{
+      width: 420, background: `linear-gradient(145deg,#0f1120 0%,#0b0d14 60%,#0f1120 100%)`,
+      border: `1.5px solid ${col}33`, borderRadius: 24, overflow: "hidden",
+      boxShadow: `0 0 0 1px #ffffff06, 0 32px 80px #000000cc, 0 0 60px ${col}18`,
+      fontFamily: T.sans, position: "relative",
+    }}>
+      {/* Dot-grid texture */}
+      <div style={{ position: "absolute", inset: 0, pointerEvents: "none",
+        backgroundImage: "radial-gradient(circle,#ffffff05 1px,transparent 1px)", backgroundSize: "20px 20px" }} />
+      {/* Top glow bar */}
+      <div style={{ height: 3, background: `linear-gradient(90deg,transparent,${col},transparent)` }} />
+
+      {/* Header */}
+      <div style={{ padding: "14px 20px 0", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <VisualGaugeArc score={score} size={40} uid={uid + "h"} />
+          <div>
+            <div style={{ fontFamily: T.display, fontSize: 16, fontWeight: 800, letterSpacing: 2, color: T.text }}>
+              <span style={{ color: T.cyan }}>ANON</span>SCORE
+            </div>
+            <div style={{ fontFamily: T.mono, fontSize: 7, color: T.textDim, letterSpacing: 2, marginTop: 1 }}>{auditLabel}</div>
+          </div>
+        </div>
+        <div style={{ fontFamily: T.mono, fontSize: 8, color: T.textDim, textAlign: "right", lineHeight: 1.7 }}>
+          <div style={{ letterSpacing: 1 }}>{dateStr}</div>
+          <div style={{ opacity: 0.5 }}>anonscore.com</div>
+        </div>
+      </div>
+
+      {/* Score hero */}
+      <div style={{ padding: "10px 20px 12px", display: "flex", alignItems: "center", gap: 16 }}>
+        <VisualGaugeArc score={score} size={88} uid={uid + "b"} />
+        <div>
+          <div style={{ fontFamily: T.serif, fontSize: 56, color: col, lineHeight: 1, fontWeight: 300,
+            textShadow: `0 0 24px ${col}55` }}>{grade}</div>
+          <div style={{ fontFamily: T.mono, fontSize: 10, color: col, letterSpacing: 1, marginTop: 3 }}>{scoreLabel(score)}</div>
+          <div style={{ fontFamily: T.mono, fontSize: 20, color: T.text, marginTop: 4, fontWeight: 600 }}>
+            {score}<span style={{ fontSize: 10, color: T.textDim, fontWeight: 400 }}>/100</span>
+          </div>
+          {address && address !== "DEMO" && address !== "DEMO_LN" && (
+            <div style={{ fontFamily: T.mono, fontSize: 8, color: T.textDim, marginTop: 4 }}>
+              {symbol} {fmt.addr(address)}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Divider */}
+      <div style={{ height: 1, background: `linear-gradient(90deg,transparent,${T.border},transparent)`, margin: "0 20px" }} />
+
+      {/* Findings */}
+      <div style={{ padding: "12px 20px" }}>
+        <div style={{ fontFamily: T.mono, fontSize: 8, color: T.textDim, letterSpacing: 1.5, marginBottom: 8 }}>FINDINGS</div>
+        <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+          {[{ count: fails, label: "Critical", color: T.red }, { count: warns, label: "Warnings", color: T.amber }, { count: passes, label: "Passed", color: T.green }].map(({ count, label, color }) => (
+            <div key={label} style={{ flex: 1, background: `${color}10`, border: `1px solid ${color}28`, borderRadius: 8, padding: "7px 0", textAlign: "center" }}>
+              <div style={{ fontFamily: T.display, fontSize: 19, color, fontWeight: 700 }}>{count}</div>
+              <div style={{ fontFamily: T.mono, fontSize: 7, color: T.textDim, letterSpacing: 1, marginTop: 1 }}>{label.toUpperCase()}</div>
+            </div>
+          ))}
+        </div>
+        {topIssues.map((issue, i) => {
+          const dot = issue.status === "fail" ? T.red : T.amber;
+          return (
+            <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 0", borderTop: `1px solid #1e2130` }}>
+              <div style={{ width: 5, height: 5, borderRadius: "50%", background: dot, flexShrink: 0 }} />
+              <span style={{ fontSize: 11, color: T.text, flex: 1 }}>{issue.name}</span>
+              <span style={{ fontFamily: T.mono, fontSize: 8, color: dot, textTransform: "uppercase" }}>{issue.status}</span>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Footer CTA */}
+      <div style={{ margin: "0 20px 16px", background: `${T.cyan}0d`, border: `1px solid ${T.cyan}22`,
+        borderRadius: 10, padding: "9px 14px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <div style={{ fontFamily: T.mono, fontSize: 9, color: T.textMid }}>
+          {isLightning ? "Score your Lightning node free" : "Scan your wallet free"}
+        </div>
+        <div style={{ fontFamily: T.mono, fontSize: 10, color: T.cyan, fontWeight: 600, letterSpacing: 0.5 }}>anonscore.com →</div>
+      </div>
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────────
+   SHARE MODAL
+───────────────────────────────────────────── */
+function ShareCard({ score, grade, checks, address, isLightning = false, onClose }) {
+  const col = scoreColor(score);
+  const [mode, setMode] = useState("copy");
   const [didCopy, setDidCopy] = useState(false);
   const [nostrSent, setNostrSent] = useState(false);
-  const shareText = `My Bitcoin privacy score: Grade ${grade} (${score}/100)\n${issueCount} issue${issueCount !== 1 ? "s" : ""} found.\nCheck yours free → anonscore.com`;
-  const xText = `My Bitcoin privacy score: Grade ${grade} (${score}/100) — ${issueCount} issue${issueCount !== 1 ? "s" : ""} found.\n\nMost wallets score 38/100. Check yours free 👇\nanonscore.com`;
-  const badgeMd = `\`Privacy: ${score}/100 · Grade ${grade}\` — [AnonScore](https://anonscore.com)`;
-  const nostrNote = `🔒 Bitcoin privacy score: Grade ${grade} (${score}/100)\n\n${issueCount} issue${issueCount !== 1 ? "s" : ""} detected via AnonScore — a free open-source tool that runs 10 heuristics against your on-chain history.\n\nMost wallets score 38/100. How does yours compare?\n\nhttps://anonscore.com\n\n#Bitcoin #Privacy`;
-  const copy = (text) => { navigator.clipboard?.writeText(text).catch(()=>{}); setDidCopy(true); setTimeout(()=>setDidCopy(false),2000); };
-  const shareToX = () => {
-    const url = `https://x.com/intent/tweet?text=${encodeURIComponent(xText)}`;
-    window.open(url, "_blank", "noopener,noreferrer");
-  };
+  const [downloading, setDownloading] = useState(false);
+  const cardRef = useRef(null);
+
+  const issueCount = checks.filter(c => c.status !== "pass").length;
+  const modeStr = isLightning ? "Lightning node" : "Bitcoin wallet";
+  const heuristicStr = isLightning ? "8 Lightning privacy checks" : "10 on-chain heuristics";
+  const avgStr = isLightning ? "" : "\n\nMost wallets score 38/100. How does yours compare?";
+
+  const shareText = `My ${modeStr} privacy score: Grade ${grade} (${score}/100)\n${issueCount} issue${issueCount !== 1 ? "s" : ""} found.\nCheck yours free → anonscore.com`;
+  const xText    = `My ${modeStr} privacy score: Grade ${grade} (${score}/100) — ${issueCount} issue${issueCount !== 1 ? "s" : ""} found.${avgStr}\n\nFree tool 👇\nanonscore.com`;
+  const badgeMd  = `\`Privacy: ${score}/100 · Grade ${grade}\` — [AnonScore](https://anonscore.com)`;
+  const nostrNote = `🔒 ${modeStr.charAt(0).toUpperCase() + modeStr.slice(1)} privacy score: Grade ${grade} (${score}/100)\n\n${issueCount} issue${issueCount !== 1 ? "s" : ""} detected via AnonScore — a free open-source tool that runs ${heuristicStr} against your ${isLightning ? "node's public footprint" : "on-chain history"}.${avgStr}\n\nhttps://anonscore.com\n\n#Bitcoin #Privacy${isLightning ? " #Lightning" : ""}`;
+
+  const copy = (text) => { navigator.clipboard?.writeText(text).catch(() => {}); setDidCopy(true); setTimeout(() => setDidCopy(false), 2000); };
+  const shareToX = () => window.open(`https://x.com/intent/tweet?text=${encodeURIComponent(xText)}`, "_blank", "noopener,noreferrer");
   const shareToNostr = async () => {
     if (window.nostr) {
-      try { await window.nostr.signEvent({kind:1,content:nostrNote,tags:[],created_at:Math.floor(Date.now()/1000)}); setNostrSent(true); setTimeout(()=>setNostrSent(false),3000); return; } catch {}
+      try { await window.nostr.signEvent({ kind: 1, content: nostrNote, tags: [], created_at: Math.floor(Date.now() / 1000) }); setNostrSent(true); setTimeout(() => setNostrSent(false), 3000); return; } catch {}
     }
     copy(nostrNote);
   };
+
+  const downloadPng = async () => {
+    if (!cardRef.current || downloading) return;
+    setDownloading(true);
+    try {
+      // Load dom-to-image-more from cdnjs if not already loaded
+      if (!window.domtoimage) {
+        await new Promise((res, rej) => {
+          const s = document.createElement("script");
+          s.src = "https://cdnjs.cloudflare.com/ajax/libs/dom-to-image-more/3.4.0/dom-to-image-more.min.js";
+          s.onload = res; s.onerror = rej;
+          document.head.appendChild(s);
+        });
+      }
+      // Give fonts a beat to settle
+      await new Promise(r => setTimeout(r, 120));
+      const blob = await window.domtoimage.toBlob(cardRef.current, { width: 420, scale: 2, bgcolor: "#0b0d14" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = `anonscore-grade${grade}-${score}.png`;
+      a.click();
+    } catch {
+      copy(shareText); // fallback
+    }
+    setDownloading(false);
+  };
+
+  const TABS = [["copy","📤 Copy"],["x","𝕏 Post"],["nostr","🟣 Nostr"],["badge","🏷 Badge"],["card","🖼 Card"]];
+  const isCard = mode === "card";
+
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 800, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
-      <div onClick={onClose} style={{ position: "absolute", inset: 0, background: "#00000077" }} />
-      <div style={{ position: "relative", background: T.card, border: `1px solid ${T.border}`, borderRadius: 20, padding: 28, width: "min(400px,94vw)", animation: "fadeUp .3s ease both" }}>
-        <div style={{ background: `linear-gradient(135deg,${T.surface},${T.bg})`, borderRadius: 14, padding: 22, marginBottom: 18, border: `1px solid ${col}33` }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
-            <span style={{ color: T.btc, fontFamily: T.mono, fontSize: 14 }}>₿</span>
-            <span style={{ fontFamily: T.display, fontSize: 10, color: T.textDim, letterSpacing: 3 }}>ANONSCORE</span>
-          </div>
-          <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
-            <div style={{ textAlign: "center" }}>
-              <div style={{ fontFamily: T.serif, fontSize: 48, color: col, lineHeight: 1 }}>{score}</div>
-              <div style={{ fontFamily: T.mono, fontSize: 8, color: T.textDim, letterSpacing: 2, marginTop: 3 }}>SCORE</div>
-            </div>
-            <div>
-              <div style={{ fontFamily: T.serif, fontSize: 34, color: col, lineHeight: 1 }}>Grade {grade}</div>
-              <div style={{ fontSize: 13, color: T.textMid, marginTop: 5 }}>{scoreLabel(score)}</div>
-              <div style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim, marginTop: 5 }}>{issueCount} issue{issueCount!==1?"s":""} found · {fmt.addr(address)}</div>
-            </div>
-          </div>
-        </div>
-        <div style={{ display: "flex", gap: 6, marginBottom: 14 }}>
-          {[["share","📤 Copy"],["x","𝕏 Post"],["nostr","🟣 Nostr"],["badge","🏷 Badge"]].map(([m,label]) => (
-            <button key={m} onClick={()=>setMode(m)} style={{ flex:1, padding:"7px 4px", background:mode===m?T.cyanLo:"transparent", border:`1.5px solid ${mode===m?T.cyan:T.border}`, borderRadius:8, color:mode===m?T.cyan:T.textMid, fontSize:11, cursor:"pointer", fontFamily:T.sans, transition:"all .15s" }}>{label}</button>
+      <div onClick={onClose} style={{ position: "absolute", inset: 0, background: "#00000088" }} />
+      <div style={{ position: "relative", background: T.card, border: `1px solid ${T.border}`, borderRadius: 20, padding: 24,
+        width: isCard ? "min(480px,96vw)" : "min(400px,94vw)", animation: "fadeUp .3s ease both", transition: "width .2s ease" }}>
+
+        {/* Tab strip */}
+        <div style={{ display: "flex", gap: 4, marginBottom: 18 }}>
+          {TABS.map(([m, label]) => (
+            <button key={m} onClick={() => setMode(m)} style={{ flex: 1, padding: "7px 2px", background: mode === m ? (m === "card" ? T.lnLo : T.cyanLo) : "transparent",
+              border: `1.5px solid ${mode === m ? (m === "card" ? T.ln : T.cyan) : T.border}`, borderRadius: 8,
+              color: mode === m ? (m === "card" ? T.ln : T.cyan) : T.textMid,
+              fontSize: 11, cursor: "pointer", fontFamily: T.sans, transition: "all .15s", whiteSpace: "nowrap" }}>{label}</button>
           ))}
         </div>
-        {mode==="share" && <>
-          <div style={{ background:T.surface, borderRadius:10, padding:14, marginBottom:14, border:`1px solid ${T.borderLo}` }}>
-            <pre style={{ fontFamily:T.sans, fontSize:13, color:T.textMid, lineHeight:1.6, whiteSpace:"pre-wrap" }}>{shareText}</pre>
+
+        {/* Copy tab */}
+        {mode === "copy" && <>
+          <div style={{ background: T.surface, borderRadius: 10, padding: 14, marginBottom: 14, border: `1px solid ${T.borderLo}` }}>
+            <pre style={{ fontFamily: T.sans, fontSize: 13, color: T.textMid, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{shareText}</pre>
           </div>
-          <div style={{ display:"flex", gap:10 }}>
-            <button onClick={()=>copy(shareText)} style={{ flex:1, padding:"12px", background:didCopy?T.green:T.cyan, border:"none", borderRadius:10, color:T.bg, fontFamily:T.sans, fontWeight:700, fontSize:14, cursor:"pointer", transition:"background .2s" }}>{didCopy?"✓ Copied!":"Copy to share"}</button>
-            <button onClick={onClose} style={{ padding:"12px 14px", background:"transparent", border:`1px solid ${T.border}`, borderRadius:10, color:T.textMid, cursor:"pointer" }}>✕</button>
+          <div style={{ display: "flex", gap: 10 }}>
+            <button onClick={() => copy(shareText)} style={{ flex: 1, padding: "12px", background: didCopy ? T.green : T.cyan, border: "none", borderRadius: 10, color: T.bg, fontFamily: T.sans, fontWeight: 700, fontSize: 14, cursor: "pointer", transition: "background .2s" }}>{didCopy ? "✓ Copied!" : "Copy to share"}</button>
+            <button onClick={onClose} style={{ padding: "12px 14px", background: "transparent", border: `1px solid ${T.border}`, borderRadius: 10, color: T.textMid, cursor: "pointer" }}>✕</button>
           </div>
         </>}
-        {mode==="x" && <>
-          <div style={{ background:T.surface, borderRadius:10, padding:14, marginBottom:14, border:`1px solid ${T.borderLo}` }}>
-            <pre style={{ fontFamily:T.sans, fontSize:13, color:T.textMid, lineHeight:1.6, whiteSpace:"pre-wrap" }}>{xText}</pre>
+
+        {/* X tab */}
+        {mode === "x" && <>
+          <div style={{ background: T.surface, borderRadius: 10, padding: 14, marginBottom: 14, border: `1px solid ${T.borderLo}` }}>
+            <pre style={{ fontFamily: T.sans, fontSize: 13, color: T.textMid, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{xText}</pre>
           </div>
-          <div style={{ display:"flex", gap:10 }}>
-            <button onClick={shareToX} style={{ flex:1, padding:"12px", background:"#000", border:"none", borderRadius:10, color:"#fff", fontFamily:T.sans, fontWeight:700, fontSize:14, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", gap:8 }}>
-              <span style={{ fontSize:16 }}>𝕏</span> Post on X
+          <div style={{ display: "flex", gap: 10 }}>
+            <button onClick={shareToX} style={{ flex: 1, padding: "12px", background: "#000", border: "none", borderRadius: 10, color: "#fff", fontFamily: T.sans, fontWeight: 700, fontSize: 14, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+              <span style={{ fontSize: 16 }}>𝕏</span> Post on X
             </button>
-            <button onClick={()=>copy(xText)} style={{ padding:"12px 14px", background:"transparent", border:`1px solid ${T.border}`, borderRadius:10, color:T.textMid, cursor:"pointer", fontSize:12 }}>{didCopy?"✓":"Copy"}</button>
-            <button onClick={onClose} style={{ padding:"12px 14px", background:"transparent", border:`1px solid ${T.border}`, borderRadius:10, color:T.textMid, cursor:"pointer" }}>✕</button>
+            <button onClick={() => copy(xText)} style={{ padding: "12px 14px", background: "transparent", border: `1px solid ${T.border}`, borderRadius: 10, color: T.textMid, cursor: "pointer", fontSize: 12 }}>{didCopy ? "✓" : "Copy"}</button>
+            <button onClick={onClose} style={{ padding: "12px 14px", background: "transparent", border: `1px solid ${T.border}`, borderRadius: 10, color: T.textMid, cursor: "pointer" }}>✕</button>
           </div>
         </>}
-        {mode==="nostr" && <>
-          {window.nostr && <div style={{ background:T.greenLo, border:`1px solid ${T.green}33`, borderRadius:8, padding:"8px 12px", marginBottom:10, fontSize:12, color:T.green }}>✓ NIP-07 extension detected — can publish directly</div>}
-          <div style={{ background:T.surface, borderRadius:10, padding:14, marginBottom:14, border:`1px solid ${T.borderLo}` }}>
-            <pre style={{ fontFamily:T.sans, fontSize:12, color:T.textMid, lineHeight:1.6, whiteSpace:"pre-wrap" }}>{nostrNote}</pre>
+
+        {/* Nostr tab */}
+        {mode === "nostr" && <>
+          {window.nostr && <div style={{ background: T.greenLo, border: `1px solid ${T.green}33`, borderRadius: 8, padding: "8px 12px", marginBottom: 10, fontSize: 12, color: T.green }}>✓ NIP-07 extension detected — can publish directly</div>}
+          <div style={{ background: T.surface, borderRadius: 10, padding: 14, marginBottom: 14, border: `1px solid ${T.borderLo}` }}>
+            <pre style={{ fontFamily: T.sans, fontSize: 12, color: T.textMid, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{nostrNote}</pre>
           </div>
-          <div style={{ display:"flex", gap:10 }}>
-            <button onClick={shareToNostr} style={{ flex:1, padding:"12px", background:nostrSent?T.green:"#8B5CF6", border:"none", borderRadius:10, color:"#fff", fontFamily:T.sans, fontWeight:700, fontSize:14, cursor:"pointer", transition:"background .2s" }}>{nostrSent?"✓ Published!":window.nostr?"Publish to Nostr":"Copy Nostr note"}</button>
-            <button onClick={onClose} style={{ padding:"12px 14px", background:"transparent", border:`1px solid ${T.border}`, borderRadius:10, color:T.textMid, cursor:"pointer" }}>✕</button>
+          <div style={{ display: "flex", gap: 10 }}>
+            <button onClick={shareToNostr} style={{ flex: 1, padding: "12px", background: nostrSent ? T.green : "#8B5CF6", border: "none", borderRadius: 10, color: "#fff", fontFamily: T.sans, fontWeight: 700, fontSize: 14, cursor: "pointer", transition: "background .2s" }}>{nostrSent ? "✓ Published!" : window.nostr ? "Publish to Nostr" : "Copy Nostr note"}</button>
+            <button onClick={onClose} style={{ padding: "12px 14px", background: "transparent", border: `1px solid ${T.border}`, borderRadius: 10, color: T.textMid, cursor: "pointer" }}>✕</button>
           </div>
         </>}
-        {mode==="badge" && <>
-          <div style={{ background:T.surface, borderRadius:10, padding:14, marginBottom:10, border:`1px solid ${T.borderLo}` }}>
-            <div style={{ fontFamily:T.mono, fontSize:9, color:T.textDim, letterSpacing:1.5, marginBottom:8 }}>MARKDOWN BADGE</div>
-            <pre style={{ fontFamily:T.mono, fontSize:11, color:T.textMid, lineHeight:1.7, whiteSpace:"pre-wrap", wordBreak:"break-all" }}>{badgeMd}</pre>
+
+        {/* Badge tab */}
+        {mode === "badge" && <>
+          <div style={{ background: T.surface, borderRadius: 10, padding: 14, marginBottom: 10, border: `1px solid ${T.borderLo}` }}>
+            <div style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim, letterSpacing: 1.5, marginBottom: 8 }}>MARKDOWN BADGE</div>
+            <pre style={{ fontFamily: T.mono, fontSize: 11, color: T.textMid, lineHeight: 1.7, whiteSpace: "pre-wrap", wordBreak: "break-all" }}>{badgeMd}</pre>
           </div>
-          <div style={{ fontSize:12, color:T.textMid, marginBottom:14, lineHeight:1.5 }}>Paste into your GitHub README or Nostr profile bio to show your privacy grade.</div>
-          <button onClick={()=>copy(badgeMd)} style={{ width:"100%", padding:"12px", background:didCopy?T.green:T.cyan, border:"none", borderRadius:10, color:T.bg, fontFamily:T.sans, fontWeight:700, fontSize:14, cursor:"pointer", transition:"background .2s" }}>{didCopy?"✓ Copied!":"Copy badge markdown"}</button>
+          <div style={{ fontSize: 12, color: T.textMid, marginBottom: 14, lineHeight: 1.5 }}>Paste into your GitHub README or Nostr profile bio to show your privacy grade.</div>
+          <button onClick={() => copy(badgeMd)} style={{ width: "100%", padding: "12px", background: didCopy ? T.green : T.cyan, border: "none", borderRadius: 10, color: T.bg, fontFamily: T.sans, fontWeight: 700, fontSize: 14, cursor: "pointer", transition: "background .2s" }}>{didCopy ? "✓ Copied!" : "Copy badge markdown"}</button>
         </>}
+
+        {/* Card tab */}
+        {mode === "card" && (
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 14 }}>
+            <div style={{ transform: "scale(0.94)", transformOrigin: "top center" }}>
+              <VisualScoreCard score={score} grade={grade} checks={checks} address={address} isLightning={isLightning} cardRef={cardRef} />
+            </div>
+            <div style={{ display: "flex", gap: 8, width: "100%" }}>
+              <button onClick={downloadPng} style={{ flex: 1, padding: "12px", background: downloading ? T.surface : T.ln, border: `1px solid ${downloading ? T.border : "transparent"}`, borderRadius: 10, color: downloading ? T.textMid : T.bg, fontFamily: T.sans, fontWeight: 700, fontSize: 14, cursor: downloading ? "default" : "pointer", transition: "all .2s" }}>
+                {downloading ? "Rendering…" : "⬇ Download PNG"}
+              </button>
+              <button onClick={onClose} style={{ padding: "12px 14px", background: "transparent", border: `1px solid ${T.border}`, borderRadius: 10, color: T.textMid, cursor: "pointer" }}>✕</button>
+            </div>
+            <div style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim, textAlign: "center", lineHeight: 1.7 }}>
+              Save the PNG and drop it into any post. Works on X, Nostr, Telegram.
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -1102,28 +1302,33 @@ function Landing({ onAnalyze, isMobile }) {
 
           {/* Headline */}
           <h1 style={{ fontFamily: T.serif, fontSize: isMobile ? 38 : 56, lineHeight: 1.06, color: T.text, marginBottom: 20, animation: "fadeUp .5s ease .08s both", fontWeight: 400 }}>
-            Is your Bitcoin<br />wallet leaking?<br /><em style={{ color: T.cyan }}>Find out in 60 seconds.</em>
+            Is your Bitcoin<br />stack leaking?<br /><em style={{ color: T.cyan }}>Find out in 60 seconds.</em>
           </h1>
 
           <p style={{ fontSize: isMobile ? 15 : 18, color: T.textMid, lineHeight: 1.7, marginBottom: 32, fontWeight: 300, animation: "fadeUp .5s ease .14s both", maxWidth: 560, margin: "0 auto 32px" }}>
             Paste a Bitcoin address or a Lightning node pubkey. Get a privacy score, every issue explained, and a ranked fix plan — free, open source, nothing stored.
           </p>
 
-          {/* Score spectrum — slim, inline */}
-          <div style={{ maxWidth: 480, margin: "0 auto 28px", animation: "fadeUp .5s ease .16s both" }}>
-            <div style={{ position: "relative", height: 6, borderRadius: 6, background: `linear-gradient(90deg, ${T.red} 0%, ${T.btc} 40%, ${T.amber} 60%, ${T.green} 100%)`, marginBottom: 6 }}>
-              <div style={{ position: "absolute", top: "50%", left: "38%", transform: "translate(-50%,-50%)", width: 12, height: 12, borderRadius: "50%", background: T.bg, border: `2px solid ${T.btc}`, boxShadow: `0 0 8px ${T.btc}` }} />
+          {/* Score spectrum — slim, inline — hidden when Lightning detected */}
+          {!isLn && (
+            <div style={{ maxWidth: 480, margin: "0 auto 28px", animation: "fadeUp .5s ease .16s both" }}>
+              <div style={{ position: "relative", height: 6, borderRadius: 6, background: `linear-gradient(90deg, ${T.red} 0%, ${T.btc} 40%, ${T.amber} 60%, ${T.green} 100%)`, marginBottom: 6 }}>
+                <div style={{ position: "absolute", top: "50%", left: "38%", transform: "translate(-50%,-50%)", width: 12, height: 12, borderRadius: "50%", background: T.bg, border: `2px solid ${T.btc}`, boxShadow: `0 0 8px ${T.btc}` }} />
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between" }}>
+                <span style={{ fontFamily: T.mono, fontSize: 9, color: T.red }}>0 · Fully traceable</span>
+                <span style={{ fontFamily: T.mono, fontSize: 9, color: T.btc }}>avg wallet: 38</span>
+                <span style={{ fontFamily: T.mono, fontSize: 9, color: T.green }}>100 · Invisible</span>
+              </div>
             </div>
-            <div style={{ display: "flex", justifyContent: "space-between" }}>
-              <span style={{ fontFamily: T.mono, fontSize: 9, color: T.red }}>0 · Fully traceable</span>
-              <span style={{ fontFamily: T.mono, fontSize: 9, color: T.btc }}>avg wallet: 38</span>
-              <span style={{ fontFamily: T.mono, fontSize: 9, color: T.green }}>100 · Invisible</span>
-            </div>
-          </div>
+          )}
 
-          {/* Trust callout */}
-          <div style={{ maxWidth: 480, margin: "0 auto 12px", animation: "fadeUp .5s ease .20s both", background: T.surface, border: "1px solid " + T.border, borderRadius: 10, padding: "10px 14px", fontFamily: T.sans, fontSize: 12, color: T.textMid, lineHeight: 1.5, textAlign: "left" }}>
-            Bitcoin addresses are public by design - we read the blockchain like a block explorer. Your address is never logged or stored.
+          {/* Trust callout — updates based on detected type */}
+          <div style={{ maxWidth: 480, margin: "0 auto 12px", animation: "fadeUp .5s ease .20s both", background: T.surface, border: `1px solid ${isLn ? T.ln + "44" : T.border}`, borderRadius: 10, padding: "10px 14px", fontFamily: T.sans, fontSize: 12, color: T.textMid, lineHeight: 1.5, textAlign: "left", transition: "border-color .2s" }}>
+            {isLn
+              ? "⚡ Lightning node pubkeys are public on the gossip network — we query mempool.space's public API. Your pubkey is never logged or stored."
+              : "₿ Bitcoin addresses are public by design — we read the blockchain like a block explorer. Your address is never logged or stored."
+            }
           </div>
 
           {/* CTAs */}
@@ -1166,6 +1371,11 @@ function Landing({ onAnalyze, isMobile }) {
                   </button>
                 </div>
               )}
+              {isLn && (
+                <div style={{ fontFamily: T.mono, fontSize: 10, color: T.textDim, marginTop: 5, textAlign: "left" }}>
+                  ⚡ Node pubkeys only work if you run your own node — Umbrel, Start9, Citadel, RaspiBlitz, etc.
+                </div>
+              )}
               {error && <div style={{ fontSize: 12, color: T.red, marginTop: 6, animation: "slideDown .2s ease" }}>⚠ {error}</div>}
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -1180,21 +1390,19 @@ function Landing({ onAnalyze, isMobile }) {
                 onMouseOut={e => e.currentTarget.style.borderColor = T.border}>
                 ₿ Bitcoin sample
               </button>
-              <button onClick={() => onAnalyze("DEMO_LN", false, "ln_pubkey")}
-                style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, background: T.surface, border: `1.5px solid ${T.border}`, borderRadius: 12, padding: "11px 16px", color: T.textMid, fontFamily: T.sans, fontSize: 13, fontWeight: 600, cursor: "pointer", transition: "all .18s" }}
-                onMouseOver={e => e.currentTarget.style.borderColor = T.ln}
-                onMouseOut={e => e.currentTarget.style.borderColor = T.border}>
-                ⚡ Lightning sample
+              <button onClick={() => onAnalyze("DEMO", true, "btc")}
+                style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, background: T.cyan, border: "none", borderRadius: 12, padding: "11px 16px", color: T.bg, fontFamily: T.sans, fontSize: 13, fontWeight: 700, cursor: "pointer", transition: "all .18s", boxShadow: `0 2px 14px ${T.cyanMid}` }}
+                onMouseOver={e => e.currentTarget.style.opacity = ".88"}
+                onMouseOut={e => e.currentTarget.style.opacity = "1"}>
+                💬 Plain English
               </button>
-              <div style={{ flex: 2, display: "flex", flexDirection: "column", gap: 4 }}>
-                <button onClick={() => onAnalyze("DEMO", true, "btc")}
-                  style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, background: T.cyan, border: "none", borderRadius: 12, padding: "11px 16px", color: T.bg, fontFamily: T.sans, fontSize: 13, fontWeight: 700, cursor: "pointer", transition: "all .18s", boxShadow: `0 2px 14px ${T.cyanMid}` }}
-                  onMouseOver={e => e.currentTarget.style.opacity = ".88"}
-                  onMouseOut={e => e.currentTarget.style.opacity = "1"}>
-                  💬 Plain English
-                </button>
-                <div style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim, textAlign: "center" }}>no jargon · Bitcoin sample</div>
-              </div>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+              <button onClick={() => onAnalyze("DEMO_LN", false, "ln_pubkey")} style={{ background: "none", border: "none", cursor: "pointer", fontFamily: T.mono, fontSize: 10, color: T.ln, padding: 0 }}
+                onMouseOver={e => e.currentTarget.style.opacity = ".7"}
+                onMouseOut={e => e.currentTarget.style.opacity = "1"}>
+                ⚡ Try Lightning node sample →
+              </button>
             </div>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
               <a href="https://github.com/netasset/anonscore" target="_blank" rel="noopener noreferrer"
@@ -1270,8 +1478,12 @@ function Landing({ onAnalyze, isMobile }) {
       <section style={{ background: T.surface, padding: isMobile ? "56px 20px" : "72px 48px" }}>
         <div style={{ maxWidth: 1000, margin: "0 auto" }}>
           <div style={{ textAlign: "center", marginBottom: 40 }}>
-            <div style={{ fontFamily: T.mono, fontSize: 10, color: T.textDim, letterSpacing: 2.5, marginBottom: 12 }}>10 HEURISTICS — PLAIN ENGLISH</div>
+            <div style={{ fontFamily: T.mono, fontSize: 10, color: T.textDim, letterSpacing: 2.5, marginBottom: 12 }}>WHAT WE CHECK — PLAIN ENGLISH</div>
             <h2 style={{ fontFamily: T.serif, fontSize: isMobile ? 28 : 40, color: T.text, fontWeight: 400 }}>Every check, explained</h2>
+            <div style={{ display: "flex", gap: 12, justifyContent: "center", marginTop: 16 }}>
+              <span style={{ fontFamily: T.mono, fontSize: 10, color: T.cyan, background: T.cyanLo, border: `1px solid ${T.cyanMid}`, borderRadius: 6, padding: "4px 10px" }}>₿ 10 Bitcoin heuristics</span>
+              <span style={{ fontFamily: T.mono, fontSize: 10, color: T.ln, background: T.lnLo, border: `1px solid ${T.lnMid}`, borderRadius: 6, padding: "4px 10px" }}>⚡ 8 Lightning node checks</span>
+            </div>
           </div>
           <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(2, 1fr)", gap: 10 }}>
             {LANDING_CHECKS.map((c) => (
@@ -1300,13 +1512,13 @@ function Landing({ onAnalyze, isMobile }) {
             Free, open source, nothing stored. Takes 60 seconds.
           </p>
           <div style={{ display: "flex", flexDirection: isMobile ? "column" : "row", gap: 10, justifyContent: "center" }}>
-            <button onClick={() => onAnalyze("DEMO", false)}
+            <button onClick={() => onAnalyze("DEMO", false, "btc")}
               style={{ background: T.surface, border: `1.5px solid ${T.border}`, borderRadius: 12, padding: "15px 28px", color: T.text, fontFamily: T.sans, fontSize: 15, fontWeight: 600, cursor: "pointer", transition: "all .18s" }}
               onMouseOver={e => e.currentTarget.style.borderColor = T.cyan}
               onMouseOut={e => e.currentTarget.style.borderColor = T.border}>
               ▶ Try the demo
             </button>
-            <button onClick={() => onAnalyze("DEMO", true)}
+            <button onClick={() => onAnalyze("DEMO", true, "btc")}
               style={{ background: T.cyan, border: "none", borderRadius: 12, padding: "15px 28px", color: T.bg, fontFamily: T.sans, fontSize: 15, fontWeight: 700, cursor: "pointer", transition: "all .18s", boxShadow: `0 4px 24px ${T.cyanMid}` }}
               onMouseOver={e => e.currentTarget.style.opacity = ".88"}
               onMouseOut={e => e.currentTarget.style.opacity = "1"}>
@@ -1699,9 +1911,10 @@ function AiAssistant({ checks, recommendations, score, grade, onClose }) {
 /* ─────────────────────────────────────────────
    DASHBOARD
 ───────────────────────────────────────────── */
-function Dashboard({ address, addrInfo, utxos, txs, isMobile, onBack, onRescan, toast, autoShare, scanAt, defaultSimple }) {
+function Dashboard({ address, addrInfo, utxos, txs, isMobile, onBack, onRescan, toast, autoShare, scanAt, defaultSimple, simpleMode: simpleModeFromApp, onSimpleModeChange }) {
   const [tab, setTab] = useState("Fix It");
-  const [simpleMode, setSimpleMode] = useState(defaultSimple || false);
+  const [simpleMode, setSimpleMode] = useState(simpleModeFromApp !== undefined ? simpleModeFromApp : (defaultSimple || false));
+  const setSimpleModeSync = (val) => { setSimpleMode(val); onSimpleModeChange && onSimpleModeChange(val); };
   const [shareOpen, setShareOpen] = useState(false);
   const [selectedUtxo, setSelectedUtxo] = useState(null);
   const [doneFixes, setDoneFixes] = useState(new Set());
@@ -1864,7 +2077,7 @@ function Dashboard({ address, addrInfo, utxos, txs, isMobile, onBack, onRescan, 
           <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 2 }}>
             {TABS.map(t => <Pill key={t} active={tab === t} onClick={() => setTab(t)}>{t}</Pill>)}
           </div>
-          <button onClick={() => setSimpleMode(m => !m)} style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 7, background: simpleMode ? T.cyan : T.surface, border: `1.5px solid ${simpleMode ? T.cyan : T.border}`, borderRadius: 20, padding: "8px 16px", cursor: "pointer", transition: "all .2s", boxShadow: simpleMode ? `0 0 12px ${T.cyanMid}` : "none" }}
+          <button onClick={() => setSimpleModeSync(!simpleMode)} style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 7, background: simpleMode ? T.cyan : T.surface, border: `1.5px solid ${simpleMode ? T.cyan : T.border}`, borderRadius: 20, padding: "8px 16px", cursor: "pointer", transition: "all .2s", boxShadow: simpleMode ? `0 0 12px ${T.cyanMid}` : "none" }}
             onMouseOver={e => { e.currentTarget.style.borderColor = T.cyan; if (!simpleMode) e.currentTarget.style.background = T.cyan + "18"; }}
             onMouseOut={e => { e.currentTarget.style.borderColor = simpleMode ? T.cyan : T.border; if (!simpleMode) e.currentTarget.style.background = T.surface; }}>
             <span style={{ fontSize: 14 }}>💬</span>
@@ -2192,7 +2405,7 @@ function Dashboard({ address, addrInfo, utxos, txs, isMobile, onBack, onRescan, 
         </div>
       )}
 
-      {shareOpen && <ShareCard score={score} grade={grade} issueCount={issueCount} address={address} onClose={() => setShareOpen(false)} />}
+      {shareOpen && <ShareCard score={score} grade={grade} checks={checks} address={address} isLightning={false} onClose={() => setShareOpen(false)} />}
       {aiStage === "consent" && <AiConsentGate score={score} grade={grade} checks={checks} recommendations={recommendations} onAccept={() => setAiStage("chat")} onDecline={() => setAiStage(null)} />}
       {aiStage === "chat" && <AiAssistant checks={checks} recommendations={recommendations} score={score} grade={grade} onClose={() => setAiStage(null)} />}
 
@@ -2290,7 +2503,7 @@ function Dashboard({ address, addrInfo, utxos, txs, isMobile, onBack, onRescan, 
 /* ─────────────────────────────────────────────
    LIGHTNING DASHBOARD
 ───────────────────────────────────────────── */
-function LightningDashboard({ nodeId, nodeData, channels, isMobile, onBack, toast }) {
+function LightningDashboard({ nodeId, nodeData, channels, isMobile, onBack, onRescan, toast }) {
   const [tab, setTab] = useState("Fix It");
   const { score, grade, checks, recommendations } = useMemo(
     () => runLightningEngine(nodeData, channels), [nodeData, channels]
@@ -2301,6 +2514,8 @@ function LightningDashboard({ nodeId, nodeData, channels, isMobile, onBack, toas
   const passes = checks.filter(c => c.status === "pass").length;
   const [expandedCheck, setExpandedCheck] = useState(null);
   const [doneFixes, setDoneFixes] = useState(new Set());
+  const [shareOpen, setShareOpen] = useState(false);
+  const [aiStage, setAiStage] = useState(null); // null | "consent" | "chat"
   const toggleDone = k => setDoneFixes(p => { const n = new Set(p); n.has(k) ? n.delete(k) : n.add(k); return n; });
 
   const totalCap = channels.reduce((s, c) => s + (c.capacity || 0), 0);
@@ -2308,8 +2523,14 @@ function LightningDashboard({ nodeId, nodeData, channels, isMobile, onBack, toas
   const pubkeyShort = nodeId ? `${nodeId.slice(0, 10)}…${nodeId.slice(-6)}` : "—";
   const TABS = isMobile ? ["Fix It", "Checks", "Channels"] : ["Fix It", "Checks", "Channels", "Methodology"];
 
+  const handleRescan = () => onRescan && onRescan(nodeId, false, "ln_pubkey");
+
   return (
     <div style={{ minHeight: "100vh", background: T.bg, display: "flex", flexDirection: "column" }}>
+
+      {/* ── Share modal — unified with BTC ── */}
+      {shareOpen && <ShareCard score={score} grade={grade} checks={checks} address={nodeId} isLightning={true} onClose={() => setShareOpen(false)} />}
+
       {/* ── Nav — matches BTC nav ── */}
       <nav style={{ display: "flex", alignItems: "center", gap: 10, padding: isMobile ? "12px 16px" : "12px 32px", borderBottom: `1px solid ${T.border}`, background: T.bg, position: "sticky", top: 0, zIndex: 100 }}>
         <button onClick={onBack} style={{ background: "transparent", border: `1.5px solid ${T.border}`, borderRadius: 8, padding: "7px 12px", color: T.textMid, fontFamily: T.sans, fontSize: 13, cursor: "pointer", transition: "border .15s" }}
@@ -2324,6 +2545,22 @@ function LightningDashboard({ nodeId, nodeData, channels, isMobile, onBack, toas
         </div>
         <div style={{ display: "flex", gap: 8, flexShrink: 0, alignItems: "center" }}>
           <Tag label={grade} color={col} size={10} />
+          {!isMobile && (
+            <>
+              <button onClick={handleRescan} style={{ background: "transparent", border: `1.5px solid ${T.border}`, borderRadius: 8, padding: "6px 12px", color: T.textMid, fontSize: 13, cursor: "pointer", transition: "all .15s" }}
+                onMouseOver={e => e.currentTarget.style.borderColor = T.ln}
+                onMouseOut={e => e.currentTarget.style.borderColor = T.border}>↻ Re-scan</button>
+              <button onClick={() => setShareOpen(true)} style={{ background: "transparent", border: `1.5px solid ${T.border}`, borderRadius: 8, padding: "6px 12px", color: T.textMid, fontSize: 13, cursor: "pointer", transition: "all .15s" }}
+                onMouseOver={e => e.currentTarget.style.borderColor = T.ln}
+                onMouseOut={e => e.currentTarget.style.borderColor = T.border}>Share</button>
+            </>
+          )}
+          {isMobile && (
+            <>
+              <button onClick={() => setShareOpen(true)} style={{ background: "transparent", border: `1.5px solid ${T.border}`, borderRadius: 8, padding: "6px 10px", color: T.textMid, fontSize: 12, cursor: "pointer" }}>Share</button>
+              <button onClick={handleRescan} style={{ background: "transparent", border: `1.5px solid ${T.border}`, borderRadius: 8, padding: "6px 10px", color: T.textMid, fontSize: 12, cursor: "pointer" }}>↻</button>
+            </>
+          )}
         </div>
       </nav>
 
@@ -2401,6 +2638,59 @@ function LightningDashboard({ nodeId, nodeData, channels, isMobile, onBack, toas
             {recommendations.length === 0 && score < 80 && (
               <div style={{ fontSize: 13, color: T.textMid, padding: "12px 0" }}>No specific fixes generated. Check the Checks tab for detail.</div>
             )}
+
+            {/* AI assistant card — same pattern as BTC */}
+            {aiStage !== "chat" && (
+              <div style={{ background: T.card, border: `1px solid ${T.ln}33`, borderRadius: 16, overflow: "hidden", marginBottom: 2 }}>
+                <div style={{ display: "flex", gap: 0, borderBottom: `1px solid ${T.borderLo}` }}>
+                  {[
+                    { icon: "✕", label: "Node ID never sent" },
+                    { icon: "✕", label: "No data stored" },
+                    { icon: "✕", label: "Not used for training" },
+                  ].map((badge, i) => (
+                    <div key={i} style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 5, padding: "7px 8px", borderRight: i < 2 ? `1px solid ${T.borderLo}` : undefined, background: T.greenLo }}>
+                      <span style={{ fontFamily: T.mono, fontSize: 9, color: T.green, fontWeight: 700 }}>{badge.icon}</span>
+                      <span style={{ fontFamily: T.mono, fontSize: 9, color: T.green, letterSpacing: 0.3, whiteSpace: "nowrap" }}>{badge.label}</span>
+                    </div>
+                  ))}
+                </div>
+                <button onClick={() => setAiStage("consent")} style={{ display: "flex", alignItems: "center", gap: 14, padding: "16px 18px", cursor: "pointer", textAlign: "left", width: "100%", background: "transparent", border: "none", transition: "background .15s" }}
+                  onMouseOver={e => e.currentTarget.style.background = T.ln + "0a"}
+                  onMouseOut={e => e.currentTarget.style.background = "transparent"}>
+                  <div style={{ width: 36, height: 36, background: T.ln + "18", border: `1px solid ${T.ln}33`, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, flexShrink: 0 }}>⚡</div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: T.text, marginBottom: 3 }}>Ask the Privacy Assistant</div>
+                    <div style={{ fontSize: 12, color: T.textMid, lineHeight: 1.55 }}>
+                      Get step-by-step guidance for your {checks.filter(c => c.status !== "pass").length} Lightning issues. Only your score and issue names are shared — never your node ID.
+                    </div>
+                  </div>
+                  <div style={{ flexShrink: 0 }}>
+                    <div style={{ background: T.ln, borderRadius: 8, padding: "7px 14px", color: T.bg, fontSize: 12, fontWeight: 700, whiteSpace: "nowrap" }}>Ask now →</div>
+                  </div>
+                </button>
+                {aiStage === "consent" && (
+                  <div style={{ padding: "14px 18px", borderTop: `1px solid ${T.borderLo}`, background: T.lnLo }}>
+                    <div style={{ fontSize: 13, color: T.textMid, marginBottom: 12, lineHeight: 1.6 }}>
+                      The assistant will receive your score ({score}/100) and issue names only. No node ID, no channel data, no on-chain info. Powered by Claude.
+                    </div>
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <button onClick={() => setAiStage("chat")} style={{ flex: 1, background: T.ln, border: "none", borderRadius: 8, padding: "10px", color: T.bg, fontFamily: T.sans, fontWeight: 700, fontSize: 13, cursor: "pointer" }}>I understand — open assistant</button>
+                      <button onClick={() => setAiStage(null)} style={{ background: "transparent", border: `1.5px solid ${T.border}`, borderRadius: 8, padding: "10px 14px", color: T.textDim, fontSize: 12, cursor: "pointer" }}>Cancel</button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {aiStage === "chat" && (
+              <AiAssistant
+                checks={checks}
+                recommendations={recommendations}
+                score={score}
+                grade={grade}
+                onClose={() => setAiStage(null)}
+              />
+            )}
             {recommendations.map((r, i) => {
               const done = doneFixes.has(r.key);
               return (
@@ -2434,6 +2724,15 @@ function LightningDashboard({ nodeId, nodeData, channels, isMobile, onBack, toas
                 </div>
               );
             })}
+            {/* Share card */}
+            <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: 14, padding: "18px 22px", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
+              <div>
+                <div style={{ fontFamily: T.serif, fontSize: 17, color: T.text, fontWeight: 400 }}>Share your node score</div>
+                <div style={{ fontSize: 13, color: T.textMid, marginTop: 3 }}>Let your Nostr or Twitter followers check theirs.</div>
+              </div>
+              <button onClick={() => setShareOpen(true)} style={{ background: T.ln, border: "none", borderRadius: 10, padding: "11px 20px", color: T.bg, fontFamily: T.sans, fontWeight: 700, fontSize: 14, cursor: "pointer" }}>Share Grade {grade} →</button>
+            </div>
+
             {/* Lightning privacy explainer */}
             <div style={{ background: T.lnLo, border: `1px solid ${T.lnMid}`, borderRadius: 14, padding: "16px 20px", marginTop: 4 }}>
               <div style={{ fontSize: 13, fontWeight: 600, color: T.ln, marginBottom: 6 }}>⚡ What Lightning scores — and what it can't</div>
@@ -2485,7 +2784,7 @@ function LightningDashboard({ nodeId, nodeData, channels, isMobile, onBack, toas
             )}
             {channels.map((ch, i) => {
               const peerPub = ch.node1_pub === nodeId ? ch.node2_pub : ch.node1_pub;
-              const isKyc = KYC_NODES.some(k => k === ch.node1_pub || k === ch.node2_pub);
+              const isKyc = isKycNode(ch.node1_pub) || isKycNode(ch.node2_pub);
               const pct = totalCap > 0 ? Math.round((ch.capacity / totalCap) * 100) : 0;
               const riskColor = isKyc ? T.red : T.green;
               const riskLabel = isKyc ? "KYC" : "OK";
@@ -2551,6 +2850,7 @@ function App() {
   const [autoShare, setAutoShare] = useState(false);
   const [scanAt, setScanAt] = useState(null);
   const [defaultSimple, setDefaultSimple] = useState(false);
+  const [simpleMode, setSimpleMode] = useState(false); // persists across re-scans
   // Lightning state
   const [lnNodeId, setLnNodeId] = useState("");
   const [lnNodeData, setLnNodeData] = useState(null);
@@ -2644,8 +2944,8 @@ function App() {
       <Toast toasts={toast.toasts} />
       {page === "landing"      && <Landing onAnalyze={analyze} isMobile={isMobile} />}
       {page === "scanning"     && <Scanning address={address || lnNodeId} isLightning={isScanningLightning} />}
-      {page === "dashboard"    && <Dashboard address={address} addrInfo={addrInfo} utxos={utxos} txs={txs} isMobile={isMobile} onBack={() => setPage("landing")} onRescan={analyze} toast={toast} autoShare={autoShare} scanAt={scanAt} defaultSimple={defaultSimple} />}
-      {page === "ln_dashboard" && <LightningDashboard nodeId={lnNodeId} nodeData={lnNodeData} channels={lnChannels} isMobile={isMobile} onBack={() => setPage("landing")} toast={toast} />}
+      {page === "dashboard"    && <Dashboard address={address} addrInfo={addrInfo} utxos={utxos} txs={txs} isMobile={isMobile} onBack={() => setPage("landing")} onRescan={analyze} toast={toast} autoShare={autoShare} scanAt={scanAt} defaultSimple={defaultSimple} simpleMode={simpleMode} onSimpleModeChange={setSimpleMode} />}
+      {page === "ln_dashboard" && <LightningDashboard nodeId={lnNodeId} nodeData={lnNodeData} channels={lnChannels} isMobile={isMobile} onBack={() => setPage("landing")} onRescan={analyze} toast={toast} />}
     </>
   );
 }
