@@ -961,46 +961,50 @@ function VisualScoreCard({ score, grade, checks, address, isLightning = false, c
 
   return (
     <div ref={cardRef} style={{
-      width: 420, background: `linear-gradient(145deg,#0f1120 0%,#0b0d14 60%,#0f1120 100%)`,
-      border: `1.5px solid ${col}33`, borderRadius: 24, overflow: "hidden",
-      boxShadow: `0 0 0 1px #ffffff06, 0 32px 80px #000000cc, 0 0 60px ${col}18`,
+      width: 320, background: `linear-gradient(145deg,#0f1120 0%,#0b0d14 60%,#0f1120 100%)`,
+      border: `1.5px solid ${col}33`, borderRadius: 20, overflow: "hidden",
+      boxShadow: `0 0 0 1px #ffffff06, 0 24px 60px #000000cc, 0 0 40px ${col}18`,
       fontFamily: T.sans, position: "relative",
     }}>
       {/* Dot-grid texture */}
       <div style={{ position: "absolute", inset: 0, pointerEvents: "none",
-        backgroundImage: "radial-gradient(circle,#ffffff05 1px,transparent 1px)", backgroundSize: "20px 20px" }} />
+        backgroundImage: "radial-gradient(circle,#ffffff05 1px,transparent 1px)", backgroundSize: "18px 18px" }} />
       {/* Top glow bar */}
       <div style={{ height: 3, background: `linear-gradient(90deg,transparent,${col},transparent)` }} />
 
       {/* Header */}
-      <div style={{ padding: "14px 20px 0", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <VisualGaugeArc score={score} size={40} uid={uid + "h"} />
+      <div style={{ padding: "12px 16px 0", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+          <VisualGaugeArc score={score} size={32} uid={uid + "h"} />
           <div>
-            <div style={{ fontFamily: T.display, fontSize: 16, fontWeight: 800, letterSpacing: 2, color: T.text }}>
+            <div style={{ fontFamily: T.display, fontSize: 14, fontWeight: 800, letterSpacing: 2, color: T.text }}>
               <span style={{ color: T.cyan }}>ANON</span>SCORE
             </div>
-            <div style={{ fontFamily: T.mono, fontSize: 7, color: T.textDim, letterSpacing: 2, marginTop: 1 }}>{auditLabel}</div>
+            <div style={{ fontFamily: T.mono, fontSize: 6, color: T.textDim, letterSpacing: 1.5, marginTop: 1 }}>{auditLabel}</div>
           </div>
         </div>
-        <div style={{ fontFamily: T.mono, fontSize: 8, color: T.textDim, textAlign: "right", lineHeight: 1.7 }}>
+        <div style={{ fontFamily: T.mono, fontSize: 7, color: T.textDim, textAlign: "right", lineHeight: 1.6 }}>
           <div style={{ letterSpacing: 1 }}>{dateStr}</div>
           <div style={{ opacity: 0.5 }}>anonscore.com</div>
         </div>
       </div>
 
-      {/* Score hero */}
-      <div style={{ padding: "10px 20px 12px", display: "flex", alignItems: "center", gap: 16 }}>
-        <VisualGaugeArc score={score} size={88} uid={uid + "b"} />
-        <div>
-          <div style={{ fontFamily: T.serif, fontSize: 56, color: col, lineHeight: 1, fontWeight: 300,
-            textShadow: `0 0 24px ${col}55` }}>{grade}</div>
-          <div style={{ fontFamily: T.mono, fontSize: 10, color: col, letterSpacing: 1, marginTop: 3 }}>{scoreLabel(score)}</div>
-          <div style={{ fontFamily: T.mono, fontSize: 20, color: T.text, marginTop: 4, fontWeight: 600 }}>
-            {score}<span style={{ fontSize: 10, color: T.textDim, fontWeight: 400 }}>/100</span>
+      {/* Score hero — arc left, stats right, no dead space */}
+      <div style={{ padding: "8px 16px 10px", display: "flex", alignItems: "center", gap: 12 }}>
+        <VisualGaugeArc score={score} size={72} uid={uid + "b"} />
+        <div style={{ flex: 1 }}>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+            <div style={{ fontFamily: T.serif, fontSize: 52, color: col, lineHeight: 1, fontWeight: 300,
+              textShadow: `0 0 20px ${col}55` }}>{grade}</div>
+            <div>
+              <div style={{ fontFamily: T.mono, fontSize: 9, color: col, letterSpacing: 1 }}>{scoreLabel(score)}</div>
+              <div style={{ fontFamily: T.mono, fontSize: 18, color: T.text, fontWeight: 600, lineHeight: 1.1 }}>
+                {score}<span style={{ fontSize: 9, color: T.textDim, fontWeight: 400 }}>/100</span>
+              </div>
+            </div>
           </div>
           {address && address !== "DEMO" && address !== "DEMO_LN" && (
-            <div style={{ fontFamily: T.mono, fontSize: 8, color: T.textDim, marginTop: 4 }}>
+            <div style={{ fontFamily: T.mono, fontSize: 7, color: T.textDim, marginTop: 4 }}>
               {symbol} {fmt.addr(address)}
             </div>
           )}
@@ -1008,38 +1012,38 @@ function VisualScoreCard({ score, grade, checks, address, isLightning = false, c
       </div>
 
       {/* Divider */}
-      <div style={{ height: 1, background: `linear-gradient(90deg,transparent,${T.border},transparent)`, margin: "0 20px" }} />
+      <div style={{ height: 1, background: `linear-gradient(90deg,transparent,${T.border},transparent)`, margin: "0 16px" }} />
 
       {/* Findings */}
-      <div style={{ padding: "12px 20px" }}>
-        <div style={{ fontFamily: T.mono, fontSize: 8, color: T.textDim, letterSpacing: 1.5, marginBottom: 8 }}>FINDINGS</div>
-        <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+      <div style={{ padding: "10px 16px" }}>
+        <div style={{ fontFamily: T.mono, fontSize: 7, color: T.textDim, letterSpacing: 1.5, marginBottom: 7 }}>FINDINGS</div>
+        <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
           {[{ count: fails, label: "Critical", color: T.red }, { count: warns, label: "Warnings", color: T.amber }, { count: passes, label: "Passed", color: T.green }].map(({ count, label, color }) => (
-            <div key={label} style={{ flex: 1, background: `${color}10`, border: `1px solid ${color}28`, borderRadius: 8, padding: "7px 0", textAlign: "center" }}>
-              <div style={{ fontFamily: T.display, fontSize: 19, color, fontWeight: 700 }}>{count}</div>
-              <div style={{ fontFamily: T.mono, fontSize: 7, color: T.textDim, letterSpacing: 1, marginTop: 1 }}>{label.toUpperCase()}</div>
+            <div key={label} style={{ flex: 1, background: `${color}10`, border: `1px solid ${color}28`, borderRadius: 7, padding: "6px 0", textAlign: "center" }}>
+              <div style={{ fontFamily: T.display, fontSize: 17, color, fontWeight: 700 }}>{count}</div>
+              <div style={{ fontFamily: T.mono, fontSize: 6, color: T.textDim, letterSpacing: 1, marginTop: 1 }}>{label.toUpperCase()}</div>
             </div>
           ))}
         </div>
         {topIssues.map((issue, i) => {
           const dot = issue.status === "fail" ? T.red : T.amber;
           return (
-            <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 0", borderTop: `1px solid #1e2130` }}>
-              <div style={{ width: 5, height: 5, borderRadius: "50%", background: dot, flexShrink: 0 }} />
-              <span style={{ fontSize: 11, color: T.text, flex: 1 }}>{issue.name}</span>
-              <span style={{ fontFamily: T.mono, fontSize: 8, color: dot, textTransform: "uppercase" }}>{issue.status}</span>
+            <div key={i} style={{ display: "flex", alignItems: "center", gap: 7, padding: "4px 0", borderTop: `1px solid #1e2130` }}>
+              <div style={{ width: 4, height: 4, borderRadius: "50%", background: dot, flexShrink: 0 }} />
+              <span style={{ fontSize: 10, color: T.text, flex: 1 }}>{issue.name}</span>
+              <span style={{ fontFamily: T.mono, fontSize: 7, color: dot, textTransform: "uppercase" }}>{issue.status}</span>
             </div>
           );
         })}
       </div>
 
       {/* Footer CTA */}
-      <div style={{ margin: "0 20px 16px", background: `${T.cyan}0d`, border: `1px solid ${T.cyan}22`,
-        borderRadius: 10, padding: "9px 14px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <div style={{ fontFamily: T.mono, fontSize: 9, color: T.textMid }}>
-          {isLightning ? "Score your Lightning node free" : "Scan your wallet free"}
+      <div style={{ margin: "0 16px 14px", background: `${T.cyan}0d`, border: `1px solid ${T.cyan}22`,
+        borderRadius: 8, padding: "7px 12px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <div style={{ fontFamily: T.mono, fontSize: 8, color: T.textMid }}>
+          {isLightning ? "Score your node free" : "Scan your wallet free"}
         </div>
-        <div style={{ fontFamily: T.mono, fontSize: 10, color: T.cyan, fontWeight: 600, letterSpacing: 0.5 }}>anonscore.com →</div>
+        <div style={{ fontFamily: T.mono, fontSize: 9, color: T.cyan, fontWeight: 600, letterSpacing: 0.5 }}>anonscore.com →</div>
       </div>
     </div>
   );
@@ -1108,7 +1112,7 @@ function ShareCard({ score, grade, checks, address, isLightning = false, onClose
     <div style={{ position: "fixed", inset: 0, zIndex: 800, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
       <div onClick={onClose} style={{ position: "absolute", inset: 0, background: "#00000088" }} />
       <div style={{ position: "relative", background: T.card, border: `1px solid ${T.border}`, borderRadius: 20, padding: 24,
-        width: isCard ? "min(480px,96vw)" : "min(400px,94vw)", animation: "fadeUp .3s ease both", transition: "width .2s ease" }}>
+        width: isCard ? "min(380px,96vw)" : "min(400px,94vw)", animation: "fadeUp .3s ease both", transition: "width .2s ease" }}>
 
         {/* Tab strip */}
         <div style={{ display: "flex", gap: 4, marginBottom: 18 }}>
@@ -1170,7 +1174,7 @@ function ShareCard({ score, grade, checks, address, isLightning = false, onClose
         {/* Card tab */}
         {mode === "card" && (
           <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 14 }}>
-            <div style={{ transform: "scale(0.94)", transformOrigin: "top center" }}>
+            <div style={{ display: "flex", justifyContent: "center" }}>
               <VisualScoreCard score={score} grade={grade} checks={checks} address={address} isLightning={isLightning} cardRef={cardRef} />
             </div>
             <div style={{ display: "flex", gap: 8, width: "100%" }}>
