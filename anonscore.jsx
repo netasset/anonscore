@@ -122,8 +122,8 @@ const removeFromHistory = (addr) => {
 };
 
 const FIXES_KEY = "anonscore_fixes_v1";
-const getDoneFixes  = (addr) => { try { return new Set(JSON.parse(localStorage.getItem(FIXES_KEY + addr) || "[]")); } catch { return new Set(); } };
-const saveDoneFixes = (addr, set) => { try { localStorage.setItem(FIXES_KEY + addr, JSON.stringify([...set])); } catch {} };
+const getDoneFixes  = (addr) => { try { return new Set(JSON.parse(localStorage.getItem(FIXES_KEY + ":" + addr) || "[]")); } catch { return new Set(); } };
+const saveDoneFixes = (addr, set) => { try { localStorage.setItem(FIXES_KEY + ":" + addr, JSON.stringify([...set])); } catch {} };
 
 const DEMO_EXAMPLES = [
   {
@@ -414,11 +414,15 @@ function runEngine(utxos = [], txs = [], txCount = 0) {
 ───────────────────────────────────────────── */
 const API = "https://blockstream.info/api";
 async function fetchAddress(addr) {
+  const safe = encodeURIComponent(addr);
   const [info, utxos, txs] = await Promise.all([
-    fetch(`${API}/address/${addr}`).then(r => { if (!r.ok) throw new Error("Not found"); return r.json(); }),
-    fetch(`${API}/address/${addr}/utxo`).then(r => r.json()),
-    fetch(`${API}/address/${addr}/txs`).then(r => r.json()),
+    fetch(`${API}/address/${safe}`).then(r => { if (!r.ok) throw new Error("Not found"); return r.json(); }),
+    fetch(`${API}/address/${safe}/utxo`).then(r => r.json()),
+    fetch(`${API}/address/${safe}/txs`).then(r => r.json()),
   ]);
+  if (!info || typeof info !== "object") throw new Error("Invalid API response");
+  if (!Array.isArray(utxos)) throw new Error("Invalid UTXO response");
+  if (!Array.isArray(txs)) throw new Error("Invalid TX response");
   return { addrInfo: info, utxos: utxos.slice(0, 30), txs: txs.slice(0, 30) };
 }
 
@@ -450,11 +454,13 @@ const DEMO = {
 const LN_API = "https://mempool.space/api/v1/lightning";
 
 async function fetchLightningNode(pubkey) {
+  const safe = encodeURIComponent(pubkey);
   const [node, channels] = await Promise.all([
-    fetch(`${LN_API}/nodes/${pubkey}`).then(r => { if (!r.ok) throw new Error("Node not found"); return r.json(); }),
-    fetch(`${LN_API}/nodes/${pubkey}/channels?status=open`).then(r => r.json()).catch(() => ({ channels: [] })),
+    fetch(`${LN_API}/nodes/${safe}`).then(r => { if (!r.ok) throw new Error("Node not found"); return r.json(); }),
+    fetch(`${LN_API}/nodes/${safe}/channels?status=open`).then(r => r.json()).catch(() => ({ channels: [] })),
   ]);
-  return { node, channels: (channels.channels || []).slice(0, 30) };
+  if (!node || typeof node !== "object") throw new Error("Invalid node response");
+  return { node, channels: (Array.isArray(channels.channels) ? channels.channels : []).slice(0, 30) };
 }
 
 // Known KYC/custodial exchange node pubkeys — verified against 1ML/Amboss
@@ -1174,6 +1180,8 @@ function ShareCard({ score, grade, checks, address, isLightning = false, onClose
         await new Promise((res, rej) => {
           const s = document.createElement("script");
           s.src = "https://cdnjs.cloudflare.com/ajax/libs/dom-to-image-more/3.4.0/dom-to-image-more.min.js";
+          s.integrity = "sha384-OLBgp1GsljhM2TJ+sbHjaiH9txEUvgdDTAzHv2P24donTt6/529l+9Ua0vFImLlb";
+          s.crossOrigin = "anonymous";
           s.onload = res; s.onerror = rej;
           document.head.appendChild(s);
         });
@@ -3053,9 +3061,9 @@ function LightningDashboard({ nodeId, nodeData, channels, isMobile, onBack, onRe
 ───────────────────────────────────────────── */
 function App() {
   const [page, setPage] = useState("landing");
-  const analyzeRef = useRef(null); // used by ?scan= param effect to avoid stale closure
+  const [pendingScan, setPendingScan] = useState(null); // { addr, inputType } awaiting user confirmation
 
-  // Inject meta/OG tags + handle ?scan= URL param
+  // Inject meta/OG tags
   useEffect(() => {
     const set = (sel, attr, val) => { let el = document.querySelector(sel); if (!el) { el = document.createElement("meta"); document.head.appendChild(el); } el.setAttribute(attr, val); };
     document.title = "AnonScore — Free Bitcoin & Lightning Privacy Audit";
@@ -3071,17 +3079,17 @@ function App() {
     set('meta[name="twitter:image"]',  "content", "https://anonscore.com/og.png");
   }, []);
 
-  // Separate effect: fires after analyze is stable
+  // Parse ?scan= param — store for user confirmation, never auto-fire
   useEffect(() => {
     try {
       const params = new URLSearchParams(window.location.search);
       const addr = params.get("scan");
-      if (addr && analyzeRef.current) {
+      if (addr) {
         const t = detectInputType(addr);
-        if (t) analyzeRef.current(addr, false, t);
+        if (t) setPendingScan({ addr, inputType: t });
       }
     } catch {}
-  }, []);  // analyzeRef.current is set before this fires
+  }, []);
   // Bitcoin state
   const [address, setAddress] = useState("");
   const [addrInfo, setAddrInfo] = useState(null);
@@ -3191,12 +3199,39 @@ function App() {
       toast.show("Showing demo data", { icon: "ℹ️", color: T.blue, msg: "Live API unavailable — sample shown" });
     }
   }, [toast]);
-  analyzeRef.current = analyze; // keep ref fresh for ?scan= effect
 
   return (
     <>
       <style>{CSS}</style>
       <Toast toasts={toast.toasts} />
+
+      {/* ?scan= confirmation — shown over landing, never auto-fires */}
+      {pendingScan && page === "landing" && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 900, display: "flex", alignItems: "center", justifyContent: "center", padding: 20, background: "#000000aa" }}>
+          <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 18, padding: 28, width: "min(400px,94vw)", animation: "fadeUp .25s ease" }}>
+            <div style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim, letterSpacing: 2, marginBottom: 14 }}>SHARED SCAN LINK</div>
+            <div style={{ fontFamily: T.serif, fontSize: 20, color: T.text, marginBottom: 10, fontWeight: 400 }}>
+              You were linked to scan this {pendingScan.inputType === "btc" ? "Bitcoin address" : "Lightning node"}
+            </div>
+            <div style={{ fontFamily: T.mono, fontSize: 11, color: T.textDim, background: T.surface, border: `1px solid ${T.border}`, borderRadius: 8, padding: "10px 14px", marginBottom: 16, wordBreak: "break-all" }}>
+              {pendingScan.addr.slice(0, 20)}…{pendingScan.addr.slice(-8)}
+            </div>
+            <div style={{ fontSize: 13, color: T.textMid, lineHeight: 1.65, marginBottom: 20 }}>
+              This will query the public blockchain API for this address. The address itself is public data — nothing private leaves your browser.
+            </div>
+            <div style={{ display: "flex", gap: 10 }}>
+              <button onClick={() => setPendingScan(null)} style={{ flex: 1, padding: "12px", background: "transparent", border: `1.5px solid ${T.border}`, borderRadius: 10, color: T.textMid, fontSize: 13, cursor: "pointer" }}>
+                Cancel
+              </button>
+              <button onClick={() => { const p = pendingScan; setPendingScan(null); analyze(p.addr, false, p.inputType); }}
+                style={{ flex: 1, padding: "12px", background: T.cyan, border: "none", borderRadius: 10, color: T.bg, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
+                Scan it →
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {page === "landing"      && <Landing onAnalyze={analyze} isMobile={isMobile} />}
       {page === "scanning"     && <Scanning address={address || lnNodeId} isLightning={isScanningLightning} dataReady={scanDataReady} />}
       {page === "dashboard"    && <Dashboard address={address} addrInfo={addrInfo} utxos={utxos} txs={txs} isMobile={isMobile} onBack={() => setPage("landing")} onRescan={analyze} toast={toast} autoShare={autoShare} scanAt={scanAt} defaultSimple={defaultSimple} simpleMode={simpleMode} onSimpleModeChange={setSimpleMode} />}
