@@ -541,7 +541,9 @@ function runLightningEngine(node = {}, channels = []) {
       "Your capacity is distributed across channels — good for routing privacy.", "clean", 0);
 
   // 6. Node alias (using real identity)
-  const alias = node.alias || "";
+  // Sanitise alias: strip control chars, newlines, limit to 50 chars
+  const rawAlias = node.alias || "";
+  const alias = rawAlias.replace(/[\x00-\x1f\x7f]/g, "").trim().slice(0, 50);
   const suspiciousAlias = alias.length > 0 && /^[A-Z][a-z]/.test(alias) && alias.includes(" ");
   if (suspiciousAlias)
     add("alias", "Node Alias Privacy", "warn",
@@ -1963,16 +1965,21 @@ function AiAssistant({ checks, recommendations, score, grade, onClose, starters:
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ messages: next, systemPrompt }),
       });
-      const data = await res.json();
       if (res.status === 429) {
         setRateLimited(true);
         setMessages(m => [...m, { role: "assistant", content: "You've reached the daily limit for the Privacy Assistant. It resets at midnight UTC — come back tomorrow." }]);
+      } else if (!res.ok) {
+        setMessages(m => [...m, { role: "assistant", content: `Server error (${res.status}). Please try again in a moment.` }]);
       } else {
+        const data = await res.json();
         const reply = data.reply || "Sorry, I couldn't get a response. Try again.";
         setMessages(m => [...m, { role: "assistant", content: reply }]);
       }
-    } catch {
-      setMessages(m => [...m, { role: "assistant", content: "Connection error. Please try again." }]);
+    } catch (err) {
+      const msg = err?.name === "TypeError"
+        ? "Could not reach the assistant — check your connection and try again."
+        : "Connection error. Please try again.";
+      setMessages(m => [...m, { role: "assistant", content: msg }]);
     }
     setLoading(false);
   };
@@ -2715,7 +2722,7 @@ function LightningDashboard({ nodeId, nodeData, channels, isMobile, onBack, onRe
   const toggleDone = k => setDoneFixes(p => { const n = new Set(p); n.has(k) ? n.delete(k) : n.add(k); saveDoneFixes(nodeId || "ln", n); return n; });
 
   const totalCap = channels.reduce((s, c) => s + (c.capacity || 0), 0);
-  const alias = nodeData.alias || "Unknown Node";
+  const alias = (nodeData.alias || "Unknown Node").replace(/[\x00-\x1f\x7f]/g, "").trim().slice(0, 50) || "Unknown Node";
   const pubkeyShort = nodeId ? `${nodeId.slice(0, 10)}…${nodeId.slice(-6)}` : "—";
   const TABS = isMobile ? ["Fix It", "Checks", "Channels"] : ["Fix It", "Checks", "Channels", "Methodology"];
 
