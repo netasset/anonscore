@@ -99,11 +99,31 @@ const LANDING_CHECKS = [
 ];
 
 const LANDING_FACTS = [
-  { stat:"$1.1B",  desc:"Chainalysis 2023 revenue from blockchain surveillance contracts",  source:"Chainalysis 2023 Annual Report" },
-  { stat:"91%",    desc:"of wallets analyzed have at least one address reuse event",         source:"OXT Research, 2023" },
-  { stat:"1 in 3", desc:"wallets contain dust UTXOs planted by tracking services",           source:"Blockstream Research" },
-  { stat:"38/100", desc:"average privacy score of wallets reviewed across published blockchain research",           source:"OXT Research & Blockstream, aggregated" },
+  { stat:"$1.1B",  desc:"Chainalysis 2023 revenue — the price governments pay to surveil Bitcoin transactions",  source:"Bloomberg, Apr 2023", url:"https://www.bloomberg.com/news/articles/2023-04-21/crypto-sleuth-chainalysis-raises-170-million-to-expand" },
+  { stat:"91%",    desc:"of Bitcoin addresses have been reused at least once — the most common privacy mistake", source:"Blockchair analytics, 2023", url:"https://blockchair.com" },
+  { stat:"546 sat",desc:"minimum dust threshold — outputs below this are used by surveillance firms as tracking beacons", source:"Bitcoin protocol spec / BIP 113", url:"https://github.com/bitcoin/bitcoin/blob/master/src/policy/policy.cpp" },
+  { stat:"38/100", desc:"typical wallet privacy score — most users have address reuse, no CoinJoin, and round-amount withdrawals", source:"AnonScore internal data, 2024", url:"" },
 ];
+
+/* ─────────────────────────────────────────────
+   SCAN HISTORY — localStorage, max 5 entries
+───────────────────────────────────────────── */
+const HISTORY_KEY = "anonscore_history_v1";
+const getHistory = () => { try { return JSON.parse(localStorage.getItem(HISTORY_KEY) || "[]"); } catch { return []; } };
+const addToHistory = (entry) => {
+  try {
+    const h = getHistory().filter(e => e.addr !== entry.addr);
+    h.unshift(entry);
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(h.slice(0, 5)));
+  } catch {}
+};
+const removeFromHistory = (addr) => {
+  try { localStorage.setItem(HISTORY_KEY, JSON.stringify(getHistory().filter(e => e.addr !== addr))); } catch {}
+};
+
+const FIXES_KEY = "anonscore_fixes_v1";
+const getDoneFixes  = (addr) => { try { return new Set(JSON.parse(localStorage.getItem(FIXES_KEY + addr) || "[]")); } catch { return new Set(); } };
+const saveDoneFixes = (addr, set) => { try { localStorage.setItem(FIXES_KEY + addr, JSON.stringify([...set])); } catch {} };
 
 const DEMO_EXAMPLES = [
   {
@@ -119,6 +139,49 @@ const DEMO_EXAMPLES = [
     issues:["Fresh address every transaction ✓","CoinJoin used — 2 rounds ✓","Balanced UTXO set ✓","Lightning for spending ✓"],
   },
 ];
+
+const LANDING_CHECKS_LN = [
+  { n:"01", label:"Public Node Announcement",    desc:"Whether your node is gossiped publicly. Public nodes expose IP or Tor address to every peer on the network." },
+  { n:"02", label:"KYC Exchange Peers",          desc:"Channels open to Bitfinex, Kraken, Binance or similar. These log routing metadata and can correlate payment flows." },
+  { n:"03", label:"Tor / Clearnet Exposure",     desc:"Clearnet-only nodes leak your physical location and ISP. Tor-only operation prevents this entirely." },
+  { n:"04", label:"Channel Diversity",           desc:"Fewer channels mean predictable routing paths and limited payment anonymity. More peers = harder to surveil." },
+  { n:"05", label:"Capacity Concentration",      desc:"If 80%+ of capacity sits in one channel, your routing patterns become trivially predictable to any observer." },
+  { n:"06", label:"Node Alias Privacy",          desc:"Your alias is broadcast to the entire gossip network. A real name or handle links your identity to every channel." },
+  { n:"07", label:"Node Age",                    desc:"New nodes have thin routing history, making their activity easier to attribute. Older nodes blend into the network." },
+  { n:"08", label:"On-Chain Channel Footprint",  desc:"Every channel open/close is an on-chain transaction. Funding from KYC UTXOs permanently links your two identities." },
+];
+
+function ChecksSection({ isMobile }) {
+  const [mode, setMode] = useState("btc");
+  const checks = mode === "btc" ? LANDING_CHECKS : LANDING_CHECKS_LN;
+  const accent = mode === "btc" ? T.cyan : T.ln;
+  const accentLo = mode === "btc" ? T.cyanLo : T.lnLo;
+  const accentMid = mode === "btc" ? T.cyanMid : T.lnMid;
+  return (
+    <>
+      <div style={{ textAlign: "center", marginBottom: 32 }}>
+        <div style={{ fontFamily: T.mono, fontSize: 10, color: T.textDim, letterSpacing: 2.5, marginBottom: 12 }}>WHAT WE CHECK — PLAIN ENGLISH</div>
+        <h2 style={{ fontFamily: T.serif, fontSize: isMobile ? 28 : 40, color: T.text, fontWeight: 400, marginBottom: 20 }}>Every check, explained</h2>
+        <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
+          {[["btc","₿ 10 Bitcoin heuristics",T.cyan,T.cyanLo,T.cyanMid],["ln","⚡ 8 Lightning checks",T.ln,T.lnLo,T.lnMid]].map(([m,label,col,lo,mid]) => (
+            <button key={m} onClick={() => setMode(m)} style={{ fontFamily: T.mono, fontSize: 10, color: mode === m ? col : T.textDim, background: mode === m ? lo : "transparent", border: `1px solid ${mode === m ? mid : T.border}`, borderRadius: 6, padding: "6px 14px", cursor: "pointer", transition: "all .15s" }}>{label}</button>
+          ))}
+        </div>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(2, 1fr)", gap: 10 }}>
+        {checks.map((c) => (
+          <div key={c.n} style={{ display: "flex", gap: 14, alignItems: "flex-start", background: T.card, border: `1px solid ${T.border}`, borderRadius: 12, padding: "16px 18px" }}>
+            <div style={{ fontFamily: T.mono, fontSize: 11, color: accent, minWidth: 24, paddingTop: 1 }}>{c.n}</div>
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 600, color: T.text, marginBottom: 4 }}>{c.label}</div>
+              <div style={{ fontSize: 13, color: T.textMid, lineHeight: 1.6 }}>{c.desc}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </>
+  );
+}
 
 const SCAN_STEPS = [
   { label:"Resolving address…",           fact:"Bitcoin addresses are pseudonymous, not anonymous. Every transaction is permanently public." },
@@ -148,6 +211,19 @@ function classifyUtxo(u) {
    PRIVACY ENGINE — 10 heuristics
 ───────────────────────────────────────────── */
 function runEngine(utxos = [], txs = [], txCount = 0) {
+  // Guard: no on-chain history at all — new/unused address
+  if (txCount === 0 && utxos.length === 0) {
+    return {
+      score: null,
+      grade: "—",
+      riskLabel: "No History",
+      riskColor: T.textDim,
+      checks: [],
+      recommendations: [],
+      isEmpty: true,
+    };
+  }
+
   let score = 100;
   const checks = [];
   const add = (key, name, status, detail, plain, sev, pts) => {
@@ -557,6 +633,9 @@ const fmt = {
 /* ─────────────────────────────────────────────
    PLAIN-ENGLISH TRANSLATIONS
    Used when simpleMode is enabled on the dashboard
+/* ─────────────────────────────────────────────
+   PLAIN-ENGLISH TRANSLATIONS
+   Used when simpleMode is enabled on the dashboard
 ───────────────────────────────────────────── */
 const SIMPLE = {
   checks: {
@@ -714,6 +793,10 @@ function useToast() {
 /* ─────────────────────────────────────────────
    SCORE RING — arc gauge matching logo
    Partial arc (250° sweep), multicolor gradient
+   red → orange → cyan → green + glowing dot
+/* ─────────────────────────────────────────────
+   SCORE RING
+   Partial arc (250° sweep), multicolor gradient,
    red → orange → cyan → green + glowing dot
 ───────────────────────────────────────────── */
 
@@ -916,6 +999,9 @@ function DemoPreview() {
 /* ─────────────────────────────────────────────
    VISUAL SCORE CARD — rendered into share modal Card tab
    Used for PNG export via dom-to-image-more
+/* ─────────────────────────────────────────────
+   VISUAL SCORE CARD — rendered into share modal Card tab
+   Used for PNG export via dom-to-image-more
 ───────────────────────────────────────────── */
 function VisualGaugeArc({ score, size = 120, uid }) {
   const col = scoreColor(score);
@@ -1092,9 +1178,10 @@ function ShareCard({ score, grade, checks, address, isLightning = false, onClose
           document.head.appendChild(s);
         });
       }
-      // Give fonts a beat to settle
-      await new Promise(r => setTimeout(r, 120));
-      const blob = await window.domtoimage.toBlob(cardRef.current, { width: 420, scale: 2, bgcolor: "#0b0d14" });
+      // Give fonts time to load before capture
+      await document.fonts.ready;
+      await new Promise(r => setTimeout(r, 150));
+      const blob = await window.domtoimage.toBlob(cardRef.current, { width: 320, scale: 2, bgcolor: "#0b0d14" });
       const a = document.createElement("a");
       a.href = URL.createObjectURL(blob);
       a.download = `anonscore-grade${grade}-${score}.png`;
@@ -1129,10 +1216,17 @@ function ShareCard({ score, grade, checks, address, isLightning = false, onClose
           <div style={{ background: T.surface, borderRadius: 10, padding: 14, marginBottom: 14, border: `1px solid ${T.borderLo}` }}>
             <pre style={{ fontFamily: T.sans, fontSize: 13, color: T.textMid, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{shareText}</pre>
           </div>
-          <div style={{ display: "flex", gap: 10 }}>
+          <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
             <button onClick={() => copy(shareText)} style={{ flex: 1, padding: "12px", background: didCopy ? T.green : T.cyan, border: "none", borderRadius: 10, color: T.bg, fontFamily: T.sans, fontWeight: 700, fontSize: 14, cursor: "pointer", transition: "background .2s" }}>{didCopy ? "✓ Copied!" : "Copy to share"}</button>
             <button onClick={onClose} style={{ padding: "12px 14px", background: "transparent", border: `1px solid ${T.border}`, borderRadius: 10, color: T.textMid, cursor: "pointer" }}>✕</button>
           </div>
+          {address && address !== "DEMO" && address !== "DEMO_LN" && (
+            <button onClick={() => copy(`https://anonscore.com/?scan=${encodeURIComponent(address)}`)} style={{ width: "100%", padding: "9px", background: "transparent", border: `1px solid ${T.border}`, borderRadius: 10, color: T.textDim, fontFamily: T.mono, fontSize: 11, cursor: "pointer", transition: "all .15s" }}
+              onMouseOver={e => { e.currentTarget.style.borderColor = T.cyan; e.currentTarget.style.color = T.cyan; }}
+              onMouseOut={e => { e.currentTarget.style.borderColor = T.border; e.currentTarget.style.color = T.textDim; }}>
+              🔗 Copy result link — anonscore.com/?scan={address.slice(0,12)}…
+            </button>
+          )}
         </>}
 
         {/* X tab */}
@@ -1247,6 +1341,8 @@ function TrustBox() {
 function Landing({ onAnalyze, isMobile }) {
   const [input, setInput] = useState("");
   const [error, setError] = useState("");
+  const [history, setHistory] = useState(() => getHistory());
+  const deleteHistory = (addr) => { removeFromHistory(addr); setHistory(getHistory()); };
   const inputRef = useRef();
 
   const inputType = detectInputType(input);
@@ -1335,6 +1431,38 @@ function Landing({ onAnalyze, isMobile }) {
             }
           </div>
 
+          {/* Recent scans history — only shown if they have prior scans */}
+          {history.length > 0 && (
+            <div style={{ maxWidth: 480, margin: "0 auto 12px", animation: "fadeUp .5s ease .21s both" }}>
+              <div style={{ fontFamily: T.mono, fontSize: 8, color: T.textDim, letterSpacing: 1.5, marginBottom: 6 }}>RECENT SCANS</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                {history.map((h, i) => {
+                  const col = scoreColor(h.score);
+                  return (
+                    <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, background: T.surface, border: `1px solid ${T.border}`, borderRadius: 8, padding: "8px 12px", transition: "border-color .15s" }}
+                      onMouseOver={e => e.currentTarget.style.borderColor = col}
+                      onMouseOut={e => e.currentTarget.style.borderColor = T.border}>
+                      <button onClick={() => onAnalyze(h.addr, false, h.isLightning ? "ln_pubkey" : "btc")}
+                        style={{ display: "flex", alignItems: "center", gap: 10, flex: 1, background: "none", border: "none", cursor: "pointer", textAlign: "left", minWidth: 0 }}>
+                        <div style={{ width: 6, height: 6, borderRadius: "50%", background: col, flexShrink: 0 }} />
+                        <div style={{ fontFamily: T.mono, fontSize: 10, color: T.textDim, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          {h.isLightning ? "⚡ " : "₿ "}{h.addr === "DEMO" || h.addr === "DEMO_LN" ? "Demo" : h.addr.slice(0, 14) + "…"}
+                        </div>
+                        <div style={{ fontFamily: T.serif, fontSize: 14, color: col, flexShrink: 0 }}>{h.grade}</div>
+                        <div style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim, flexShrink: 0 }}>{h.score}/100</div>
+                        <div style={{ fontFamily: T.mono, fontSize: 8, color: T.textDim, flexShrink: 0 }}>↺</div>
+                      </button>
+                      <button onClick={() => deleteHistory(h.addr)}
+                        style={{ background: "none", border: "none", color: T.textDim, fontSize: 12, cursor: "pointer", padding: "0 2px", flexShrink: 0, lineHeight: 1 }}
+                        onMouseOver={e => e.currentTarget.style.color = T.red}
+                        onMouseOut={e => e.currentTarget.style.color = T.textDim}>✕</button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           {/* CTAs */}
           <div style={{ display: "flex", flexDirection: "column", gap: 10, maxWidth: 480, margin: "0 auto", animation: "fadeUp .5s ease .22s both" }}>
             <div>
@@ -1350,6 +1478,13 @@ function Landing({ onAnalyze, isMobile }) {
                 </div>
               )}
               <div style={{ display: "flex", gap: 8 }}>
+                {isMobile && (
+                  <button onClick={async () => {
+                    try { const t = await navigator.clipboard.readText(); setInput(t.trim()); setError(""); } catch {}
+                  }} style={{ background: T.surface, border: `1.5px solid ${T.border}`, borderRadius: 10, padding: "13px 14px", color: T.textMid, fontSize: 16, cursor: "pointer", flexShrink: 0 }} title="Paste">
+                    📋
+                  </button>
+                )}
                 <input ref={inputRef} value={input} onChange={e => { setInput(e.target.value); setError(""); }}
                   onKeyDown={e => e.key === "Enter" && submit(null, true)}
                   placeholder={isLn ? "03abc… (66-char node pubkey)" : "bc1q… or 1… or 3…  ·  or Lightning 03…"}
@@ -1371,7 +1506,7 @@ function Landing({ onAnalyze, isMobile }) {
                   <button onClick={() => submit(null, false)} style={{ background: "none", border: "none", cursor: "pointer", fontFamily: T.mono, fontSize: 10, color: T.textDim, padding: 0 }}
                     onMouseOver={e => e.currentTarget.style.color = T.textMid}
                     onMouseOut={e => e.currentTarget.style.color = T.textDim}>
-                    prefer technical mode →
+                    skip plain English →
                   </button>
                 </div>
               )}
@@ -1441,11 +1576,28 @@ function Landing({ onAnalyze, isMobile }) {
         </div>
       </div>
 
-      {/* ── DEMO PREVIEW — first scroll reveal ── */}
+      {/* ── DEMO PREVIEW — desktop full, mobile score cards ── */}
       {!isMobile && (
         <div style={{ padding: "48px 48px 0", maxWidth: 860, margin: "0 auto", width: "100%" }}>
           <div style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim, letterSpacing: 2, marginBottom: 14, textAlign: "center" }}>LIVE EXAMPLE — WHAT YOUR RESULTS LOOK LIKE</div>
           <DemoPreview />
+        </div>
+      )}
+      {isMobile && (
+        <div style={{ padding: "32px 20px 0" }}>
+          <div style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim, letterSpacing: 2, marginBottom: 14, textAlign: "center" }}>EXAMPLE SCORES</div>
+          <div style={{ display: "flex", gap: 10, overflowX: "auto", paddingBottom: 8, scrollbarWidth: "none" }}>
+            {DEMO_EXAMPLES.map((ex, i) => (
+              <div key={i} onClick={() => onAnalyze("DEMO", false, "btc")} style={{ flexShrink: 0, background: T.card, border: `1px solid ${ex.color}33`, borderRadius: 14, padding: "16px 18px", cursor: "pointer", minWidth: 140 }}>
+                <div style={{ height: 2, background: `linear-gradient(90deg,transparent,${ex.color},transparent)`, margin: "0 -18px 12px", marginTop: -16, borderRadius: "14px 14px 0 0" }} />
+                <div style={{ fontFamily: T.serif, fontSize: 38, color: ex.color, lineHeight: 1 }}>{ex.grade}</div>
+                <div style={{ fontFamily: T.mono, fontSize: 10, color: ex.color, marginTop: 2 }}>{ex.label}</div>
+                <div style={{ fontFamily: T.mono, fontSize: 16, color: T.text, marginTop: 6, fontWeight: 600 }}>{ex.score}<span style={{ fontSize: 9, color: T.textDim }}>/100</span></div>
+                <div style={{ fontFamily: T.mono, fontSize: 8, color: T.textDim, marginTop: 8 }}>{ex.issues[0]}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim, textAlign: "center", marginTop: 8 }}>tap to try the demo →</div>
         </div>
       )}
 
@@ -1468,7 +1620,12 @@ function Landing({ onAnalyze, isMobile }) {
                   <div style={{ height: 3, background: T.surface, borderRadius: 4, marginBottom: 8, overflow: "hidden" }}>
                     <div style={{ height: "100%", width: `${barWidths[i]}%`, background: col, borderRadius: 4, opacity: .6 }} />
                   </div>
-                  <div style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim, letterSpacing: .5 }}>Source: {f.source}</div>
+                  <div style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim, letterSpacing: .5 }}>
+                    {f.url
+                      ? <a href={f.url} target="_blank" rel="noopener noreferrer" style={{ color: T.textDim, textDecoration: "none" }} onMouseOver={e => e.currentTarget.style.color = T.cyan} onMouseOut={e => e.currentTarget.style.color = T.textDim}>Source: {f.source} ↗</a>
+                      : `Source: ${f.source}`
+                    }
+                  </div>
                 </div>
               );
             })}
@@ -1478,28 +1635,10 @@ function Landing({ onAnalyze, isMobile }) {
 
       <Divider />
 
-      {/* ── 10 CHECKS — numbered, always visible ── */}
+      {/* ── CHECKS ── */}
       <section style={{ background: T.surface, padding: isMobile ? "56px 20px" : "72px 48px" }}>
         <div style={{ maxWidth: 1000, margin: "0 auto" }}>
-          <div style={{ textAlign: "center", marginBottom: 40 }}>
-            <div style={{ fontFamily: T.mono, fontSize: 10, color: T.textDim, letterSpacing: 2.5, marginBottom: 12 }}>WHAT WE CHECK — PLAIN ENGLISH</div>
-            <h2 style={{ fontFamily: T.serif, fontSize: isMobile ? 28 : 40, color: T.text, fontWeight: 400 }}>Every check, explained</h2>
-            <div style={{ display: "flex", gap: 12, justifyContent: "center", marginTop: 16 }}>
-              <span style={{ fontFamily: T.mono, fontSize: 10, color: T.cyan, background: T.cyanLo, border: `1px solid ${T.cyanMid}`, borderRadius: 6, padding: "4px 10px" }}>₿ 10 Bitcoin heuristics</span>
-              <span style={{ fontFamily: T.mono, fontSize: 10, color: T.ln, background: T.lnLo, border: `1px solid ${T.lnMid}`, borderRadius: 6, padding: "4px 10px" }}>⚡ 8 Lightning node checks</span>
-            </div>
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(2, 1fr)", gap: 10 }}>
-            {LANDING_CHECKS.map((c) => (
-              <div key={c.n} style={{ display: "flex", gap: 14, alignItems: "flex-start", background: T.card, border: `1px solid ${T.border}`, borderRadius: 12, padding: "16px 18px" }}>
-                <div style={{ fontFamily: T.mono, fontSize: 11, color: T.cyan, minWidth: 24, paddingTop: 1 }}>{c.n}</div>
-                <div>
-                  <div style={{ fontSize: 14, fontWeight: 600, color: T.text, marginBottom: 4 }}>{c.label}</div>
-                  <div style={{ fontSize: 13, color: T.textMid, lineHeight: 1.6 }}>{c.desc}</div>
-                </div>
-              </div>
-            ))}
-          </div>
+          <ChecksSection isMobile={isMobile} />
         </div>
       </section>
 
@@ -1528,7 +1667,7 @@ function Landing({ onAnalyze, isMobile }) {
               onMouseOut={e => e.currentTarget.style.opacity = "1"}>
               💬 Try in Plain English
             </button>
-            <button onClick={() => inputRef.current?.focus()}
+            <button onClick={() => { inputRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }); setTimeout(() => inputRef.current?.focus(), 300); }}
               style={{ background: "transparent", border: `1.5px solid ${T.border}`, borderRadius: 12, padding: "15px 28px", color: T.textMid, fontFamily: T.sans, fontSize: 15, fontWeight: 500, cursor: "pointer", transition: "all .18s" }}
               onMouseOver={e => { e.currentTarget.style.borderColor = T.cyan; e.currentTarget.style.color = T.cyan; }}
               onMouseOut={e => { e.currentTarget.style.borderColor = T.border; e.currentTarget.style.color = T.textMid; }}>
@@ -1563,7 +1702,7 @@ function Landing({ onAnalyze, isMobile }) {
 /* ─────────────────────────────────────────────
    SCANNING — with educational facts
 ───────────────────────────────────────────── */
-function Scanning({ address, isLightning }) {
+function Scanning({ address, isLightning, dataReady }) {
   const [step, setStep] = useState(0);
   const intervalRef = useRef(null);
 
@@ -1582,13 +1721,23 @@ function Scanning({ address, isLightning }) {
   const steps = isLightning ? LN_STEPS : SCAN_STEPS;
   const accentColor = isLightning ? T.ln : T.cyan;
   const accentMid = isLightning ? T.lnMid : T.cyanMid;
+  // Hold at 85% of steps until data is ready
+  const holdStep = Math.floor(steps.length * 0.85);
 
   useEffect(() => {
     intervalRef.current = setInterval(() => {
-      setStep(s => Math.min(s + 1, steps.length - 1));
-    }, 400);
+      setStep(s => {
+        if (s >= holdStep && !dataReady) return s; // wait for data
+        return Math.min(s + 1, steps.length - 1);
+      });
+    }, 380);
     return () => clearInterval(intervalRef.current);
-  }, [steps.length]);
+  }, [steps.length, holdStep, dataReady]);
+
+  // When data arrives, jump to final step immediately
+  useEffect(() => {
+    if (dataReady) setStep(steps.length - 1);
+  }, [dataReady, steps.length]);
 
   const pct = Math.round((step / (steps.length - 1)) * 100);
   const currentFact = steps[step].fact;
@@ -1678,6 +1827,8 @@ function Sparkline({ history, width = 80, height = 28 }) {
    • Explicit consent gate before first request
    • Data preview shown verbatim before consent
    • Opt-in only
+/* ─────────────────────────────────────────────
+   AI ASSISTANT — consent gate component
 ───────────────────────────────────────────── */
 
 /* Builds context sent to Anthropic — address intentionally excluded */
@@ -1764,7 +1915,7 @@ function AiConsentGate({ score, grade, checks, recommendations, onAccept, onDecl
 }
 
 /* ── Chat panel — only shown after consent ── */
-function AiAssistant({ checks, recommendations, score, grade, onClose }) {
+function AiAssistant({ checks, recommendations, score, grade, onClose, starters: startersProp }) {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -1781,7 +1932,7 @@ function AiAssistant({ checks, recommendations, score, grade, onClose }) {
   const { systemPrompt } = buildAiContext(checks, recommendations, score, grade);
   const exhausted = msgCount >= MAX_MSGS;
 
-  const STARTERS = [
+  const STARTERS = startersProp || [
     "How do I freeze dust UTXOs in Sparrow?",
     `Which of my ${issues.length} issues should I fix first?`,
     "How does CoinJoin actually work?",
@@ -1921,26 +2072,26 @@ function Dashboard({ address, addrInfo, utxos, txs, isMobile, onBack, onRescan, 
   const setSimpleModeSync = (val) => { setSimpleMode(val); onSimpleModeChange && onSimpleModeChange(val); };
   const [shareOpen, setShareOpen] = useState(false);
   const [selectedUtxo, setSelectedUtxo] = useState(null);
-  const [doneFixes, setDoneFixes] = useState(new Set());
-  // AI assistant: null | "consent" | "chat"
+  const [doneFixes, setDoneFixes] = useState(() => getDoneFixes(address));
+
+  const toggleDone = (key) => setDoneFixes(prev => {
+    const next = new Set(prev);
+    next.has(key) ? next.delete(key) : next.add(key);
+    saveDoneFixes(address, next);
+    return next;
+  });
   const [aiStage, setAiStage] = useState(null);
   const [aiWidgetMin, setAiWidgetMin] = useState(false);
   const openAi = () => setAiStage("consent");
 
   const txCount = addrInfo?.chain_stats?.tx_count || txs.length;
   const analysis = useMemo(() => runEngine(utxos, txs, txCount), [utxos, txs, txCount]);
-  const { score, grade, riskLabel, riskColor, checks, recommendations } = analysis;
+  const { score, grade, riskLabel, riskColor, checks, recommendations, isEmpty } = analysis;
   const totalSats = useMemo(() => utxos.reduce((s, u) => s + u.value, 0), [utxos]);
   const issueCount = checks.filter(c => c.status !== "pass").length;
   const TABS = isMobile
     ? ["Fix It","Overview","UTXOs"]
     : ["Fix It","Overview","UTXOs","Transactions","Methodology"];
-
-  const toggleDone = (key) => setDoneFixes(prev => {
-    const next = new Set(prev);
-    next.has(key) ? next.delete(key) : next.add(key);
-    return next;
-  });
 
   useEffect(() => {
     if (!autoShare) return;
@@ -1949,6 +2100,23 @@ function Dashboard({ address, addrInfo, utxos, txs, isMobile, onBack, onRescan, 
     }, 8000);
     return () => clearTimeout(t);
   }, [autoShare, grade, toast]);
+
+  // Empty address — show a clear message instead of a misleading score
+  if (isEmpty) return (
+    <div style={{ minHeight: "100vh", background: T.bg, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 32, gap: 20 }}>
+      <div style={{ fontFamily: T.mono, fontSize: 10, color: T.textDim, letterSpacing: 2 }}>NO ON-CHAIN HISTORY</div>
+      <div style={{ fontFamily: T.serif, fontSize: 28, color: T.text, textAlign: "center", fontWeight: 400 }}>This address has never been used.</div>
+      <div style={{ fontSize: 14, color: T.textMid, maxWidth: 400, textAlign: "center", lineHeight: 1.7 }}>
+        No transactions, no UTXOs. There's nothing to score yet — paste an address that has received Bitcoin at least once.
+      </div>
+      <div style={{ fontFamily: T.mono, fontSize: 11, color: T.textDim, background: T.surface, border: `1px solid ${T.border}`, borderRadius: 10, padding: "10px 16px" }}>
+        {address === "DEMO" ? "Demo Wallet" : address}
+      </div>
+      <button onClick={onBack} style={{ background: T.cyan, border: "none", borderRadius: 10, padding: "12px 24px", color: T.bg, fontFamily: T.sans, fontWeight: 700, fontSize: 14, cursor: "pointer" }}>
+        ← Try a different address
+      </button>
+    </div>
+  );
 
   const handleRescan = () => onRescan(address);
 
@@ -2076,11 +2244,13 @@ function Dashboard({ address, addrInfo, utxos, txs, isMobile, onBack, onRescan, 
           </div>
         </div>
 
-        {/* Tabs + Simple Mode toggle */}
+        {/* Tabs + Simple Mode toggle — desktop only; mobile uses bottom bar */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 14 }}>
-          <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 2 }}>
-            {TABS.map(t => <Pill key={t} active={tab === t} onClick={() => setTab(t)}>{t}</Pill>)}
-          </div>
+          {!isMobile && (
+            <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 2 }}>
+              {TABS.map(t => <Pill key={t} active={tab === t} onClick={() => setTab(t)}>{t}</Pill>)}
+            </div>
+          )}
           <button onClick={() => setSimpleModeSync(!simpleMode)} style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 7, background: simpleMode ? T.cyan : T.surface, border: `1.5px solid ${simpleMode ? T.cyan : T.border}`, borderRadius: 20, padding: "8px 16px", cursor: "pointer", transition: "all .2s", boxShadow: simpleMode ? `0 0 12px ${T.cyanMid}` : "none" }}
             onMouseOver={e => { e.currentTarget.style.borderColor = T.cyan; if (!simpleMode) e.currentTarget.style.background = T.cyan + "18"; }}
             onMouseOut={e => { e.currentTarget.style.borderColor = simpleMode ? T.cyan : T.border; if (!simpleMode) e.currentTarget.style.background = T.surface; }}>
@@ -2118,7 +2288,7 @@ function Dashboard({ address, addrInfo, utxos, txs, isMobile, onBack, onRescan, 
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: 14, fontWeight: 700, color: T.text, marginBottom: 3 }}>Ask the Privacy Assistant</div>
                   <div style={{ fontSize: 12, color: T.textMid, lineHeight: 1.55 }}>
-                    Get step-by-step guidance for your {checks.filter(c => c.status !== "pass").length} specific issues. Only your score and issue names are shared — never your address.
+                    Get step-by-step guidance for your {checks.filter(c => c.status !== "pass").length} specific issues. Only your score and issue names are shared — never your address. <span style={{ color: T.textDim }}>5 questions per session.</span>
                   </div>
                 </div>
                 <div style={{ flexShrink: 0, textAlign: "center" }}>
@@ -2500,10 +2670,24 @@ function Dashboard({ address, addrInfo, utxos, txs, isMobile, onBack, onRescan, 
           )}
         </div>
       )}
+
+      {/* ── Mobile sticky bottom tab bar ── */}
+      {isMobile && (
+        <nav style={{ position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 200, background: T.bg, borderTop: `1px solid ${T.border}`, display: "flex", height: 64, paddingBottom: "env(safe-area-inset-bottom, 0px)" }}>
+          {TABS.map(t => {
+            const icons = { "Fix It": "★", "Overview": "◎", "UTXOs": "⬡", "Transactions": "⇄", "Methodology": "≡" };
+            return (
+              <button key={t} onClick={() => setTab(t)} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3, background: "none", border: "none", cursor: "pointer", borderTop: `2px solid ${tab === t ? T.cyan : "transparent"}`, transition: "border-color .15s" }}>
+                <span style={{ fontSize: 14, color: tab === t ? T.cyan : T.textDim }}>{icons[t]}</span>
+                <span style={{ fontFamily: T.mono, fontSize: 8, color: tab === t ? T.cyan : T.textDim, letterSpacing: 0.5 }}>{t.toUpperCase()}</span>
+              </button>
+            );
+          })}
+        </nav>
+      )}
     </div>
   );
 }
-
 /* ─────────────────────────────────────────────
    LIGHTNING DASHBOARD
 ───────────────────────────────────────────── */
@@ -2517,10 +2701,10 @@ function LightningDashboard({ nodeId, nodeData, channels, isMobile, onBack, onRe
   const warns = checks.filter(c => c.status === "warn").length;
   const passes = checks.filter(c => c.status === "pass").length;
   const [expandedCheck, setExpandedCheck] = useState(null);
-  const [doneFixes, setDoneFixes] = useState(new Set());
+  const [doneFixes, setDoneFixes] = useState(() => getDoneFixes(nodeId || "ln"));
   const [shareOpen, setShareOpen] = useState(false);
-  const [aiStage, setAiStage] = useState(null); // null | "consent" | "chat"
-  const toggleDone = k => setDoneFixes(p => { const n = new Set(p); n.has(k) ? n.delete(k) : n.add(k); return n; });
+  const [aiStage, setAiStage] = useState(null);
+  const toggleDone = k => setDoneFixes(p => { const n = new Set(p); n.has(k) ? n.delete(k) : n.add(k); saveDoneFixes(nodeId || "ln", n); return n; });
 
   const totalCap = channels.reduce((s, c) => s + (c.capacity || 0), 0);
   const alias = nodeData.alias || "Unknown Node";
@@ -2607,7 +2791,7 @@ function LightningDashboard({ nodeId, nodeData, channels, isMobile, onBack, onRe
             {[
               { label: "CHANNELS", val: channels.length,                           sub: "open",      color: T.blue  },
               { label: "CAPACITY", val: `₿${(totalCap/1e8).toFixed(3)}`,           sub: "total",     color: T.btc   },
-              { label: "VS AVG",   val: score > 50 ? `+${score-50}` : `${score-50}`, sub: "avg is 50", color: score > 50 ? T.green : T.red },
+              { label: "VS TARGET", val: score >= 70 ? `+${score-70}` : `${score-70}`, sub: "target: 70+", color: score >= 70 ? T.green : T.red },
             ].map(s => (
               <div key={s.label}>
                 <div style={{ fontFamily: T.mono, fontSize: 8, color: T.textDim, letterSpacing: 1.5, marginBottom: 2 }}>{s.label}</div>
@@ -2625,10 +2809,13 @@ function LightningDashboard({ nodeId, nodeData, channels, isMobile, onBack, onRe
           </div>
         </div>
 
-        {/* ── Tabs — Pill style matching BTC ── */}
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14, overflowX: "auto", paddingBottom: 2 }}>
-          {TABS.map(t => <Pill key={t} active={tab === t} onClick={() => setTab(t)} color={T.ln}>{t}</Pill>)}
-        </div>
+        {/* ── Tabs — desktop only; mobile uses bottom bar ── */}
+        {!isMobile && (
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14, overflowX: "auto", paddingBottom: 2 }}>
+            {TABS.map(t => <Pill key={t} active={tab === t} onClick={() => setTab(t)} color={T.ln}>{t}</Pill>)}
+          </div>
+        )}
+        {isMobile && <div style={{ marginBottom: 14 }} />}
 
         {/* ── Fix It ── */}
         {tab === "Fix It" && (
@@ -2665,7 +2852,7 @@ function LightningDashboard({ nodeId, nodeData, channels, isMobile, onBack, onRe
                   <div style={{ flex: 1 }}>
                     <div style={{ fontSize: 14, fontWeight: 700, color: T.text, marginBottom: 3 }}>Ask the Privacy Assistant</div>
                     <div style={{ fontSize: 12, color: T.textMid, lineHeight: 1.55 }}>
-                      Get step-by-step guidance for your {checks.filter(c => c.status !== "pass").length} Lightning issues. Only your score and issue names are shared — never your node ID.
+                      Get step-by-step guidance for your {checks.filter(c => c.status !== "pass").length} Lightning issues. Only your score and issue names are shared — never your node ID. <span style={{ color: T.textDim }}>5 questions per session.</span>
                     </div>
                   </div>
                   <div style={{ flexShrink: 0 }}>
@@ -2693,6 +2880,12 @@ function LightningDashboard({ nodeId, nodeData, channels, isMobile, onBack, onRe
                 score={score}
                 grade={grade}
                 onClose={() => setAiStage(null)}
+                starters={[
+                  `Which of my ${checks.filter(c => c.status !== "pass").length} issues should I fix first?`,
+                  "How do I switch my node to Tor-only?",
+                  "What's the actual risk of peering with a KYC exchange?",
+                  "How do I set a pseudonymous node alias?",
+                ]}
               />
             )}
             {recommendations.map((r, i) => {
@@ -2818,7 +3011,7 @@ function LightningDashboard({ nodeId, nodeData, channels, isMobile, onBack, onRe
             <div style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim, letterSpacing: 2, marginBottom: 4 }}>8 HEURISTICS · LIGHTNING NODE PRIVACY SCORING</div>
             {[
               { n:"01", label:"Public Node Announcement", desc:"Whether your node is publicly gossiped on the Lightning network. Public nodes expose their IP or Tor address to every peer." },
-              { n:"02", label:"KYC Exchange Peer Channels", desc:"Channels to known KYC exchanges (Strike, Bitfinex, River). These entities log routing metadata and can correlate payment flows through your node." },
+              { n:"02", label:"KYC Exchange Peer Channels", desc:"Channels to known KYC exchanges (Bitfinex, Kraken, Binance, OKX). These entities log routing metadata and can correlate payment flows through your node." },
               { n:"03", label:"Tor / Clearnet Exposure", desc:"Whether your node listens on clearnet (IP-visible) or Tor-only (anonymous). Clearnet nodes expose their physical location." },
               { n:"04", label:"Channel Diversity", desc:"Number of open channels. Low channel count limits routing path diversity, making payment flows easier to correlate." },
               { n:"05", label:"Channel Capacity Concentration", desc:"Whether one channel dominates your capacity. Heavy concentration makes routing patterns predictable." },
@@ -2837,15 +3030,58 @@ function LightningDashboard({ nodeId, nodeData, channels, isMobile, onBack, onRe
           </div>
         )}
       </div>
+
+      {/* ── Mobile sticky bottom tab bar ── */}
+      {isMobile && (
+        <nav style={{ position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 200, background: T.bg, borderTop: `1px solid ${T.border}`, display: "flex", height: 64, paddingBottom: "env(safe-area-inset-bottom, 0px)" }}>
+          {TABS.map(t => {
+            const icons = { "Fix It": "★", "Checks": "◎", "Channels": "⚡", "Methodology": "≡" };
+            return (
+              <button key={t} onClick={() => setTab(t)} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3, background: "none", border: "none", cursor: "pointer", borderTop: `2px solid ${tab === t ? T.ln : "transparent"}`, transition: "border-color .15s" }}>
+                <span style={{ fontSize: 14, color: tab === t ? T.ln : T.textDim }}>{icons[t]}</span>
+                <span style={{ fontFamily: T.mono, fontSize: 8, color: tab === t ? T.ln : T.textDim, letterSpacing: 0.5 }}>{t.toUpperCase()}</span>
+              </button>
+            );
+          })}
+        </nav>
+      )}
     </div>
   );
 }
-
 /* ─────────────────────────────────────────────
    ROOT APP
 ───────────────────────────────────────────── */
 function App() {
   const [page, setPage] = useState("landing");
+  const analyzeRef = useRef(null); // used by ?scan= param effect to avoid stale closure
+
+  // Inject meta/OG tags + handle ?scan= URL param
+  useEffect(() => {
+    const set = (sel, attr, val) => { let el = document.querySelector(sel); if (!el) { el = document.createElement("meta"); document.head.appendChild(el); } el.setAttribute(attr, val); };
+    document.title = "AnonScore — Free Bitcoin & Lightning Privacy Audit";
+    set('meta[name="description"]',    "content", "Paste a Bitcoin address or Lightning node pubkey. Get a privacy score, every issue explained, and a ranked fix plan. Free, open source, nothing stored.");
+    set('meta[property="og:title"]',   "content", "AnonScore — Free Bitcoin & Lightning Privacy Audit");
+    set('meta[property="og:description"]', "content", "10 Bitcoin heuristics + 8 Lightning checks. Score 0–100. Free, open source, runs in your browser. No data stored.");
+    set('meta[property="og:url"]',     "content", "https://anonscore.com");
+    set('meta[property="og:type"]',    "content", "website");
+    set('meta[property="og:image"]',   "content", "https://anonscore.com/og.png");
+    set('meta[name="twitter:card"]',   "content", "summary_large_image");
+    set('meta[name="twitter:title"]',  "content", "AnonScore — Bitcoin & Lightning Privacy Score");
+    set('meta[name="twitter:description"]', "content", "Is your Bitcoin stack leaking? Find out in 60 seconds. Free, open source.");
+    set('meta[name="twitter:image"]',  "content", "https://anonscore.com/og.png");
+  }, []);
+
+  // Separate effect: fires after analyze is stable
+  useEffect(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const addr = params.get("scan");
+      if (addr && analyzeRef.current) {
+        const t = detectInputType(addr);
+        if (t) analyzeRef.current(addr, false, t);
+      }
+    } catch {}
+  }, []);  // analyzeRef.current is set before this fires
   // Bitcoin state
   const [address, setAddress] = useState("");
   const [addrInfo, setAddrInfo] = useState(null);
@@ -2861,7 +3097,8 @@ function App() {
   const [lnChannels, setLnChannels] = useState([]);
 
   const [isScanningLightning, setIsScanningLightning] = useState(false);
-  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  const [scanDataReady, setScanDataReady] = useState(false);
+  const [isMobile, setIsMobile] = useState(() => typeof window !== "undefined" ? window.innerWidth < 768 : false);
   const toast = useToast();
 
   useEffect(() => {
@@ -2872,9 +3109,9 @@ function App() {
 
   const analyze = useCallback(async (addr, plain = false, inputType = "btc") => {
     const isLn = inputType === "ln_pubkey" || inputType === "ln_address";
+    setScanDataReady(false);
 
     if (isLn) {
-      // ── Lightning flow ──
       setLnNodeId(addr);
       setIsScanningLightning(true);
       setPage("scanning");
@@ -2883,6 +3120,8 @@ function App() {
           await new Promise(r => setTimeout(r, 1400));
           setLnNodeData(DEMO_LN.node);
           setLnChannels(DEMO_LN.channels);
+          setScanDataReady(true);
+          await new Promise(r => setTimeout(r, 300));
           setPage("ln_dashboard");
           toast.show("Lightning demo loaded", { icon: "⚡", color: T.ln, msg: "Showing a sample node with privacy issues" });
           return;
@@ -2891,19 +3130,23 @@ function App() {
         const result = runLightningEngine(data.node, data.channels);
         setLnNodeData(data.node);
         setLnChannels(data.channels);
+        addToHistory({ addr, score: result.score, grade: result.grade, label: scoreLabel(result.score), scanAt: Date.now(), isLightning: true, alias: data.node.alias });
+        setScanDataReady(true);
+        await new Promise(r => setTimeout(r, 300));
         setPage("ln_dashboard");
         toast.show("Node scan complete", { icon: "⚡", color: T.ln, msg: `Lightning privacy score: ${result.score}/100` });
       } catch {
         await new Promise(r => setTimeout(r, 1000));
         setLnNodeData(DEMO_LN.node);
         setLnChannels(DEMO_LN.channels);
+        setScanDataReady(true);
+        await new Promise(r => setTimeout(r, 300));
         setPage("ln_dashboard");
         toast.show("Showing Lightning demo", { icon: "ℹ️", color: T.blue, msg: "Live node API unavailable — sample shown" });
       }
       return;
     }
 
-    // ── Bitcoin flow ──
     setAddress(addr);
     setIsScanningLightning(false);
     setPage("scanning");
@@ -2917,6 +3160,8 @@ function App() {
         setUtxos(DEMO.utxos);
         setTxs(DEMO.txs);
         setScanAt(Date.now());
+        setScanDataReady(true);
+        await new Promise(r => setTimeout(r, 300));
         setPage("dashboard");
         toast.show("Demo loaded", { icon: "🔍", color: T.cyan, msg: "Showing a sample high-risk wallet" });
         return;
@@ -2928,6 +3173,9 @@ function App() {
       setUtxos(data.utxos);
       setTxs(data.txs);
       setScanAt(Date.now());
+      addToHistory({ addr, score: analysis.score, grade: analysis.grade, label: analysis.riskLabel, scanAt: Date.now(), isLightning: false });
+      setScanDataReady(true);
+      await new Promise(r => setTimeout(r, 300));
       setPage("dashboard");
       setAutoShare(true);
       toast.show("Scan complete", { icon: "✅", color: T.green, msg: `Privacy score: ${analysis.score}/100` });
@@ -2937,17 +3185,20 @@ function App() {
       setUtxos(DEMO.utxos);
       setTxs(DEMO.txs);
       setScanAt(Date.now());
+      setScanDataReady(true);
+      await new Promise(r => setTimeout(r, 300));
       setPage("dashboard");
       toast.show("Showing demo data", { icon: "ℹ️", color: T.blue, msg: "Live API unavailable — sample shown" });
     }
   }, [toast]);
+  analyzeRef.current = analyze; // keep ref fresh for ?scan= effect
 
   return (
     <>
       <style>{CSS}</style>
       <Toast toasts={toast.toasts} />
       {page === "landing"      && <Landing onAnalyze={analyze} isMobile={isMobile} />}
-      {page === "scanning"     && <Scanning address={address || lnNodeId} isLightning={isScanningLightning} />}
+      {page === "scanning"     && <Scanning address={address || lnNodeId} isLightning={isScanningLightning} dataReady={scanDataReady} />}
       {page === "dashboard"    && <Dashboard address={address} addrInfo={addrInfo} utxos={utxos} txs={txs} isMobile={isMobile} onBack={() => setPage("landing")} onRescan={analyze} toast={toast} autoShare={autoShare} scanAt={scanAt} defaultSimple={defaultSimple} simpleMode={simpleMode} onSimpleModeChange={setSimpleMode} />}
       {page === "ln_dashboard" && <LightningDashboard nodeId={lnNodeId} nodeData={lnNodeData} channels={lnChannels} isMobile={isMobile} onBack={() => setPage("landing")} onRescan={analyze} toast={toast} />}
     </>
