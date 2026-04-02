@@ -106,8 +106,196 @@ const LANDING_FACTS = [
 ];
 
 /* ─────────────────────────────────────────────
-   SCAN HISTORY — localStorage, max 5 entries
+   CASE FILES — notable Bitcoin wallets
 ───────────────────────────────────────────── */
+const CASE_FILES = [
+  {
+    id: "001",
+    slug: "bitfinex-hack-recovery",
+    title: "The Bitfinex Hack Recovery",
+    address: "bc1qazcm763858nkj2dj986etajv6wquslv8uxwczt",
+    entity: "US Department of Justice",
+    btc: "~94,000",
+    category: "seizure",
+    status: "active",
+    added: "2026-04-01",
+    hook: "In 2016, hackers stole 119,756 BTC from Bitfinex. In 2022, the DOJ seized it back — and the wallet fingerprint tells the whole story.",
+    summary: "The largest cryptocurrency seizure in history. After sitting dormant for six years, the 2016 Bitfinex hack funds were traced to a New York couple — Ilya Lichtenstein and Heather Morgan — who had laundered only a fraction before being caught. The rest sat in this wallet.",
+    narrative: `In August 2016, hackers executed 2,072 transactions to drain 119,756 BTC from Bitfinex, then worth ~$72 million. The funds sat largely untouched for years while investigators built their case.
+
+On February 1, 2022, everything moved at once — all the hack proceeds consolidated into this single government-controlled address in a single day. Lichtenstein and Morgan were arrested the same week. The government had been watching the wallet for years, waiting for the launderers to move.
+
+What makes this address forensically remarkable: the funding pattern is completely unlike normal wallet behaviour. Every input arrived on a single date. The address has never sent anything out. There is zero mixing, zero CoinJoin, zero attempt at obfuscation — the DOJ simply took custody and held.
+
+The privacy score here is interesting not because of what the wallet's owner did wrong, but because of what a government seizure wallet looks like on-chain: extreme balance concentration, no transaction diversity, no privacy measures whatsoever. It scores poorly by every heuristic — not because of bad habits, but because it was never meant to be private.`,
+    thread: [
+      "In 2016, hackers stole 119,756 BTC from Bitfinex (~$72M at the time). The funds sat dormant for 6 years. Then in Feb 2022, the DOJ moved it all at once — and arrested a NYC couple the same day. Here's what the on-chain data shows 🧵",
+      "All 94,000+ BTC arrived at this address on a single date: February 1, 2022. Every input, same day. That's not how normal wallets work. That's a government seizure — structured, controlled, and permanent.",
+      "The wallet has NEVER sent anything out. No mixing. No CoinJoin. No obfuscation attempts. It's the forensic opposite of what a privacy-conscious holder would do — which makes sense. The FBI isn't trying to hide.",
+      "The privacy score? Terrible. Balance concentration at 100%. No CoinJoin ever. Round amounts everywhere. Script type inconsistency from the original hack consolidations. It scores F by almost every heuristic.",
+      "The lesson isn't about the DOJ's privacy. It's about what 6 years of blockchain forensics looks like. Chainalysis and CipherTrace traced every hop. The hack funds never really moved — they just waited to be claimed. anonscore.com/?scan=bc1qazcm763858nkj2dj986etajv6wquslv8uxwczt",
+    ],
+    tags: ["#Bitcoin", "#Bitfinex", "#Forensics", "#DOJ"],
+    notable: ["Largest crypto seizure in history", "Funded in a single day — Feb 1 2022", "Connected to 2016 Bitfinex hack", "Ilya Lichtenstein & Heather Morgan case"],
+    externalUrl: "https://www.justice.gov/opa/pr/two-arrested-alleged-conspiracy-launder-45-billion-stolen-cryptocurrency-hack",
+  },
+  {
+    id: "002",
+    slug: "binance-cold-wallet-1",
+    title: "Binance Cold Wallet #1",
+    address: "34xp4vRoCGJym3xR7yCVPFHoCNxv4Twseo",
+    entity: "Binance",
+    btc: "~248,000",
+    category: "exchange",
+    status: "active",
+    added: "2026-04-01",
+    hook: "The single largest Bitcoin address on the blockchain. Nearly $17 billion in one wallet, with zero privacy measures — a perfect surveillance target.",
+    summary: "The largest known single-address Bitcoin wallet belongs to Binance. With ~248,000 BTC, it holds more Bitcoin than any other individual address on-chain. Its transaction patterns are a textbook case of what custodial exchanges look like — and why they score so poorly on privacy.",
+    narrative: `This address holds more Bitcoin than any other single address on the blockchain — roughly 248,000 BTC, worth approximately $17 billion at current prices.
+
+Binance uses this as a primary cold storage address. Funds flow in from exchange operations in large batches, and flow out rarely — only for major withdrawals, exchange operations, or proof-of-reserves audits. The activity pattern is unmistakable to any blockchain analyst.
+
+From a privacy standpoint, this wallet commits almost every heuristic violation in the book. Round-number transactions are pervasive — exchange deposits and withdrawals almost always come in round amounts, a primary Chainalysis fingerprint. The balance is extremely concentrated. There is no CoinJoin usage. The address itself is a legacy P2SH format, mixing with SegWit inputs over time.
+
+But the most important thing this wallet illustrates is custodial risk. Every Bitcoin in this address belongs to Binance customers — yet those customers have no on-chain claim. Their funds are mixed together, indistinguishable, and fully controlled by Binance. If this address moved tomorrow, every customer would know instantly. That's both transparency and vulnerability in the same package.`,
+    thread: [
+      "This is the single largest Bitcoin address on Earth. ~248,000 BTC. ~$17 billion. One address. It belongs to Binance — and its privacy score is absolutely terrible. Here's why that matters 🧵",
+      "Round amounts everywhere. Binance processes thousands of deposits and withdrawals, almost always in round numbers (0.1 BTC, 1.0 BTC, 10.0 BTC). This is the primary signal Chainalysis uses to identify exchange activity. It's permanently on-chain.",
+      "Zero CoinJoin. Zero mixing. 100% balance concentration. The wallet literally scores 0 on the checks that matter most for privacy. Not because Binance is careless — but because custodial exchanges fundamentally can't be private.",
+      "The deeper point: every sat in this address belongs to a Binance customer, but those customers have no on-chain claim. Their coins are pooled, indistinguishable, and controlled by a single company. That's custodial risk in address form.",
+      "Not your keys, not your coins — this is what that looks like on-chain. Scan it yourself: anonscore.com/?scan=34xp4vRoCGJym3xR7yCVPFHoCNxv4Twseo",
+    ],
+    tags: ["#Bitcoin", "#Binance", "#NotYourKeys", "#Privacy"],
+    notable: ["Largest single Bitcoin address on-chain", "~248,000 BTC / ~$17B", "Primary Binance cold storage", "Perfect example of custodial risk"],
+    externalUrl: "https://arkham.com",
+  },
+  {
+    id: "003",
+    slug: "silk-road-individual-x",
+    title: "Silk Road — Individual X",
+    address: "1HQ3Go3ggs8pFnXuHVHRytPCq5fGG8Hbhx",
+    entity: "US Government (seized from Individual X)",
+    btc: "~0",
+    category: "seizure",
+    status: "liquidated",
+    added: "2026-04-01",
+    hook: "69,370 BTC sat in this address for 8 years. Nobody knew who owned it. Then on November 3, 2020, it all moved — and the US Government revealed they'd seized it from an anonymous hacker.",
+    summary: "The most mysterious wallet in Bitcoin history. An unknown person — called only 'Individual X' in court documents — hacked Silk Road between 2012 and 2013, stealing tens of thousands of BTC. They held it for 7 years without spending a satoshi. Then in 2020, they agreed to forfeit it to the US government, who auctioned it off.",
+    narrative: `Between 2012 and 2013, someone hacked Silk Road — the darknet marketplace that pioneered Bitcoin commerce — and quietly stole 69,370 BTC. The funds were moved to this address and then never touched again. For seven years.
+
+Nobody knew who owned it. On-chain, it was just a dormant address with an enormous balance. Blockchain analysts tracked it, wondered about it, and waited. When it finally moved on November 3, 2020, the entire Bitcoin world noticed: $1 billion moved in a single transaction, the largest single on-chain movement in Bitcoin's history at the time.
+
+The court documents revealed the holder had been "Individual X" — an anonymous hacker who approached the US Government and agreed to forfeit the funds. In exchange, they presumably received some form of immunity or reduced liability. Their identity was never revealed.
+
+What makes this address fascinating from a forensics perspective: the holding pattern itself is the signature. A single large inflow in 2013. Then absolute silence for 7 years. No mixing, no splitting, no consolidation attempts. The holder knew that any movement would be traced. So they held. Until they didn't.`,
+    thread: [
+      "On November 3, 2020, $1 billion in Bitcoin moved from this address. It had been dormant for 7 years. The owner was never identified. This is the most mysterious wallet in Bitcoin history 🧵",
+      "Between 2012-2013, someone hacked Silk Road and stole 69,370 BTC. They moved it here — and then never spent a single satoshi for 7 years. No mixing. No splitting. Just held.",
+      "Why hold for 7 years without spending? Because they knew any movement would be traced. Blockchain analytics firms had this address tagged and watched. The only safe move was no move.",
+      "In 2020, 'Individual X' — their identity still unknown — contacted the US Government and voluntarily forfeited the coins. In exchange for what, exactly, was never disclosed. The DOJ auctioned off the BTC.",
+      "The privacy lesson: sometimes the right move is to do nothing. 7 years of inaction was the most effective privacy strategy possible. Until it wasn't. anonscore.com/?scan=1HQ3Go3ggs8pFnXuHVHRytPCq5fGG8Hbhx",
+    ],
+    tags: ["#Bitcoin", "#SilkRoad", "#Forensics", "#Privacy"],
+    notable: ["69,370 BTC dormant for 7 years", "Stolen from Silk Road 2012-2013", "Owner 'Individual X' — never identified", "Largest single BTC movement at time ($1B, Nov 2020)"],
+    externalUrl: "https://en.wikipedia.org/wiki/Silk_Road_(marketplace)",
+  },
+  {
+    id: "004",
+    slug: "us-government-seizure",
+    title: "US Government Bitcoin Treasury",
+    address: "bc1qazcm763858nkj2dj986etajv6wquslv8uxwczt",
+    entity: "US Department of Justice / FBI",
+    btc: "~94,000",
+    category: "seizure",
+    status: "active",
+    added: "2026-04-01",
+    hook: "The US Government holds over 200,000 BTC from criminal seizures. How does the FBI manage a $14 billion Bitcoin treasury — and what do their on-chain habits reveal?",
+    summary: "The United States Government is one of the largest Bitcoin holders in the world, with over 200,000 BTC across multiple seizure addresses. These wallets come from the Bitfinex hack, Silk Road, and the James Zhong case. Their management approach — consolidate, hold, auction — leaves a distinctive forensic trail.",
+    narrative: `The US Government didn't set out to become a major Bitcoin holder. It happened through criminal prosecutions. Each major case — Silk Road in 2013, the Bitfinex hack recovery in 2022, the James Zhong Silk Road hacker case in 2022 — left the government holding thousands of Bitcoin that needed to be managed and eventually liquidated.
+
+The DOJ's approach is consistent: seize via civil forfeiture, consolidate into US Marshals Service-controlled addresses, hold during prosecution, then auction. The US Marshals Service has conducted multiple Bitcoin auctions, with buyers including Tim Draper (who bought 30,000 BTC in 2014 for $18.7 million — worth over $2 billion today).
+
+From a privacy standpoint, government seizure addresses are unique: they're the opposite of private by design. Every movement is documented in court filings. Every auction is public. The government's on-chain activity is the most transparent Bitcoin management in the world, which means it scores terribly by every privacy heuristic.
+
+What's interesting is the market impact. When the government moves these wallets — even to consolidate or prepare for auction — Bitcoin price often reacts. In March 2023, a $300 million movement caused a -6% market swing. The addresses are so well-known and watched that they've become market-moving signals.`,
+    thread: [
+      "The US Government holds 200,000+ BTC from criminal seizures. They didn't plan to become a Bitcoin whale — it happened through Silk Road, Bitfinex, and more. Here's how the FBI manages a $14B BTC treasury 🧵",
+      "Their approach: seize → consolidate → hold during prosecution → auction via US Marshals. Simple, transparent, and completely traceable on-chain. They make no attempt at privacy because they don't need to.",
+      "The market watches these addresses obsessively. In March 2023, a single government consolidation movement caused Bitcoin to drop 6%. That's how much weight these addresses carry.",
+      "Privacy score? Terrible — but intentionally so. No CoinJoin, no mixing, 100% concentration. The government's Bitcoin strategy optimizes for auditability and legal compliance, not privacy.",
+      "The irony: the world's most surveilled Bitcoin addresses belong to the organization that built the blockchain surveillance industry. anonscore.com/?scan=bc1qazcm763858nkj2dj986etajv6wquslv8uxwczt",
+    ],
+    tags: ["#Bitcoin", "#USGovernment", "#DOJ", "#Forensics"],
+    notable: ["200,000+ BTC across seizure addresses", "Funds from Silk Road, Bitfinex, James Zhong case", "US Marshals conduct public BTC auctions", "Every movement is market-moving news"],
+    externalUrl: "https://tokeninsight.com/en/tokenwiki/all/bitcoin-addresses-related-to-the-u.s.-government",
+  },
+  {
+    id: "005",
+    slug: "satoshi-patoshi-cluster",
+    title: "The Satoshi Cluster",
+    address: "1A1zP1eP5QGefi2DMPTfTL5SLmv7Divf Na",
+    entity: "Satoshi Nakamoto (attributed)",
+    btc: "~1,100,000",
+    category: "miner",
+    status: "dormant",
+    added: "2026-04-01",
+    hook: "The genesis address. The first Bitcoin ever mined. 1,000,000+ BTC never moved. What does the original Bitcoin wallet tell us about privacy — and what happens if it ever moves?",
+    summary: "Satoshi Nakamoto mined approximately 1.1 million Bitcoin in the early days of the network, identifiable through a distinctive mining pattern called the Patoshi Pattern. None of it has ever been spent. These dormant coins represent the ultimate long-term hodl — and the ultimate privacy case study.",
+    narrative: `On January 3, 2009, Satoshi Nakamoto mined the first Bitcoin block — the Genesis Block — and received 50 BTC. That reward has never moved. Neither have the rewards from thousands of subsequent blocks Satoshi mined in the following months.
+
+Researcher Sergio Demian Lerner identified a distinctive pattern in early Bitcoin mining — now called the Patoshi Pattern — that allows attribution of roughly 1.1 million BTC to a single miner, almost certainly Satoshi. The nonce values in these early blocks follow a unique incremental pattern not seen in any other early miner.
+
+From a privacy perspective, Satoshi's approach was actually quite sophisticated for 2009: mining to fresh addresses, never consolidating, never reusing. The problem was scale — mining 1.1 million BTC in a single cohort creates an attribution link that no amount of address rotation can erase. The Patoshi Pattern shows that privacy through address diversity only works if your total activity doesn't form a recognizable signature.
+
+The burning question: what happens if these coins ever move? Every analysis suggests it would be the most significant Bitcoin event in history. The market would likely crash. Every blockchain analytics firm has alerts set. And whoever moved them would immediately become the most watched Bitcoin holder on Earth.
+
+Satoshi's best privacy move was also the simplest: don't spend.`,
+    thread: [
+      "1,100,000 Bitcoin. Never moved. The coins mined by Bitcoin's creator, Satoshi Nakamoto, have sat untouched for 15+ years. What do they tell us about privacy — and what happens if they ever move? 🧵",
+      "Researcher Sergio Lerner found a distinctive pattern in early block mining — now called the 'Patoshi Pattern'. The nonce values increment in a unique way that links ~22,000 early blocks to a single miner. Almost certainly Satoshi.",
+      "The privacy lesson: Satoshi used fresh addresses for every block. Smart. But mining 1.1M BTC in one cohort creates an attribution fingerprint that address rotation can't erase. Scale defeats privacy.",
+      "What happens if these coins move? Every analytics firm has alerts set. The market would likely drop significantly. Whoever moved them would be the most-watched Bitcoin holder on Earth. Which may be why they haven't.",
+      "Satoshi's best privacy strategy turned out to be the simplest: don't spend. 15 years of inaction. The coins are worth $77B today. Sometimes the most private wallet is the one that never moves. anonscore.com",
+    ],
+    tags: ["#Bitcoin", "#Satoshi", "#PatoshiPattern", "#Privacy"],
+    notable: ["Genesis Block — first Bitcoin ever mined", "~1.1M BTC attributed via Patoshi Pattern", "Never moved since 2009-2010", "Would be the most significant BTC event in history if moved"],
+    externalUrl: "https://bitslog.com/2013/04/17/the-well-deserved-fortune-of-satoshi-nakamoto/",
+  },
+  {
+    id: "006",
+    slug: "mt-gox-trustee",
+    title: "Mt. Gox Trustee Wallet",
+    address: "1FeexV6bAHb8ybZjqQMjJrcCrHGW9sb6uF",
+    entity: "Nobuaki Kobayashi (Mt. Gox Trustee)",
+    btc: "~80,000",
+    category: "exchange",
+    status: "liquidating",
+    added: "2026-04-01",
+    hook: "Mt. Gox collapsed in 2014 with 850,000 BTC missing. A decade later, the trustee is still distributing what was recovered. This wallet has moved markets every time it twitched.",
+    summary: "The Mt. Gox rehabilitation process has been running since 2014. Trustee Nobuaki Kobayashi holds the recovered BTC for distribution to ~127,000 creditors. Every movement of this wallet triggers market analysis, price predictions, and community anxiety — making it one of the most watched addresses in Bitcoin.",
+    narrative: `In February 2014, Mt. Gox — once handling 70% of all Bitcoin transactions — announced it had lost 850,000 BTC. The exchange filed for bankruptcy. 127,000 creditors were left waiting.
+
+Through the bankruptcy process, approximately 142,000 BTC was eventually recovered. Trustee Nobuaki Kobayashi has been managing this distribution for over a decade, navigating Japanese bankruptcy law, creditor disputes, and volatile Bitcoin prices simultaneously.
+
+The trustee's wallet management has been a masterclass in on-chain transparency — and market anxiety. Every time Kobayashi moved funds — to exchanges for liquidation, between holding addresses, to prepare distributions — the Bitcoin community watched obsessively. In 2018, movements spooked the market significantly.
+
+Finally, in 2024, distributions began to creditors. Coinbase Prime and Kraken were named as distribution partners. The market braced for selling pressure that largely didn't materialize — creditors who had waited 10 years mostly chose to hold their long-overdue Bitcoin.
+
+The forensic signature of this wallet is distinctive: infrequent large movements, always to known exchange addresses, always during specific distribution windows. No privacy measures — the entire process is court-supervised and public.`,
+    thread: [
+      "Mt. Gox collapsed in 2014 with 850,000 BTC missing. 10 years later, creditors are finally getting paid. This wallet has moved markets every time it twitched. Here's the full on-chain story 🧵",
+      "Trustee Nobuaki Kobayashi has been managing 142,000 recovered BTC since 2014. His job: navigate Japanese bankruptcy law, 127,000 creditors, and one of the most volatile assets in history. Simultaneously.",
+      "Every time this wallet moved — even just reorganizing funds — it triggered market panic. 2018 saw significant selling pressure fears. The address became so watched that its movement was itself a market signal.",
+      "In 2024, distributions finally started. Coinbase Prime and Kraken as partners. The market braced for massive selling. It largely didn't happen — creditors who waited 10 years mostly chose to hold.",
+      "The privacy lesson: court-supervised wallets leave the most transparent on-chain trail possible. No mixing, no obfuscation — everything documented in Japanese bankruptcy filings. anonscore.com/?scan=1FeexV6bAHb8ybZjqQMjJrcCrHGW9sb6uF",
+    ],
+    tags: ["#Bitcoin", "#MtGox", "#Forensics", "#Crypto"],
+    notable: ["850,000 BTC lost in 2014 collapse", "127,000 creditors awaiting distribution", "Every movement causes market reaction", "10-year bankruptcy process — still ongoing"],
+    externalUrl: "https://en.wikipedia.org/wiki/Mt._Gox",
+  },
+];
+
+
 const HISTORY_KEY = "anonscore_history_v1";
 const getHistory = () => { try { return JSON.parse(localStorage.getItem(HISTORY_KEY) || "[]"); } catch { return []; } };
 const addToHistory = (entry) => {
@@ -1346,9 +1534,245 @@ function TrustBox() {
 }
 
 /* ─────────────────────────────────────────────
-   LANDING PAGE — v4
+   CASE FILES — list page
 ───────────────────────────────────────────── */
-function Landing({ onAnalyze, isMobile }) {
+const CATEGORY_META = {
+  exchange: { label: "Exchange",  color: "#58a6ff" },
+  seizure:  { label: "Seizure",   color: "#f85149" },
+  darknet:  { label: "Darknet",   color: "#E8A730" },
+  miner:    { label: "Miner",     color: "#3fb950" },
+};
+const STATUS_META = {
+  active:     { label: "Active",      color: "#3fb950" },
+  dormant:    { label: "Dormant",     color: "#505470" },
+  liquidating:{ label: "Liquidating", color: "#E8A730" },
+  liquidated: { label: "Liquidated",  color: "#58a6ff" },
+};
+
+function CaseFiles({ onOpenCase, onBack, isMobile }) {
+  const [filter, setFilter] = useState("all");
+  const categories = ["all", "exchange", "seizure", "miner"];
+  const visible = filter === "all" ? CASE_FILES : CASE_FILES.filter(c => c.category === filter);
+
+  return (
+    <div style={{ minHeight: "100vh", background: T.bg, display: "flex", flexDirection: "column" }}>
+      {/* Nav */}
+      <nav style={{ display: "flex", alignItems: "center", gap: 10, padding: isMobile ? "12px 16px" : "12px 32px", borderBottom: `1px solid ${T.border}`, background: T.bg, position: "sticky", top: 0, zIndex: 100 }}>
+        <button onClick={onBack} style={{ background: "transparent", border: `1.5px solid ${T.border}`, borderRadius: 8, padding: "7px 12px", color: T.textMid, fontFamily: T.sans, fontSize: 13, cursor: "pointer", transition: "border .15s" }}
+          onMouseOver={e => e.currentTarget.style.borderColor = T.cyan}
+          onMouseOut={e => e.currentTarget.style.borderColor = T.border}>← Back</button>
+        <div style={{ fontFamily: T.display, fontSize: 15, letterSpacing: 4, fontWeight: 700 }}>ANON<span style={{ color: T.cyan }}>SCORE</span></div>
+        <div style={{ flex: 1 }} />
+        <div style={{ fontFamily: T.mono, fontSize: 10, color: T.textDim }}>CASE FILES</div>
+      </nav>
+
+      <div style={{ flex: 1, padding: isMobile ? "24px 16px" : "40px 48px", maxWidth: 960, margin: "0 auto", width: "100%" }}>
+        {/* Header */}
+        <div style={{ marginBottom: 32 }}>
+          <div style={{ fontFamily: T.mono, fontSize: 10, color: T.textDim, letterSpacing: 2.5, marginBottom: 12 }}>NOTABLE BITCOIN WALLETS</div>
+          <h1 style={{ fontFamily: T.serif, fontSize: isMobile ? 32 : 48, color: T.text, fontWeight: 400, marginBottom: 12 }}>Case Files</h1>
+          <p style={{ fontSize: 15, color: T.textMid, lineHeight: 1.7, maxWidth: 600, fontWeight: 300 }}>
+            The most significant Bitcoin addresses in history — scored, dissected, and explained. Each case shows what blockchain forensics actually reveals about real-world wallets.
+          </p>
+        </div>
+
+        {/* Filter pills */}
+        <div style={{ display: "flex", gap: 8, marginBottom: 24, flexWrap: "wrap" }}>
+          {categories.map(cat => (
+            <button key={cat} onClick={() => setFilter(cat)}
+              style={{ padding: "6px 14px", borderRadius: 20, border: `1px solid ${filter === cat ? T.cyan : T.border}`, background: filter === cat ? T.cyanLo : "transparent", color: filter === cat ? T.cyan : T.textDim, fontFamily: T.mono, fontSize: 10, cursor: "pointer", letterSpacing: 1, transition: "all .15s", textTransform: "uppercase" }}>
+              {cat === "all" ? `All (${CASE_FILES.length})` : `${CATEGORY_META[cat]?.label} (${CASE_FILES.filter(c => c.category === cat).length})`}
+            </button>
+          ))}
+        </div>
+
+        {/* Case grid */}
+        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(2, 1fr)", gap: 16 }}>
+          {visible.map((c, i) => {
+            const cat = CATEGORY_META[c.category];
+            const st  = STATUS_META[c.status];
+            return (
+              <div key={c.id} onClick={() => onOpenCase(c)}
+                style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 16, padding: "22px 24px", cursor: "pointer", transition: "all .2s", animation: `fadeUp .35s ease ${i * .06}s both` }}
+                onMouseEnter={e => { e.currentTarget.style.borderColor = cat.color + "66"; e.currentTarget.style.transform = "translateY(-2px)"; }}
+                onMouseLeave={e => { e.currentTarget.style.borderColor = T.border; e.currentTarget.style.transform = "none"; }}>
+                {/* Top bar */}
+                <div style={{ height: 2, background: cat.color, borderRadius: 1, marginBottom: 16, opacity: 0.7 }} />
+                {/* Meta row */}
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+                  <span style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim }}>#{c.id}</span>
+                  <span style={{ fontFamily: T.mono, fontSize: 8, color: cat.color, background: cat.color + "18", border: `1px solid ${cat.color}33`, borderRadius: 4, padding: "2px 7px", letterSpacing: 1 }}>{cat.label.toUpperCase()}</span>
+                  <span style={{ fontFamily: T.mono, fontSize: 8, color: st.color, background: st.color + "18", border: `1px solid ${st.color}33`, borderRadius: 4, padding: "2px 7px", letterSpacing: 1 }}>{st.label.toUpperCase()}</span>
+                  <span style={{ marginLeft: "auto", fontFamily: T.mono, fontSize: 9, color: T.textDim }}>{c.btc} BTC</span>
+                </div>
+                {/* Title */}
+                <div style={{ fontFamily: T.serif, fontSize: 20, color: T.text, fontWeight: 400, marginBottom: 8 }}>{c.title}</div>
+                {/* Entity */}
+                <div style={{ fontFamily: T.mono, fontSize: 10, color: T.textDim, marginBottom: 10 }}>{c.entity}</div>
+                {/* Hook */}
+                <div style={{ fontSize: 13, color: T.textMid, lineHeight: 1.6, marginBottom: 16 }}>{c.hook}</div>
+                {/* Address */}
+                <div style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim, background: T.surface, borderRadius: 6, padding: "6px 10px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {c.address}
+                </div>
+                <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 14 }}>
+                  <span style={{ fontFamily: T.mono, fontSize: 10, color: cat.color }}>Read case →</span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────────
+   CASE DETAIL — individual case with live scan
+───────────────────────────────────────────── */
+function CaseDetail({ caseFile, onBack, onAnalyze, isMobile }) {
+  const [shareMode, setShareMode] = useState(null); // null | "thread" | "link"
+  const [copied, setCopied] = useState(false);
+  const cat = CATEGORY_META[caseFile.category];
+  const st  = STATUS_META[caseFile.status];
+
+  const copy = (text) => {
+    navigator.clipboard?.writeText(text).catch(() => {});
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const scanUrl = `https://anonscore.com/?scan=${encodeURIComponent(caseFile.address)}`;
+  const threadText = caseFile.thread.join("\n\n---\n\n");
+
+  return (
+    <div style={{ minHeight: "100vh", background: T.bg, display: "flex", flexDirection: "column" }}>
+      {/* Nav */}
+      <nav style={{ display: "flex", alignItems: "center", gap: 10, padding: isMobile ? "12px 16px" : "12px 32px", borderBottom: `1px solid ${T.border}`, background: T.bg, position: "sticky", top: 0, zIndex: 100 }}>
+        <button onClick={onBack} style={{ background: "transparent", border: `1.5px solid ${T.border}`, borderRadius: 8, padding: "7px 12px", color: T.textMid, fontFamily: T.sans, fontSize: 13, cursor: "pointer" }}
+          onMouseOver={e => e.currentTarget.style.borderColor = T.cyan}
+          onMouseOut={e => e.currentTarget.style.borderColor = T.border}>← Cases</button>
+        <div style={{ fontFamily: T.display, fontSize: 15, letterSpacing: 4, fontWeight: 700 }}>ANON<span style={{ color: T.cyan }}>SCORE</span></div>
+        <div style={{ flex: 1 }} />
+        <span style={{ fontFamily: T.mono, fontSize: 9, color: cat.color, background: cat.color + "18", border: `1px solid ${cat.color}33`, borderRadius: 4, padding: "3px 8px", letterSpacing: 1 }}>CASE #{caseFile.id}</span>
+      </nav>
+
+      <div style={{ flex: 1, padding: isMobile ? "24px 16px" : "40px 48px", maxWidth: 800, margin: "0 auto", width: "100%" }}>
+
+        {/* Header */}
+        <div style={{ marginBottom: 32, animation: "fadeUp .4s ease both" }}>
+          <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 14 }}>
+            <span style={{ fontFamily: T.mono, fontSize: 8, color: cat.color, background: cat.color + "18", border: `1px solid ${cat.color}33`, borderRadius: 4, padding: "2px 7px", letterSpacing: 1 }}>{cat.label.toUpperCase()}</span>
+            <span style={{ fontFamily: T.mono, fontSize: 8, color: st.color, background: st.color + "18", border: `1px solid ${st.color}33`, borderRadius: 4, padding: "2px 7px", letterSpacing: 1 }}>{st.label.toUpperCase()}</span>
+            <span style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim }}>{caseFile.entity}</span>
+          </div>
+          <h1 style={{ fontFamily: T.serif, fontSize: isMobile ? 28 : 42, color: T.text, fontWeight: 400, marginBottom: 16, lineHeight: 1.2 }}>{caseFile.title}</h1>
+          <p style={{ fontSize: 16, color: T.textMid, lineHeight: 1.7, fontWeight: 300 }}>{caseFile.hook}</p>
+        </div>
+
+        {/* Scan CTA — prominent */}
+        <div style={{ background: T.card, border: `1px solid ${cat.color}33`, borderRadius: 16, padding: "20px 24px", marginBottom: 28, animation: "fadeUp .4s ease .08s both" }}>
+          <div style={{ height: 2, background: cat.color, borderRadius: 1, margin: "-20px -24px 16px", opacity: 0.6 }} />
+          <div style={{ display: "flex", alignItems: isMobile ? "flex-start" : "center", gap: 16, flexDirection: isMobile ? "column" : "row" }}>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim, letterSpacing: 1.5, marginBottom: 6 }}>ADDRESS</div>
+              <div style={{ fontFamily: T.mono, fontSize: isMobile ? 10 : 12, color: T.text, wordBreak: "break-all", lineHeight: 1.5 }}>{caseFile.address}</div>
+              <div style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim, marginTop: 4 }}>{caseFile.btc} BTC · {caseFile.entity}</div>
+            </div>
+            <button onClick={() => onAnalyze(caseFile.address, false, "btc")}
+              style={{ flexShrink: 0, background: cat.color, border: "none", borderRadius: 10, padding: "12px 22px", color: T.bg, fontFamily: T.sans, fontWeight: 700, fontSize: 14, cursor: "pointer", whiteSpace: "nowrap", transition: "opacity .15s" }}
+              onMouseOver={e => e.currentTarget.style.opacity = ".85"}
+              onMouseOut={e => e.currentTarget.style.opacity = "1"}>
+              Scan live →
+            </button>
+          </div>
+        </div>
+
+        {/* Notable facts */}
+        <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: 12, padding: "16px 20px", marginBottom: 28, animation: "fadeUp .4s ease .12s both" }}>
+          <div style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim, letterSpacing: 1.5, marginBottom: 10 }}>KEY FACTS</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            {caseFile.notable.map((fact, i) => (
+              <div key={i} style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+                <span style={{ color: cat.color, fontSize: 10, flexShrink: 0, marginTop: 2 }}>◆</span>
+                <span style={{ fontSize: 13, color: T.textMid, lineHeight: 1.6 }}>{fact}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Summary */}
+        <div style={{ marginBottom: 24, animation: "fadeUp .4s ease .16s both" }}>
+          <div style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim, letterSpacing: 1.5, marginBottom: 12 }}>BACKGROUND</div>
+          <div style={{ fontSize: 15, color: T.textMid, lineHeight: 1.8, fontWeight: 300 }}>{caseFile.summary}</div>
+        </div>
+
+        {/* Full narrative */}
+        <div style={{ marginBottom: 32, animation: "fadeUp .4s ease .20s both" }}>
+          <div style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim, letterSpacing: 1.5, marginBottom: 16 }}>CASE ANALYSIS</div>
+          {caseFile.narrative.split("\n\n").map((para, i) => (
+            <p key={i} style={{ fontSize: 15, color: T.textMid, lineHeight: 1.85, marginBottom: 16, fontWeight: 300 }}>{para}</p>
+          ))}
+        </div>
+
+        {/* Share / publish tools */}
+        <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 16, overflow: "hidden", marginBottom: 24, animation: "fadeUp .4s ease .24s both" }}>
+          <div style={{ display: "flex", borderBottom: `1px solid ${T.border}` }}>
+            {[["thread","𝕏 Thread"],["link","🔗 Share link"]].map(([m, label]) => (
+              <button key={m} onClick={() => setShareMode(shareMode === m ? null : m)}
+                style={{ flex: 1, padding: "12px", background: shareMode === m ? T.cyanLo : "transparent", border: "none", borderRight: m === "thread" ? `1px solid ${T.border}` : "none", color: shareMode === m ? T.cyan : T.textMid, fontFamily: T.sans, fontSize: 13, cursor: "pointer", transition: "all .15s" }}>
+                {label}
+              </button>
+            ))}
+          </div>
+          {shareMode === "thread" && (
+            <div style={{ padding: "16px 20px" }}>
+              <div style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim, letterSpacing: 1.5, marginBottom: 12 }}>PRE-WRITTEN X THREAD — {caseFile.thread.length} TWEETS</div>
+              {caseFile.thread.map((tweet, i) => (
+                <div key={i} style={{ display: "flex", gap: 10, padding: "10px 0", borderTop: i > 0 ? `1px solid ${T.borderLo}` : undefined }}>
+                  <span style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim, flexShrink: 0, width: 20 }}>{i + 1}/</span>
+                  <span style={{ fontSize: 13, color: T.textMid, lineHeight: 1.65, flex: 1 }}>{tweet}</span>
+                </div>
+              ))}
+              <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
+                <button onClick={() => copy(threadText)} style={{ flex: 1, padding: "10px", background: copied ? T.green : T.cyan, border: "none", borderRadius: 8, color: T.bg, fontFamily: T.sans, fontWeight: 700, fontSize: 13, cursor: "pointer", transition: "background .2s" }}>
+                  {copied ? "✓ Copied!" : "Copy full thread"}
+                </button>
+                <button onClick={() => window.open(`https://x.com/intent/tweet?text=${encodeURIComponent(caseFile.thread[0])}`, "_blank", "noopener,noreferrer")}
+                  style={{ padding: "10px 16px", background: "#000", border: "none", borderRadius: 8, color: "#fff", fontFamily: T.sans, fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
+                  Post on 𝕏
+                </button>
+              </div>
+            </div>
+          )}
+          {shareMode === "link" && (
+            <div style={{ padding: "16px 20px" }}>
+              <div style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim, letterSpacing: 1.5, marginBottom: 10 }}>SHAREABLE SCAN LINK</div>
+              <div style={{ fontFamily: T.mono, fontSize: 11, color: T.textMid, background: T.surface, borderRadius: 8, padding: "10px 12px", marginBottom: 12, wordBreak: "break-all" }}>{scanUrl}</div>
+              <div style={{ fontSize: 12, color: T.textDim, marginBottom: 12, lineHeight: 1.6 }}>Anyone who opens this link will see a confirmation prompt, then can scan this address live. Perfect for posts and articles.</div>
+              <button onClick={() => copy(scanUrl)} style={{ width: "100%", padding: "10px", background: copied ? T.green : T.cyan, border: "none", borderRadius: 8, color: T.bg, fontFamily: T.sans, fontWeight: 700, fontSize: 13, cursor: "pointer", transition: "background .2s" }}>
+                {copied ? "✓ Copied!" : "Copy link"}
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* External source */}
+        {caseFile.externalUrl && (
+          <div style={{ textAlign: "center", marginBottom: 24, animation: "fadeUp .4s ease .28s both" }}>
+            <a href={caseFile.externalUrl} target="_blank" rel="noopener noreferrer"
+              style={{ fontFamily: T.mono, fontSize: 11, color: T.cyan, textDecoration: "none" }}>
+              Further reading ↗
+            </a>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+
+function Landing({ onAnalyze, isMobile, onCases }) {
   const [input, setInput] = useState("");
   const [error, setError] = useState("");
   const [history, setHistory] = useState(() => getHistory());
@@ -1397,6 +1821,36 @@ function Landing({ onAnalyze, isMobile }) {
           <Tag label="Free" color={T.green} size={10} />
         </div>
       </nav>
+
+      {/* ── CASE FILES STRIP ── */}
+      <div style={{ background: T.surface, borderBottom: `1px solid ${T.border}`, overflowX: "auto", WebkitOverflowScrolling: "touch", scrollbarWidth: "none" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 0, minWidth: "max-content", padding: "0 20px" }}>
+          {/* Label */}
+          <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px 8px 0", borderRight: `1px solid ${T.border}`, marginRight: 14, flexShrink: 0 }}>
+            <span style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim, letterSpacing: 2 }}>CASE FILES</span>
+          </div>
+          {/* Case pills */}
+          {CASE_FILES.map((c, i) => {
+            const cat = CATEGORY_META[c.category];
+            return (
+              <button key={c.id} onClick={() => onCases(c)}
+                style={{ display: "flex", alignItems: "center", gap: 7, padding: "8px 14px", background: "transparent", border: "none", borderRight: `1px solid ${T.borderLo}`, color: T.textDim, fontFamily: T.sans, fontSize: 12, cursor: "pointer", whiteSpace: "nowrap", transition: "all .15s", flexShrink: 0 }}
+                onMouseEnter={e => { e.currentTarget.style.background = T.bg; e.currentTarget.style.color = T.text; }}
+                onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = T.textDim; }}>
+                <span style={{ fontFamily: T.mono, fontSize: 8, color: cat.color }}>#{c.id}</span>
+                {c.title}
+              </button>
+            );
+          })}
+          {/* View all */}
+          <button onClick={() => onCases(null)}
+            style={{ display: "flex", alignItems: "center", gap: 5, padding: "8px 16px", background: "transparent", border: "none", color: T.btc, fontFamily: T.mono, fontSize: 9, cursor: "pointer", letterSpacing: 1, whiteSpace: "nowrap", flexShrink: 0, transition: "color .15s" }}
+            onMouseEnter={e => e.currentTarget.style.color = T.text}
+            onMouseLeave={e => e.currentTarget.style.color = T.btc}>
+            VIEW ALL →
+          </button>
+        </div>
+      </div>
 
       {/* ── HERO ── */}
       <div style={{ position: "relative", overflow: "hidden" }}>
@@ -3068,6 +3522,7 @@ function LightningDashboard({ nodeId, nodeData, channels, isMobile, onBack, onRe
 ───────────────────────────────────────────── */
 function App() {
   const [page, setPage] = useState("landing");
+  const [activeCaseFile, setActiveCaseFile] = useState(null);
   const [pendingScan, setPendingScan] = useState(null); // { addr, inputType } awaiting user confirmation
 
   // Inject meta/OG tags
@@ -3239,7 +3694,9 @@ function App() {
         </div>
       )}
 
-      {page === "landing"      && <Landing onAnalyze={analyze} isMobile={isMobile} />}
+      {page === "landing"      && <Landing onAnalyze={analyze} isMobile={isMobile} onCases={(c) => { if (c) { setActiveCaseFile(c); setPage("case_detail"); } else { setPage("cases"); } }} />}
+      {page === "cases"        && <CaseFiles onOpenCase={c => { setActiveCaseFile(c); setPage("case_detail"); }} onBack={() => setPage("landing")} isMobile={isMobile} />}
+      {page === "case_detail"  && activeCaseFile && <CaseDetail caseFile={activeCaseFile} onBack={() => setPage("cases")} onAnalyze={analyze} isMobile={isMobile} />}
       {page === "scanning"     && <Scanning address={address || lnNodeId} isLightning={isScanningLightning} dataReady={scanDataReady} />}
       {page === "dashboard"    && <Dashboard address={address} addrInfo={addrInfo} utxos={utxos} txs={txs} isMobile={isMobile} onBack={() => setPage("landing")} onRescan={analyze} toast={toast} autoShare={autoShare} scanAt={scanAt} defaultSimple={defaultSimple} simpleMode={simpleMode} onSimpleModeChange={setSimpleMode} />}
       {page === "ln_dashboard" && <LightningDashboard nodeId={lnNodeId} nodeData={lnNodeData} channels={lnChannels} isMobile={isMobile} onBack={() => setPage("landing")} onRescan={analyze} toast={toast} />}
