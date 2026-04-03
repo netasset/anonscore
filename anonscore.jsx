@@ -1689,7 +1689,7 @@ function CaseDetail({ caseFile, onBack, onAnalyze, isMobile }) {
         </div>
 
         {/* Notable facts */}
-        <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: 12, padding: "16px 20px", marginBottom: 28, animation: "fadeUp .4s ease .12s both" }}>
+        <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: 12, padding: "16px 20px", marginBottom: 16, animation: "fadeUp .4s ease .12s both" }}>
           <div style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim, letterSpacing: 1.5, marginBottom: 10 }}>KEY FACTS</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             {caseFile.notable.map((fact, i) => (
@@ -1698,6 +1698,23 @@ function CaseDetail({ caseFile, onBack, onAnalyze, isMobile }) {
                 <span style={{ fontSize: 13, color: T.textMid, lineHeight: 1.6 }}>{fact}</span>
               </div>
             ))}
+          </div>
+        </div>
+
+        {/* AI data disclaimer — case files only */}
+        <div style={{ background: T.greenLo, border: `1px solid ${T.green}33`, borderRadius: 12, padding: "14px 18px", marginBottom: 28, animation: "fadeUp .4s ease .14s both" }}>
+          <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+            <span style={{ color: T.green, fontSize: 13, flexShrink: 0, marginTop: 1 }}>🔓</span>
+            <div>
+              <div style={{ fontFamily: T.mono, fontSize: 9, color: T.green, letterSpacing: 1.5, marginBottom: 6 }}>PUBLIC WALLET — EXTENDED AI ACCESS</div>
+              <div style={{ fontSize: 12, color: T.textMid, lineHeight: 1.7 }}>
+                This is a publicly known institutional wallet. When you open the AI assistant after scanning, it receives the score, issue breakdown, <strong style={{ color: T.text }}>and a summary of recent on-chain transactions</strong> — all public blockchain data. This allows it to discuss specific transaction patterns, not just the score.
+              </div>
+              <div style={{ fontSize: 12, color: T.textDim, lineHeight: 1.7, marginTop: 8, paddingTop: 8, borderTop: `1px solid ${T.borderLo}` }}>
+                🔒 <strong style={{ color: T.text }}>Personal wallets work differently.</strong> When you scan your own address, the AI receives only your score and issue names — never transaction IDs, UTXO data, or anything that could identify you. That boundary is enforced in code and shown in the consent screen before every session.{" "}
+                <a href="https://github.com/netasset/anonscore" target="_blank" rel="noopener noreferrer" style={{ color: T.cyan, textDecoration: "none" }}>Verify it in the open source code →</a>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -1823,28 +1840,28 @@ function Landing({ onAnalyze, isMobile, onCases }) {
       </nav>
 
       {/* ── CASE FILES STRIP ── */}
-      <div style={{ background: T.surface, borderBottom: `1px solid ${T.border}`, overflowX: "auto", WebkitOverflowScrolling: "touch", scrollbarWidth: "none" }}>
+      <div style={{ background: T.surface, borderBottom: `1px solid ${T.border}`, borderTop: `2px solid ${T.btc}`, overflowX: "auto", WebkitOverflowScrolling: "touch", scrollbarWidth: "none" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 0, minWidth: "max-content", padding: "0 20px" }}>
           {/* Label */}
-          <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px 8px 0", borderRight: `1px solid ${T.border}`, marginRight: 14, flexShrink: 0 }}>
-            <span style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim, letterSpacing: 2 }}>CASE FILES</span>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "9px 14px 9px 0", borderRight: `1px solid ${T.border}`, marginRight: 14, flexShrink: 0 }}>
+            <span style={{ fontFamily: T.mono, fontSize: 9, color: T.btc, letterSpacing: 2, fontWeight: 700 }}>📁 CASE FILES</span>
           </div>
           {/* Case pills */}
           {CASE_FILES.map((c, i) => {
             const cat = CATEGORY_META[c.category];
             return (
               <button key={c.id} onClick={() => onCases(c)}
-                style={{ display: "flex", alignItems: "center", gap: 7, padding: "8px 14px", background: "transparent", border: "none", borderRight: `1px solid ${T.borderLo}`, color: T.textDim, fontFamily: T.sans, fontSize: 12, cursor: "pointer", whiteSpace: "nowrap", transition: "all .15s", flexShrink: 0 }}
-                onMouseEnter={e => { e.currentTarget.style.background = T.bg; e.currentTarget.style.color = T.text; }}
-                onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = T.textDim; }}>
-                <span style={{ fontFamily: T.mono, fontSize: 8, color: cat.color }}>#{c.id}</span>
+                style={{ display: "flex", alignItems: "center", gap: 7, padding: "9px 14px", background: "transparent", border: "none", borderRight: `1px solid ${T.borderLo}`, color: T.textMid, fontFamily: T.sans, fontSize: 12, cursor: "pointer", whiteSpace: "nowrap", transition: "all .15s", flexShrink: 0 }}
+                onMouseEnter={e => { e.currentTarget.style.background = T.card; e.currentTarget.style.color = T.text; }}
+                onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = T.textMid; }}>
+                <span style={{ fontFamily: T.mono, fontSize: 9, color: cat.color, fontWeight: 700 }}>#{c.id}</span>
                 {c.title}
               </button>
             );
           })}
           {/* View all */}
           <button onClick={() => onCases(null)}
-            style={{ display: "flex", alignItems: "center", gap: 5, padding: "8px 16px", background: "transparent", border: "none", color: T.btc, fontFamily: T.mono, fontSize: 9, cursor: "pointer", letterSpacing: 1, whiteSpace: "nowrap", flexShrink: 0, transition: "color .15s" }}
+            style={{ display: "flex", alignItems: "center", gap: 5, padding: "9px 16px", background: "transparent", border: "none", color: T.btc, fontFamily: T.mono, fontSize: 9, cursor: "pointer", letterSpacing: 1, whiteSpace: "nowrap", flexShrink: 0, transition: "color .15s", fontWeight: 700 }}
             onMouseEnter={e => e.currentTarget.style.color = T.text}
             onMouseLeave={e => e.currentTarget.style.color = T.btc}>
             VIEW ALL →
@@ -2296,29 +2313,145 @@ function Sparkline({ history, width = 80, height = 28 }) {
 ───────────────────────────────────────────── */
 
 /* Builds context sent to Anthropic — address intentionally excluded */
-function buildAiContext(checks, recommendations, score, grade) {
+/* Lightweight markdown renderer for AI chat bubbles
+   Handles: **bold**, *italic*, numbered lists, line breaks */
+function renderMd(text) {
+  if (!text) return null;
+  const lines = text.split("\n");
+  const out = [];
+  let key = 0;
+
+  const inlineStyles = (str) => {
+    // Bold: **text** → <strong>
+    // Italic: *text* (not preceded/followed by *) → <em>
+    const parts = [];
+    let remaining = str;
+    let idx = 0;
+    while (remaining.length > 0) {
+      const boldMatch = remaining.match(/\*\*(.+?)\*\*/);
+      const italicMatch = remaining.match(/(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)/);
+      const first = [boldMatch, italicMatch]
+        .filter(Boolean)
+        .sort((a, b) => a.index - b.index)[0];
+      if (!first) { parts.push(remaining); break; }
+      if (first.index > 0) parts.push(remaining.slice(0, first.index));
+      if (first === boldMatch) {
+        parts.push(<strong key={idx++} style={{ color: T.text, fontWeight: 700 }}>{first[1]}</strong>);
+      } else {
+        parts.push(<em key={idx++}>{first[1]}</em>);
+      }
+      remaining = remaining.slice(first.index + first[0].length);
+    }
+    return parts;
+  };
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (!line.trim()) {
+      if (out.length > 0) out.push(<div key={key++} style={{ height: 6 }} />);
+      continue;
+    }
+    // Numbered list: "1. text"
+    const numMatch = line.match(/^(\d+)\.\s+(.*)/);
+    if (numMatch) {
+      out.push(
+        <div key={key++} style={{ display: "flex", gap: 8, marginBottom: 2 }}>
+          <span style={{ color: T.cyan, fontFamily: T.mono, fontSize: 11, flexShrink: 0, marginTop: 1 }}>{numMatch[1]}.</span>
+          <span>{inlineStyles(numMatch[2])}</span>
+        </div>
+      );
+      continue;
+    }
+    // Bullet: "- text" or "• text"
+    const bulletMatch = line.match(/^[-•]\s+(.*)/);
+    if (bulletMatch) {
+      out.push(
+        <div key={key++} style={{ display: "flex", gap: 8, marginBottom: 2 }}>
+          <span style={{ color: T.cyan, flexShrink: 0, marginTop: 2, fontSize: 10 }}>›</span>
+          <span>{inlineStyles(bulletMatch[1])}</span>
+        </div>
+      );
+      continue;
+    }
+    out.push(<div key={key++} style={{ marginBottom: 2 }}>{inlineStyles(line)}</div>);
+  }
+  return <>{out}</>;
+}
+
+function buildAiContext(checks, recommendations, score, grade, walletMeta) {
   const issues = checks.filter(c => c.status !== "pass");
-  const systemPrompt = `You are a Bitcoin privacy expert assistant. The user ran a wallet privacy analysis. You have their analysis results only — no address, no transaction IDs, no identifying data.
+  const isPublic = walletMeta?.isPublic;
+  const entity   = walletMeta?.entity || "";
+
+  // Build transaction summary for public wallets — all public blockchain data
+  let txSection = "";
+  if (isPublic && walletMeta?.txs?.length) {
+    const txs   = walletMeta.txs.slice(0, 20);
+    const utxos = (walletMeta.utxos || []).slice(0, 20);
+    const now   = Math.floor(Date.now() / 1000);
+    const age   = (ts) => {
+      if (!ts) return "unknown date";
+      const d = Math.floor((now - ts) / 86400);
+      return d === 0 ? "today" : d === 1 ? "1 day ago" : `${d} days ago`;
+    };
+    const satsBtc = (s) => s >= 1e8 ? `₿${(s/1e8).toFixed(4)}` : `${s.toLocaleString()} sats`;
+
+    const txLines = txs.map((tx, i) => {
+      const inCount  = tx.vin?.length  || 0;
+      const outCount = tx.vout?.length || 0;
+      const fee      = tx.fee ? `${tx.fee} sats fee` : "";
+      const time     = age(tx.status?.block_time);
+      const totalOut = (tx.vout || []).reduce((s, o) => s + (o.value || 0), 0);
+      const flags    = [];
+      if (outCount >= 5 && inCount >= 5) flags.push("possible CoinJoin");
+      if (inCount >= 4 && outCount <= 2) flags.push("consolidation");
+      if (totalOut >= 100000 && totalOut % 100000 === 0) flags.push("round amount");
+      return `  ${i+1}. ${time} — ${inCount} inputs → ${outCount} outputs, ${satsBtc(totalOut)} total${fee ? `, ${fee}` : ""}${flags.length ? ` [${flags.join(", ")}]` : ""}`;
+    }).join("\n");
+
+    const utxoLines = utxos.slice(0, 10).map((u, i) =>
+      `  ${i+1}. ${satsBtc(u.value)} — ${u.status?.confirmed ? "confirmed" : "unconfirmed"}, ${age(u.status?.block_time)}, type: ${u.scriptpubkey_type || "unknown"}`
+    ).join("\n");
+
+    txSection = `
+On-chain transaction data (${txs.length} most recent, all public blockchain data):
+${txLines}
+
+Top UTXOs by value (${utxos.length} sampled):
+${utxoLines}`;
+  }
+
+  const walletFrame = isPublic
+    ? `The user is analyzing a PUBLIC/INSTITUTIONAL wallet — this is NOT the user's own wallet. It belongs to: ${entity}. Always use third-person language ("this wallet", "the entity", "their coins") — NEVER say "your wallet", "your coins", or "you should". Frame analysis as forensic/educational, not personal advice.`
+    : `The user ran a privacy analysis on their own wallet. Address was NOT shared — you have analysis results only.`;
+
+  const systemPrompt = `You are a Bitcoin privacy expert assistant. ${walletFrame}
 
 Analysis summary:
 - Privacy score: ${score}/100 (Grade ${grade})
 - Issues (${issues.length}):
 ${issues.map(c => `  • ${c.name} [${c.status.toUpperCase()}]: ${c.plain}`).join("\n")}
 - Top recommendations:
-${recommendations.slice(0, 5).map((r, i) => `  ${i+1}. ${r.action} (+${r.impact}pts) — Options: ${(r.tools||[{name:r.tool}]).map(t=>t.name).join(", ")}`).join("\n")}
+${recommendations.slice(0, 5).map((r, i) => `  ${i+1}. ${r.action} (+${r.impact}pts) — Options: ${(r.tools||[{name:r.tool}]).map(t=>t.name).join(", ")}`).join("\n")}${txSection}
 
-Rules: Be concise and practical. Give step-by-step wallet instructions when asked (Sparrow, Wasabi, Phoenix). Under 200 words unless steps require more. Plain text only. Never ask for or reference a Bitcoin address.`;
+Rules:
+- Plain prose only. NO markdown — no **bold**, no *italic*, no bullet points with -, no # headers.
+- Use numbered lists (1. 2. 3.) sparingly if needed for steps.
+- Be concise. Under 150 words unless step-by-step instructions require more.
+- ${isPublic ? "This is forensic analysis of a public wallet — you have transaction data above. Discuss specific transactions when asked. Focus on what the chain reveals, historical context, and privacy lessons." : "Give practical wallet instructions when asked (Sparrow, Wasabi, Phoenix)."}
+- Never reproduce or reference full Bitcoin addresses.`;
+
   const preview = [
     `Score: ${score}/100 · Grade ${grade}`,
-    `${issues.length} issue${issues.length !== 1 ? "s" : ""}: ${issues.slice(0,3).map(c => c.name).join(", ")}${issues.length > 3 ? ` +${issues.length - 3} more` : ""}`,
-    `Top fix: ${recommendations[0]?.action || "none"}`,
+    isPublic ? `Entity: ${entity}` : `${issues.length} issue${issues.length !== 1 ? "s" : ""}: ${issues.slice(0,3).map(c => c.name).join(", ")}${issues.length > 3 ? ` +${issues.length - 3} more` : ""}`,
+    isPublic && walletMeta?.txs?.length ? `${walletMeta.txs.length} recent transactions (public blockchain data)` : `Top finding: ${recommendations[0]?.action || issues[0]?.name || "none"}`,
   ];
   return { systemPrompt, preview };
 }
 
 /* ── Consent gate — shown before any data leaves the browser ── */
-function AiConsentGate({ score, grade, checks, recommendations, onAccept, onDecline }) {
-  const { preview } = buildAiContext(checks, recommendations, score, grade);
+function AiConsentGate({ score, grade, checks, recommendations, walletMeta, onAccept, onDecline }) {
+  const { preview } = buildAiContext(checks, recommendations, score, grade, walletMeta);
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 950, display: "flex", alignItems: "center", justifyContent: "center", padding: 20, background: "#000000bb" }}>
       <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 20, padding: 28, width: "min(420px,96vw)", animation: "fadeUp .25s ease both" }}>
@@ -2345,7 +2478,10 @@ function AiConsentGate({ score, grade, checks, recommendations, onAccept, onDecl
 
         <div style={{ background: T.redLo, border: `1px solid ${T.red}22`, borderRadius: 12, padding: "14px 16px", marginBottom: 18 }}>
           <div style={{ fontFamily: T.mono, fontSize: 9, color: T.red, letterSpacing: 1.5, marginBottom: 10 }}>✕ NEVER SENT</div>
-          {["Your Bitcoin address", "Transaction IDs or UTXO data", "Any data that could identify your wallet"].map((line, i) => (
+          {(walletMeta?.isPublic
+            ? ["Your identity or IP address", "Any data beyond what's shown above"]
+            : ["Your Bitcoin address", "Transaction IDs or UTXO data", "Any data that could identify your wallet"]
+          ).map((line, i) => (
             <div key={i} style={{ display: "flex", gap: 8, padding: "4px 0", borderTop: i > 0 ? `1px solid ${T.borderLo}` : undefined }}>
               <span style={{ color: T.red, fontSize: 10, flexShrink: 0, marginTop: 1 }}>✕</span>
               <span style={{ fontFamily: T.mono, fontSize: 11, color: T.textMid, lineHeight: 1.5 }}>{line}</span>
@@ -2379,12 +2515,12 @@ function AiConsentGate({ score, grade, checks, recommendations, onAccept, onDecl
 }
 
 /* ── Chat panel — only shown after consent ── */
-function AiAssistant({ checks, recommendations, score, grade, onClose, starters: startersProp }) {
+function AiAssistant({ checks, recommendations, score, grade, onClose, starters: startersProp, walletMeta }) {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [started, setStarted] = useState(false);
-  const [msgCount, setMsgCount] = useState(0); // user messages sent this session
+  const [msgCount, setMsgCount] = useState(0);
   const [rateLimited, setRateLimited] = useState(false);
   const bottomRef = useRef(null);
   const inputRef = useRef(null);
@@ -2393,15 +2529,22 @@ function AiAssistant({ checks, recommendations, score, grade, onClose, starters:
   const WORKER_URL = "https://anonscore-ai.netassetpremium.workers.dev";
 
   const issues = checks.filter(c => c.status !== "pass");
-  const { systemPrompt } = buildAiContext(checks, recommendations, score, grade);
+  const { systemPrompt } = buildAiContext(checks, recommendations, score, grade, walletMeta);
   const exhausted = msgCount >= MAX_MSGS;
+  const isPublic = walletMeta?.isPublic;
+  const entity   = walletMeta?.entity || "";
 
-  const STARTERS = startersProp || [
+  const STARTERS = startersProp || (isPublic ? [
+    `Why does ${entity || "this wallet"} score so poorly on privacy?`,
+    "What does this score reveal about institutional Bitcoin management?",
+    "What heuristics flag this wallet as an exchange or institution?",
+    "What would this wallet need to do to score higher?",
+  ] : [
     "How do I freeze dust UTXOs in Sparrow?",
     `Which of my ${issues.length} issues should I fix first?`,
     "How does CoinJoin actually work?",
     "Is my wallet software identifiable from fee rates?",
-  ];
+  ]);
 
   const send = async (text) => {
     const msg = text || input.trim();
@@ -2470,7 +2613,10 @@ function AiAssistant({ checks, recommendations, score, grade, onClose, starters:
           {!started && (
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               <div style={{ fontSize: 13, color: T.textMid, lineHeight: 1.6 }}>
-                I've read your wallet analysis. Ask me anything about your {issues.length} issue{issues.length !== 1 ? "s" : ""} or how to improve your score from <span style={{ color: scoreColor(score) }}>{score}</span> to 90+.
+                {isPublic
+                  ? <>I've analysed the score for <strong style={{ color: T.text }}>{entity}</strong>. Ask me anything about what the chain reveals, why it scores this way, or what the forensic patterns mean.</>
+                  : <>I've read your wallet analysis. Ask me anything about your {issues.length} issue{issues.length !== 1 ? "s" : ""} or how to improve your score from <span style={{ color: scoreColor(score) }}>{score}</span> to 90+.</>
+                }
               </div>
               <div style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim, letterSpacing: 1, marginTop: 4 }}>QUICK QUESTIONS</div>
               {STARTERS.map((s, i) => (
@@ -2487,8 +2633,8 @@ function AiAssistant({ checks, recommendations, score, grade, onClose, starters:
               {m.role === "assistant" && (
                 <div style={{ width: 22, height: 22, background: T.cyan + "22", border: `1px solid ${T.cyan}44`, borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, flexShrink: 0, marginTop: 2 }}>✦</div>
               )}
-              <div style={{ background: m.role === "user" ? T.cyan + "18" : T.surface, border: `1px solid ${m.role === "user" ? T.cyan + "33" : T.borderLo}`, borderRadius: m.role === "user" ? "14px 14px 4px 14px" : "14px 14px 14px 4px", padding: "10px 14px", maxWidth: "85%", fontSize: 13, color: T.text, lineHeight: 1.65, whiteSpace: "pre-wrap" }}>
-                {m.content}
+              <div style={{ background: m.role === "user" ? T.cyan + "18" : T.surface, border: `1px solid ${m.role === "user" ? T.cyan + "33" : T.borderLo}`, borderRadius: m.role === "user" ? "14px 14px 4px 14px" : "14px 14px 14px 4px", padding: "10px 14px", maxWidth: "85%", fontSize: 13, color: T.text, lineHeight: 1.65 }}>
+                {m.role === "assistant" ? renderMd(m.content) : m.content}
               </div>
             </div>
           ))}
@@ -2556,7 +2702,13 @@ function Dashboard({ address, addrInfo, utxos, txs, isMobile, onBack, onRescan, 
   const txCount = addrInfo?.chain_stats?.tx_count || txs.length;
   const analysis = useMemo(() => runEngine(utxos, txs, txCount), [utxos, txs, txCount]);
   const { score, grade, riskLabel, riskColor, checks, recommendations, isEmpty } = analysis;
-  const totalSats = useMemo(() => utxos.reduce((s, u) => s + u.value, 0), [utxos]);
+  // Use addrInfo aggregate balance (accurate) — falls back to summing sampled UTXOs for demo/edge cases
+  const totalSats = useMemo(() => {
+    const funded = addrInfo?.chain_stats?.funded_txo_sum ?? null;
+    const spent  = addrInfo?.chain_stats?.spent_txo_sum  ?? null;
+    if (funded !== null && spent !== null) return funded - spent;
+    return utxos.reduce((s, u) => s + u.value, 0);
+  }, [addrInfo, utxos]);
   const issueCount = checks.filter(c => c.status !== "pass").length;
   const TABS = isMobile
     ? ["Fix It","Overview","UTXOs"]
@@ -2693,7 +2845,7 @@ function Dashboard({ address, addrInfo, utxos, txs, isMobile, onBack, onRescan, 
           {/* Other stats — slim */}
           <div style={{ display: "flex", gap: isMobile ? 14 : 24, flexWrap: "wrap" }}>
             {[
-              { label: "BALANCE", val: `₿${(totalSats/1e8).toFixed(4)}`, sub: `${utxos.length} UTXOs`, color: T.blue },
+              { label: "BALANCE", val: `₿${(totalSats/1e8).toFixed(4)}`, sub: `${addrInfo?.chain_stats?.funded_txo_count != null ? (addrInfo.chain_stats.funded_txo_count - (addrInfo.chain_stats.spent_txo_count||0)) : utxos.length} UTXOs`, color: T.blue },
               { label: "TXS", val: txCount, sub: "total", color: T.cyan },
               { label: "VS AVG", val: score > 38 ? `+${score-38}` : `${score-38}`, sub: "avg is 38", color: score > 38 ? T.green : T.red },
             ].map(s => (
@@ -3049,8 +3201,16 @@ function Dashboard({ address, addrInfo, utxos, txs, isMobile, onBack, onRescan, 
       )}
 
       {shareOpen && <ShareCard score={score} grade={grade} checks={checks} address={address} isLightning={false} onClose={() => setShareOpen(false)} />}
-      {aiStage === "consent" && <AiConsentGate score={score} grade={grade} checks={checks} recommendations={recommendations} onAccept={() => setAiStage("chat")} onDecline={() => setAiStage(null)} />}
-      {aiStage === "chat" && <AiAssistant checks={checks} recommendations={recommendations} score={score} grade={grade} onClose={() => setAiStage(null)} />}
+      {(() => {
+        const matchedCase = CASE_FILES.find(c => c.address === address);
+        const walletMeta = matchedCase
+          ? { isPublic: true, entity: matchedCase.entity, caseTitle: matchedCase.title, utxos, txs }
+          : { isPublic: false };
+        return <>
+          {aiStage === "consent" && <AiConsentGate score={score} grade={grade} checks={checks} recommendations={recommendations} walletMeta={walletMeta} onAccept={() => setAiStage("chat")} onDecline={() => setAiStage(null)} />}
+          {aiStage === "chat" && <AiAssistant checks={checks} recommendations={recommendations} score={score} grade={grade} walletMeta={walletMeta} onClose={() => setAiStage(null)} />}
+        </>;
+      })()}
 
       {/* ── Floating AI widget — visible on all tabs, prominent CTA ── */}
       {aiStage === null && (
