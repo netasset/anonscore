@@ -201,39 +201,41 @@ What makes this address fascinating from a forensics perspective: the holding pa
   },
   {
     id: "004",
-    slug: "us-government-seizure",
-    title: "US Government Bitcoin Treasury",
-    address: "bc1qazcm763858nkj2dj986etajv6wquslv8uxwczt",
-    entity: "US Department of Justice / FBI",
-    btc: "~94,000",
+    slug: "james-zhong-silk-road-hacker",
+    title: "James Zhong — Silk Road Hacker",
+    address: "bc1qmxjefnuy06v345v6vhwpwt05dztztmx4g3y7wp",
+    entity: "US Department of Justice (James Zhong seizure)",
+    btc: "~50,000",
     category: "seizure",
-    status: "active",
+    status: "liquidating",
     added: "2026-04-01",
-    hook: "The US Government holds over 200,000 BTC from criminal seizures. How does the FBI manage a $14 billion Bitcoin treasury — and what do their on-chain habits reveal?",
-    summary: "The United States Government is one of the largest Bitcoin holders in the world, with over 200,000 BTC across multiple seizure addresses. These wallets come from the Bitfinex hack, Silk Road, and the James Zhong case. Their management approach — consolidate, hold, auction — leaves a distinctive forensic trail.",
-    narrative: `The US Government didn't set out to become a major Bitcoin holder. It happened through criminal prosecutions. Each major case — Silk Road in 2013, the Bitfinex hack recovery in 2022, the James Zhong Silk Road hacker case in 2022 — left the government holding thousands of Bitcoin that needed to be managed and eventually liquidated.
+    hook: "In 2012, James Zhong stole 50,000 BTC from Silk Road by exploiting a withdrawal bug. He hid it for 9 years — under floorboards and in a popcorn tin. The FBI found it anyway.",
+    summary: "James Zhong stole approximately 50,000 BTC from Silk Road in 2012 by rapidly triggering withdrawals faster than the system could process. He held the coins for nearly a decade, moving them only occasionally. In November 2021, the FBI executed a search warrant and found the coins hidden in a single-board computer buried under his bathroom floor and in a popcorn tin in a safe.",
+    narrative: `In September 2012, James Zhong executed one of the earliest and most audacious Bitcoin thefts. He created nine Silk Road accounts, deposited small amounts of Bitcoin, then rapidly triggered multiple withdrawals before the system could update balances. The exploit netted him approximately 50,000 BTC — worth around $600,000 at the time.
 
-The DOJ's approach is consistent: seize via civil forfeiture, consolidate into US Marshals Service-controlled addresses, hold during prosecution, then auction. The US Marshals Service has conducted multiple Bitcoin auctions, with buyers including Tim Draper (who bought 30,000 BTC in 2014 for $18.7 million — worth over $2 billion today).
+Zhong then did something remarkable: almost nothing. The coins sat largely untouched for years. Between 2012 and 2019, he made a small number of movements — consolidations, some conversions — but showed unusual discipline in not spending the bulk of the funds.
 
-From a privacy standpoint, government seizure addresses are unique: they're the opposite of private by design. Every movement is documented in court filings. Every auction is public. The government's on-chain activity is the most transparent Bitcoin management in the world, which means it scores terribly by every privacy heuristic.
+In late 2020 and early 2021, Zhong moved some coins to a mixing service. But by then, blockchain forensics had advanced dramatically. The FBI traced the funds through the mixer and eventually to wallets on Zhong's devices.
 
-What's interesting is the market impact. When the government moves these wallets — even to consolidate or prepare for auction — Bitcoin price often reacts. In March 2023, a $300 million movement caused a -6% market swing. The addresses are so well-known and watched that they've become market-moving signals.`,
+The November 2021 search warrant produced one of law enforcement's most colourful seizures: 50,491 BTC found on a single-board Raspberry Pi-style computer hidden under floorboards in a bathroom, along with 1 BTC in a popcorn tin inside a safe. Zhong pleaded guilty in November 2022 and was sentenced to a year in prison.
+
+The forensic lesson: holding coins without moving them is effective short-term privacy. But the blockchain is permanent. Nine years later, every original transaction was still there, fully traceable. The mixer didn't help — the pattern analysis connecting his accounts to the original theft was complete before he ever tried to obscure it.`,
     thread: [
-      "The US Government holds 200,000+ BTC from criminal seizures. They didn't plan to become a Bitcoin whale — it happened through Silk Road, Bitfinex, and more. Here's how the FBI manages a $14B BTC treasury 🧵",
-      "Their approach: seize → consolidate → hold during prosecution → auction via US Marshals. Simple, transparent, and completely traceable on-chain. They make no attempt at privacy because they don't need to.",
-      "The market watches these addresses obsessively. In March 2023, a single government consolidation movement caused Bitcoin to drop 6%. That's how much weight these addresses carry.",
-      "Privacy score? Terrible — but intentionally so. No CoinJoin, no mixing, 100% concentration. The government's Bitcoin strategy optimizes for auditability and legal compliance, not privacy.",
-      "The irony: the world's most surveilled Bitcoin addresses belong to the organization that built the blockchain surveillance industry. anonscore.com/?scan=bc1qazcm763858nkj2dj986etajv6wquslv8uxwczt",
+      "In 2012, James Zhong stole 50,000 BTC from Silk Road using a withdrawal exploit. He then hid the coins for 9 years — barely touching them. The FBI found them under his bathroom floor. Here's the on-chain story 🧵",
+      "The theft was simple: create accounts, deposit small amounts, then trigger multiple rapid withdrawals before Silk Road's system updated balances. Nine accounts. ~50,000 BTC. One exploit. $600,000 in 2012 — $3.3 billion when seized.",
+      "For 9 years, Zhong did almost nothing with the coins. A few consolidations. Some small movements. Remarkable discipline. The blockchain recorded every one of those moves permanently.",
+      "In late 2020, he moved some coins to a mixer. Too late. The FBI had already traced the original theft through the full transaction history. The mixing didn't obscure what had already been established.",
+      "The find: a single-board computer hidden under his bathroom floorboards, containing the wallet. Plus 1 BTC in a popcorn tin in a safe. The blockchain led them straight there. anonscore.com/?scan=bc1qmxjefnuy06v345v6vhwpwt05dztztmx4g3y7wp",
     ],
-    tags: ["#Bitcoin", "#USGovernment", "#DOJ", "#Forensics"],
-    notable: ["200,000+ BTC across seizure addresses", "Funds from Silk Road, Bitfinex, James Zhong case", "US Marshals conduct public BTC auctions", "Every movement is market-moving news"],
-    externalUrl: "https://tokeninsight.com/en/tokenwiki/all/bitcoin-addresses-related-to-the-u.s.-government",
+    tags: ["#Bitcoin", "#SilkRoad", "#Forensics", "#DOJ"],
+    notable: ["50,000 BTC stolen via withdrawal exploit in 2012", "Held untouched for 9 years", "Found on Raspberry Pi under bathroom floorboards + in a popcorn tin", "Mixer used in 2020 — too late to obscure the original trace"],
+    externalUrl: "https://www.justice.gov/opa/pr/special-agent-james-zhong-pleads-guilty-wire-fraud-stealing-over-50000-bitcoin-silk-road",
   },
   {
     id: "005",
     slug: "satoshi-patoshi-cluster",
     title: "The Satoshi Cluster",
-    address: "1A1zP1eP5QGefi2DMPTfTL5SLmv7Divf Na",
+    address: "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa",
     entity: "Satoshi Nakamoto (attributed)",
     btc: "~1,100,000",
     category: "miner",
@@ -2711,7 +2713,7 @@ function Dashboard({ address, addrInfo, utxos, txs, isMobile, onBack, onRescan, 
   }, [addrInfo, utxos]);
   const issueCount = checks.filter(c => c.status !== "pass").length;
   const TABS = isMobile
-    ? ["Fix It","Overview","UTXOs"]
+    ? ["Fix It","Overview","UTXOs","Transactions"]
     : ["Fix It","Overview","UTXOs","Transactions","Methodology"];
 
   useEffect(() => {
@@ -3191,9 +3193,9 @@ function Dashboard({ address, addrInfo, utxos, txs, isMobile, onBack, onRescan, 
       {/* Mobile bottom nav */}
       {isMobile && (
         <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, background: T.card, borderTop: `1px solid ${T.border}`, display: "flex", zIndex: 200 }}>
-          {["Fix It","Overview","UTXOs"].map(t => (
+          {["Fix It","Overview","UTXOs","Transactions"].map(t => (
             <button key={t} onClick={() => setTab(t)} style={{ flex: 1, padding: "10px 0 8px", background: "transparent", border: "none", borderTop: `2px solid ${tab === t ? T.cyan : "transparent"}`, color: tab === t ? T.cyan : T.textDim, fontFamily: T.mono, fontSize: 8, letterSpacing: .5, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 3 }}>
-              <span style={{ fontSize: 15 }}>{t === "Fix It" ? "★" : t === "Overview" ? "◎" : "⬡"}</span>
+              <span style={{ fontSize: 15 }}>{t === "Fix It" ? "★" : t === "Overview" ? "◎" : t === "Transactions" ? "↔" : "⬡"}</span>
               {t}
             </button>
           ))}
