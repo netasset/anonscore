@@ -265,35 +265,37 @@ Satoshi's best privacy move was also the simplest: don't spend.`,
   },
   {
     id: "006",
-    slug: "mt-gox-trustee",
-    title: "Mt. Gox Trustee Wallet",
+    slug: "mt-gox-hacker-1feex",
+    title: "The Mt. Gox Hacker — 79,957 BTC Untouched",
     address: "1FeexV6bAHb8ybZjqQMjJrcCrHGW9sb6uF",
-    entity: "Nobuaki Kobayashi (Mt. Gox Trustee)",
-    btc: "~80,000",
-    category: "exchange",
-    status: "liquidating",
+    entity: "Unknown (2011 Mt. Gox hack attacker)",
+    btc: "~79,957",
+    category: "seizure",
+    status: "dormant",
     added: "2026-04-01",
-    hook: "Mt. Gox collapsed in 2014 with 850,000 BTC missing. A decade later, the trustee is still distributing what was recovered. This wallet has moved markets every time it twitched.",
-    summary: "The Mt. Gox rehabilitation process has been running since 2014. Trustee Nobuaki Kobayashi holds the recovered BTC for distribution to ~127,000 creditors. Every movement of this wallet triggers market analysis, price predictions, and community anxiety — making it one of the most watched addresses in Bitcoin.",
-    narrative: `In February 2014, Mt. Gox — once handling 70% of all Bitcoin transactions — announced it had lost 850,000 BTC. The exchange filed for bankruptcy. 127,000 creditors were left waiting.
+    hook: "In March 2011, an attacker drained 80,000 BTC from Mt. Gox. The funds landed in this address and have never moved. It's the biggest untouched heist wallet in Bitcoin history.",
+    summary: "One of the earliest and largest Bitcoin thefts ever recorded. On March 1, 2011, an attacker compromised a Mt. Gox auditor account and transferred 79,957.2 BTC into this single address. Nothing has ever been sent out — not a single satoshi in 15 years. The attacker is still unknown. At current prices, the dormant balance is worth over $5 billion.",
+    narrative: `In March 2011, Mt. Gox was the dominant Bitcoin exchange — handling most of the world's trading volume. The compromise started when an attacker obtained access to an auditor's account. Within a short window, 79,957.2 BTC was transferred out of Mt. Gox's operational wallets into a single address: 1FeexV6bAHb8ybZjqQMjJrcCrHGW9sb6uF.
 
-Through the bankruptcy process, approximately 142,000 BTC was eventually recovered. Trustee Nobuaki Kobayashi has been managing this distribution for over a decade, navigating Japanese bankruptcy law, creditor disputes, and volatile Bitcoin prices simultaneously.
+At the time, those coins were worth roughly $875,000. Today, the same balance is worth more than $5 billion.
 
-The trustee's wallet management has been a masterclass in on-chain transparency — and market anxiety. Every time Kobayashi moved funds — to exchanges for liquidation, between holding addresses, to prepare distributions — the Bitcoin community watched obsessively. In 2018, movements spooked the market significantly.
+What makes this wallet extraordinary is what hasn't happened. In 15 years, the attacker has not sent a single satoshi out. No consolidations. No test transactions. No mixing attempts. No exchanges. The wallet has only ever received — including small taunting amounts sent by onlookers over the years — and has never sent.
 
-Finally, in 2024, distributions began to creditors. Coinbase Prime and Kraken were named as distribution partners. The market braced for selling pressure that largely didn't materialize — creditors who had waited 10 years mostly chose to hold their long-overdue Bitcoin.
+From a privacy perspective, this is the most effective strategy available to a thief: do nothing. Moving stolen coins creates forensic opportunities. Chainalysis, CipherTrace, and every major blockchain analytics firm have had this wallet tagged and watched since 2011. Any outbound transaction would be flagged instantly, traced to exchanges, and likely lead to prosecution — especially under modern KYC regimes.
 
-The forensic signature of this wallet is distinctive: infrequent large movements, always to known exchange addresses, always during specific distribution windows. No privacy measures — the entire process is court-supervised and public.`,
+Mt. Gox itself survived this 2011 incident but ultimately collapsed in 2014 after a separate, much larger loss. This specific theft was considered one of several early signs that the exchange's security practices were inadequate. The attacker, whoever they were, saw no path to spending the coins safely — so they chose to simply hold.
+
+Whether those coins will ever move is one of the longest-running open questions in Bitcoin. Every few years, a tiny dust transaction to the address triggers a market reaction. But the 79,957 BTC itself has not moved since March 1, 2011.`,
     thread: [
-      "Mt. Gox collapsed in 2014 with 850,000 BTC missing. 10 years later, creditors are finally getting paid. This wallet has moved markets every time it twitched. Here's the full on-chain story 🧵",
-      "Trustee Nobuaki Kobayashi has been managing 142,000 recovered BTC since 2014. His job: navigate Japanese bankruptcy law, 127,000 creditors, and one of the most volatile assets in history. Simultaneously.",
-      "Every time this wallet moved — even just reorganizing funds — it triggered market panic. 2018 saw significant selling pressure fears. The address became so watched that its movement was itself a market signal.",
-      "In 2024, distributions finally started. Coinbase Prime and Kraken as partners. The market braced for massive selling. It largely didn't happen — creditors who waited 10 years mostly chose to hold.",
-      "The privacy lesson: court-supervised wallets leave the most transparent on-chain trail possible. No mixing, no obfuscation — everything documented in Japanese bankruptcy filings. anonscore.com/?scan=1FeexV6bAHb8ybZjqQMjJrcCrHGW9sb6uF",
+      "On March 1, 2011, someone stole 80,000 BTC from Mt. Gox — then put it in this address and never touched it again. 15 years of silence. $5 billion sitting there. Here's the full on-chain story 🧵",
+      "The attack: compromised an auditor's account, transferred 79,957.2 BTC in a single move. Worth $875,000 at the time. Worth $5+ billion now. It was one of the largest Bitcoin thefts ever recorded.",
+      "What makes this forensically unique: in 15 years, not one satoshi has left this address. No test tx. No consolidations. No mixing attempts. The wallet has only ever RECEIVED — including taunting dust sent by onlookers over the years.",
+      "The privacy lesson: for a thief, the most effective strategy is often to do absolutely nothing. Any movement would be traced instantly — Chainalysis has had this wallet flagged since 2011. Moving would trigger alerts at every major exchange.",
+      "The attacker made a choice: billions sitting in an address they can never spend safely, or millions in prison. They chose billions. The coins are still there. Still watched. Still untouched. anonscore.com/?scan=1FeexV6bAHb8ybZjqQMjJrcCrHGW9sb6uF",
     ],
-    tags: ["#Bitcoin", "#MtGox", "#Forensics", "#Crypto"],
-    notable: ["850,000 BTC lost in 2014 collapse", "127,000 creditors awaiting distribution", "Every movement causes market reaction", "10-year bankruptcy process — still ongoing"],
-    externalUrl: "https://en.wikipedia.org/wiki/Mt._Gox",
+    tags: ["#Bitcoin", "#MtGox", "#Forensics", "#Privacy"],
+    notable: ["79,957 BTC stolen on March 1, 2011", "Never sent anything out — 15 years dormant", "Worth $5+ billion at current prices", "Attacker identity never established"],
+    externalUrl: "https://bitcointalk.org/index.php?topic=5464048.0",
   },
 ];
 
@@ -2093,7 +2095,8 @@ function Landing({ onAnalyze, isMobile, onCases }) {
           <div style={{ fontFamily: T.mono, fontSize: 10, color: T.textDim, letterSpacing: 2.5, textAlign: "center", marginBottom: 36 }}>BY THE NUMBERS</div>
           <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(4, 1fr)", gap: 16 }}>
             {LANDING_FACTS.map((f, i) => {
-              const barColors = [T.red, T.btc, T.btc, T.btc];              const barWidths = [88, 91, 33, 38];
+              const barColors = [T.red, T.btc, T.btc, T.btc];
+              const barWidths = [88, 91, 33, 38];
               const col = barColors[i];
               return (
                 <div key={i} style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 14, padding: "22px 18px", animation: `fadeUp .4s ease ${i * .07}s both`, position: "relative", overflow: "hidden" }}>
