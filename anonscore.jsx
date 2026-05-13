@@ -33,8 +33,10 @@ input,button,select,textarea{font-family:'Outfit',sans-serif;-webkit-tap-highlig
 @keyframes checkPop{0%{transform:scale(0) rotate(-45deg)}55%{transform:scale(1.25) rotate(8deg)}100%{transform:scale(1) rotate(0)}}
 @keyframes scanLink{from{stroke-dashoffset:120;opacity:.1}to{stroke-dashoffset:0;opacity:.65}}
 @keyframes scanRing{0%{transform:scale(.4);opacity:.55}100%{transform:scale(2.4);opacity:0}}
-@keyframes inputGlow{0%,100%{box-shadow:0 0 0 0 currentColor}50%{box-shadow:0 0 0 4px transparent}}
 .dot-grid{background-image:radial-gradient(circle,#ffffff06 1px,transparent 1px);background-size:24px 24px}
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important}
+}
 `;
 
 /* ─────────────────────────────────────────────
@@ -1012,20 +1014,19 @@ function ScoreRing({ score, size = 130, animate = true }) {
   const uid = useRef(`sr${Math.random().toString(36).slice(2,7)}`).current;
 
   useEffect(() => {
-    if (!animate) { setCur(score); return; }
+    const reduced = typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    if (!animate || reduced) { setCur(score); return; }
     setCur(0);
     const target = Math.max(0, Math.min(100, score|0));
-    const duration = 1500;
-    const startDelay = 250;
     let start = 0;
-    const ease = t => 1 - Math.pow(1 - t, 3); // ease-out cubic
+    const ease = t => 1 - Math.pow(1 - t, 3);
     const step = (ts) => {
       if (!start) start = ts;
-      const t = Math.min(1, (ts - start) / duration);
+      const t = Math.min(1, (ts - start) / 1500);
       setCur(Math.round(ease(t) * target));
       if (t < 1) rafRef.current = requestAnimationFrame(step);
     };
-    const startTimer = setTimeout(() => { rafRef.current = requestAnimationFrame(step); }, startDelay);
+    const startTimer = setTimeout(() => { rafRef.current = requestAnimationFrame(step); }, 250);
     return () => { clearTimeout(startTimer); if (rafRef.current) cancelAnimationFrame(rafRef.current); };
   }, [score, animate]);
 
@@ -2272,12 +2273,10 @@ function Scanning({ address, isLightning, dataReady }) {
               fill={accentColor}
               style={{ animation: `nodePulse 1.6s ease-in-out ${i * 0.15}s infinite`, transformOrigin: `${p.x}px ${p.y}px` }} />
           ))}
-          {/* expanding ring */}
-          <circle cx={meshNodes.cx} cy={meshNodes.cy} r="8" fill="none" stroke={accentColor} strokeWidth="1.5"
-            style={{ animation: "scanRing 1.6s ease-out infinite", transformOrigin: `${meshNodes.cx}px ${meshNodes.cy}px` }} />
-          <circle cx={meshNodes.cx} cy={meshNodes.cy} r="8" fill="none" stroke={accentColor} strokeWidth="1.5"
-            style={{ animation: "scanRing 1.6s ease-out .8s infinite", transformOrigin: `${meshNodes.cx}px ${meshNodes.cy}px` }} />
-          {/* solid center node */}
+          {[0, 0.8].map(d => (
+            <circle key={`ring${d}`} cx={meshNodes.cx} cy={meshNodes.cy} r="8" fill="none" stroke={accentColor} strokeWidth="1.5"
+              style={{ animation: `scanRing 1.6s ease-out ${d}s infinite`, transformOrigin: `${meshNodes.cx}px ${meshNodes.cy}px` }} />
+          ))}
           <circle cx={meshNodes.cx} cy={meshNodes.cy} r="6" fill={accentColor}
             style={{ filter: `drop-shadow(0 0 8px ${accentColor})` }} />
         </svg>
@@ -2790,7 +2789,7 @@ function Dashboard({ address, addrInfo, utxos, txs, isMobile, onBack, onRescan, 
       startVelocity: 45,
       ticks: 200,
       origin: { y: 0.35 },
-      colors: ["#22D3EE", "#3fb950", "#F7931A", "#58a6ff", "#ffffff"],
+      colors: [T.cyan, T.green, T.btc, T.blue, "#ffffff"],
       disableForReducedMotion: true,
       ...opts,
     });
