@@ -29,6 +29,11 @@ input,button,select,textarea{font-family:'Outfit',sans-serif;-webkit-tap-highlig
 @keyframes ticker{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}
 @keyframes nodePulse{0%,100%{opacity:.4}50%{opacity:1}}
 @keyframes lineIn{from{stroke-dashoffset:200}to{stroke-dashoffset:0}}
+@keyframes popIn{0%{opacity:0;transform:scale(.4)}65%{opacity:1;transform:scale(1.08)}100%{opacity:1;transform:scale(1)}}
+@keyframes checkPop{0%{transform:scale(0) rotate(-45deg)}55%{transform:scale(1.25) rotate(8deg)}100%{transform:scale(1) rotate(0)}}
+@keyframes scanLink{from{stroke-dashoffset:120;opacity:.1}to{stroke-dashoffset:0;opacity:.65}}
+@keyframes scanRing{0%{transform:scale(.4);opacity:.55}100%{transform:scale(2.4);opacity:0}}
+@keyframes inputGlow{0%,100%{box-shadow:0 0 0 0 currentColor}50%{box-shadow:0 0 0 4px transparent}}
 .dot-grid{background-image:radial-gradient(circle,#ffffff06 1px,transparent 1px);background-size:24px 24px}
 `;
 
@@ -1003,19 +1008,25 @@ function useToast() {
 
 function ScoreRing({ score, size = 130, animate = true }) {
   const [cur, setCur] = useState(animate ? 0 : score);
-  const timerRef = useRef(null);
+  const rafRef = useRef(null);
   const uid = useRef(`sr${Math.random().toString(36).slice(2,7)}`).current;
 
   useEffect(() => {
     if (!animate) { setCur(score); return; }
-    let v = 0;
-    const tick = () => {
-      v = Math.min(v + 1, score);
-      setCur(v);
-      if (v < score) timerRef.current = setTimeout(tick, 12);
+    setCur(0);
+    const target = Math.max(0, Math.min(100, score|0));
+    const duration = 1500;
+    const startDelay = 250;
+    let start = 0;
+    const ease = t => 1 - Math.pow(1 - t, 3); // ease-out cubic
+    const step = (ts) => {
+      if (!start) start = ts;
+      const t = Math.min(1, (ts - start) / duration);
+      setCur(Math.round(ease(t) * target));
+      if (t < 1) rafRef.current = requestAnimationFrame(step);
     };
-    timerRef.current = setTimeout(tick, 400);
-    return () => { if (timerRef.current) clearTimeout(timerRef.current); };
+    const startTimer = setTimeout(() => { rafRef.current = requestAnimationFrame(step); }, startDelay);
+    return () => { clearTimeout(startTimer); if (rafRef.current) cancelAnimationFrame(rafRef.current); };
   }, [score, animate]);
 
   const cx = size / 2, cy = size / 2;
@@ -1975,9 +1986,16 @@ function Landing({ onAnalyze, isMobile, onCases }) {
                   placeholder={isLn ? "03abc… (66-char node pubkey)" : "bc1q… or 1… or 3…  ·  or Lightning 03…"}
                   style={{ flex: 1, background: T.surface,
                     border: `1.5px solid ${error ? T.red : inputType ? (isLn ? T.ln : T.btc) : T.border}`,
-                    borderRadius: 10, padding: "13px 16px", color: T.text, fontFamily: T.mono, fontSize: 13, outline: "none", transition: "border .18s", minWidth: 0 }}
-                  onFocus={e => e.target.style.borderColor = isLn ? T.ln : T.cyan}
-                  onBlur={e => e.target.style.borderColor = error ? T.red : inputType ? (isLn ? T.ln : T.btc) : T.border} />
+                    borderRadius: 10, padding: "13px 16px", color: T.text, fontFamily: T.mono, fontSize: 13, outline: "none", transition: "border .18s, box-shadow .25s", boxShadow: "0 0 0 0 transparent", minWidth: 0 }}
+                  onFocus={e => {
+                    const c = isLn ? T.ln : T.cyan;
+                    e.target.style.borderColor = c;
+                    e.target.style.boxShadow = `0 0 0 4px ${c}22, 0 0 18px ${c}55`;
+                  }}
+                  onBlur={e => {
+                    e.target.style.borderColor = error ? T.red : inputType ? (isLn ? T.ln : T.btc) : T.border;
+                    e.target.style.boxShadow = "0 0 0 0 transparent";
+                  }} />
                 <button onClick={() => submit(null, !isLn)}
                   style={{ background: isLn ? T.ln : T.btc, border: "none", borderRadius: 10, padding: "13px 20px",
                     color: T.bg, fontFamily: T.sans, fontWeight: 700, fontSize: 14, cursor: "pointer", whiteSpace: "nowrap", transition: "all .15s" }}
@@ -2228,8 +2246,42 @@ function Scanning({ address, isLightning, dataReady }) {
   const pct = Math.round((step / (steps.length - 1)) * 100);
   const currentFact = steps[step].fact;
 
+  // Decorative scan mesh — 7 nodes around a center, with animated connecting lines + pulsing center halo
+  const meshNodes = useMemo(() => {
+    const cx = 90, cy = 60, r = 44;
+    const pts = Array.from({ length: 6 }).map((_, i) => {
+      const a = (Math.PI * 2 * i) / 6 - Math.PI / 2;
+      return { x: cx + r * Math.cos(a), y: cy + r * Math.sin(a) };
+    });
+    return { cx, cy, pts };
+  }, []);
+
   return (
-    <div style={{ minHeight: "100vh", background: T.bg, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 32, gap: 28 }}>
+    <div style={{ minHeight: "100vh", background: T.bg, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 32, gap: 24 }}>
+      {/* Decorative animated mesh */}
+      <div style={{ width: 180, height: 120, position: "relative" }} aria-hidden="true">
+        <svg width="180" height="120" viewBox="0 0 180 120" style={{ overflow: "visible" }}>
+          {meshNodes.pts.map((p, i) => (
+            <line key={`l${i}`} x1={meshNodes.cx} y1={meshNodes.cy} x2={p.x} y2={p.y}
+              stroke={accentColor} strokeWidth="1"
+              strokeDasharray="120" strokeDashoffset="120"
+              style={{ animation: `scanLink 1.8s ease-out ${i * 0.18}s infinite`, opacity: 0.5 }} />
+          ))}
+          {meshNodes.pts.map((p, i) => (
+            <circle key={`n${i}`} cx={p.x} cy={p.y} r="3.5"
+              fill={accentColor}
+              style={{ animation: `nodePulse 1.6s ease-in-out ${i * 0.15}s infinite`, transformOrigin: `${p.x}px ${p.y}px` }} />
+          ))}
+          {/* expanding ring */}
+          <circle cx={meshNodes.cx} cy={meshNodes.cy} r="8" fill="none" stroke={accentColor} strokeWidth="1.5"
+            style={{ animation: "scanRing 1.6s ease-out infinite", transformOrigin: `${meshNodes.cx}px ${meshNodes.cy}px` }} />
+          <circle cx={meshNodes.cx} cy={meshNodes.cy} r="8" fill="none" stroke={accentColor} strokeWidth="1.5"
+            style={{ animation: "scanRing 1.6s ease-out .8s infinite", transformOrigin: `${meshNodes.cx}px ${meshNodes.cy}px` }} />
+          {/* solid center node */}
+          <circle cx={meshNodes.cx} cy={meshNodes.cy} r="6" fill={accentColor}
+            style={{ filter: `drop-shadow(0 0 8px ${accentColor})` }} />
+        </svg>
+      </div>
       {/* Header */}
       <div style={{ textAlign: "center" }}>
         <div style={{ fontFamily: T.mono, fontSize: 10, color: accentColor, letterSpacing: 2, marginBottom: 12 }}>
@@ -2727,6 +2779,31 @@ function Dashboard({ address, addrInfo, utxos, txs, isMobile, onBack, onRescan, 
     return () => clearTimeout(t);
   }, [autoShare, grade, toast]);
 
+  // High-score celebration — confetti burst once per scan when score ≥ 85
+  useEffect(() => {
+    if (score < 85 || isEmpty) return;
+    if (typeof window === "undefined" || typeof window.confetti !== "function") return;
+    if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const fire = (ratio, opts) => window.confetti({
+      particleCount: Math.floor(180 * ratio),
+      spread: 70,
+      startVelocity: 45,
+      ticks: 200,
+      origin: { y: 0.35 },
+      colors: ["#22D3EE", "#3fb950", "#F7931A", "#58a6ff", "#ffffff"],
+      disableForReducedMotion: true,
+      ...opts,
+    });
+    const id = setTimeout(() => {
+      fire(0.25, { spread: 26, startVelocity: 55 });
+      fire(0.2,  { spread: 60 });
+      fire(0.35, { spread: 100, decay: 0.91, scalar: 0.9 });
+      fire(0.1,  { spread: 120, startVelocity: 25, decay: 0.92, scalar: 1.2 });
+      fire(0.1,  { spread: 120, startVelocity: 45 });
+    }, 700); // wait for score counter + ring to nearly fill
+    return () => clearTimeout(id);
+  }, [score, isEmpty]);
+
   // Empty address — show a clear message instead of a misleading score
   if (isEmpty) return (
     <div style={{ minHeight: "100vh", background: T.bg, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 32, gap: 20 }}>
@@ -2822,8 +2899,8 @@ function Dashboard({ address, addrInfo, utxos, txs, isMobile, onBack, onRescan, 
           <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
             <ScoreRing score={score} size={52} />
             <div>
-              <div style={{ fontFamily: T.serif, fontSize: 20, color: riskColor, lineHeight: 1 }}>Grade {grade}</div>
-              <div style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim, letterSpacing: 1, marginTop: 2 }}>{score}/100</div>
+              <div style={{ fontFamily: T.serif, fontSize: 20, color: riskColor, lineHeight: 1, animation: "popIn .55s cubic-bezier(.34,1.56,.64,1) .85s both", transformOrigin: "left center" }}>Grade {grade}</div>
+              <div style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim, letterSpacing: 1, marginTop: 2, animation: "fadeIn .35s ease 1.4s both" }}>{score}/100</div>
             </div>
           </div>
 
@@ -2934,8 +3011,8 @@ function Dashboard({ address, addrInfo, utxos, txs, isMobile, onBack, onRescan, 
                 <div style={{ fontFamily: T.mono, fontSize: 11, color: T.textDim, flexShrink: 0, paddingTop: 2, minWidth: 28 }}>0{i + 1}</div>
                 <div style={{ flex: 1 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-                    <span style={{ fontSize: 18 }}>{done ? "✅" : r.icon}</span>
-                    <div style={{ fontFamily: T.serif, fontSize: isMobile ? 17 : 20, color: done ? T.green : T.text, fontWeight: 400, textDecoration: done ? "line-through" : "none" }}>{displayAction}</div>
+                    <span key={done ? "done" : "todo"} style={{ fontSize: 18, display: "inline-block", animation: done ? "checkPop .45s cubic-bezier(.34,1.56,.64,1) both" : undefined }}>{done ? "✅" : r.icon}</span>
+                    <div style={{ fontFamily: T.serif, fontSize: isMobile ? 17 : 20, color: done ? T.green : T.text, fontWeight: 400, textDecoration: done ? "line-through" : "none", transition: "color .25s ease" }}>{displayAction}</div>
                   </div>
                   {!done && <>
                     <div style={{ fontSize: 14, color: T.textMid, lineHeight: 1.7, marginBottom: 10 }}>{displayPlain}</div>
