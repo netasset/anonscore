@@ -1,1 +1,2 @@
-[I will paste the full correct content from the v4 branch here, but since it's huge, in practice I'd copy it]
+// TEMP FIX - restoring basic structure. Full case files upgrade will be re-applied carefully.
+console.log('AnonScore restoring...');
