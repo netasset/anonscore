@@ -33,6 +33,7 @@ input,button,select,textarea{font-family:'Outfit',sans-serif;-webkit-tap-highlig
 @keyframes checkPop{0%{transform:scale(0) rotate(-45deg)}55%{transform:scale(1.25) rotate(8deg)}100%{transform:scale(1) rotate(0)}}
 @keyframes scanLink{from{stroke-dashoffset:120;opacity:.1}to{stroke-dashoffset:0;opacity:.65}}
 @keyframes scanRing{0%{transform:scale(.4);opacity:.55}100%{transform:scale(2.4);opacity:0}}
+@keyframes shake{0%,100%{transform:translateX(0)}10%,30%,50%,70%,90%{transform:translateX(-3px)}20%,40%,60%,80%{transform:translateX(3px)}}
 .dot-grid{background-image:radial-gradient(circle,#ffffff06 1px,transparent 1px);background-size:24px 24px}
 @media (prefers-reduced-motion: reduce){
   *,*::before,*::after{animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important}
@@ -1887,7 +1888,7 @@ function Landing({ onAnalyze, isMobile, onCases }) {
 
       {/* ── HERO ── */}
       <div style={{ position: "relative", overflow: "hidden" }}>
-        <div className="dot-grid" style={{ position: "absolute", inset: 0, pointerEvents: "none" }} />
+        <ParticleCanvas color={T.cyan} />
         <div style={{ position: "absolute", top: "10%", left: "-10%", width: 520, height: 520, borderRadius: "50%", background: "radial-gradient(circle,#22D3EE18 0%,transparent 70%)", animation: "orb 8s ease-in-out infinite", pointerEvents: "none", filter: "blur(2px)" }} />
 
         <section style={{ position: "relative", padding: isMobile ? "56px 20px 48px" : "80px 48px 64px", maxWidth: 860, margin: "0 auto", width: "100%", textAlign: "center" }}>
@@ -1931,7 +1932,10 @@ function Landing({ onAnalyze, isMobile, onCases }) {
           {/* Recent scans history — only shown if they have prior scans */}
           {history.length > 0 && (
             <div style={{ maxWidth: 480, margin: "0 auto 12px", animation: "fadeUp .5s ease .21s both" }}>
-              <div style={{ fontFamily: T.mono, fontSize: 8, color: T.textDim, letterSpacing: 1.5, marginBottom: 6 }}>RECENT SCANS</div>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                <div style={{ fontFamily: T.mono, fontSize: 8, color: T.textDim, letterSpacing: 1.5 }}>RECENT SCANS</div>
+                {history.length >= 2 && <Sparkline history={history.map(h => h.score)} width={64} height={22} />}
+              </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                 {history.map((h, i) => {
                   const col = scoreColor(h.score);
@@ -2259,27 +2263,41 @@ function Scanning({ address, isLightning, dataReady }) {
 
   return (
     <div style={{ minHeight: "100vh", background: T.bg, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 32, gap: 24 }}>
-      {/* Decorative animated mesh */}
+      {/* Decorative animated visual — bolt for Lightning, mesh for Bitcoin */}
       <div style={{ width: 180, height: 120, position: "relative" }} aria-hidden="true">
-        <svg width="180" height="120" viewBox="0 0 180 120" style={{ overflow: "visible" }}>
-          {meshNodes.pts.map((p, i) => (
-            <line key={`l${i}`} x1={meshNodes.cx} y1={meshNodes.cy} x2={p.x} y2={p.y}
-              stroke={accentColor} strokeWidth="1"
-              strokeDasharray="120" strokeDashoffset="120"
-              style={{ animation: `scanLink 1.8s ease-out ${i * 0.18}s infinite`, opacity: 0.5 }} />
-          ))}
-          {meshNodes.pts.map((p, i) => (
-            <circle key={`n${i}`} cx={p.x} cy={p.y} r="3.5"
-              fill={accentColor}
-              style={{ animation: `nodePulse 1.6s ease-in-out ${i * 0.15}s infinite`, transformOrigin: `${p.x}px ${p.y}px` }} />
-          ))}
-          {[0, 0.8].map(d => (
-            <circle key={`ring${d}`} cx={meshNodes.cx} cy={meshNodes.cy} r="8" fill="none" stroke={accentColor} strokeWidth="1.5"
-              style={{ animation: `scanRing 1.6s ease-out ${d}s infinite`, transformOrigin: `${meshNodes.cx}px ${meshNodes.cy}px` }} />
-          ))}
-          <circle cx={meshNodes.cx} cy={meshNodes.cy} r="6" fill={accentColor}
-            style={{ filter: `drop-shadow(0 0 8px ${accentColor})` }} />
-        </svg>
+        {isLightning ? (
+          <svg width="180" height="120" viewBox="0 0 180 120" style={{ overflow: "visible" }}>
+            <defs>
+              <filter id="boltGlow"><feGaussianBlur stdDeviation="4" result="b" /><feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge></filter>
+            </defs>
+            <path d="M100 10 L75 55 L95 55 L72 110 L115 50 L92 50 Z" fill={accentColor} opacity="0.9" filter="url(#boltGlow)"
+              style={{ animation: "nodePulse 1.2s ease-in-out infinite" }} />
+            {[0, 0.6].map(d => (
+              <circle key={d} cx="90" cy="60" r="20" fill="none" stroke={accentColor} strokeWidth="1"
+                style={{ animation: `scanRing 1.4s ease-out ${d}s infinite`, transformOrigin: "90px 60px" }} />
+            ))}
+          </svg>
+        ) : (
+          <svg width="180" height="120" viewBox="0 0 180 120" style={{ overflow: "visible" }}>
+            {meshNodes.pts.map((p, i) => (
+              <line key={`l${i}`} x1={meshNodes.cx} y1={meshNodes.cy} x2={p.x} y2={p.y}
+                stroke={accentColor} strokeWidth="1"
+                strokeDasharray="120" strokeDashoffset="120"
+                style={{ animation: `scanLink 1.8s ease-out ${i * 0.18}s infinite`, opacity: 0.5 }} />
+            ))}
+            {meshNodes.pts.map((p, i) => (
+              <circle key={`n${i}`} cx={p.x} cy={p.y} r="3.5"
+                fill={accentColor}
+                style={{ animation: `nodePulse 1.6s ease-in-out ${i * 0.15}s infinite`, transformOrigin: `${p.x}px ${p.y}px` }} />
+            ))}
+            {[0, 0.8].map(d => (
+              <circle key={`ring${d}`} cx={meshNodes.cx} cy={meshNodes.cy} r="8" fill="none" stroke={accentColor} strokeWidth="1.5"
+                style={{ animation: `scanRing 1.6s ease-out ${d}s infinite`, transformOrigin: `${meshNodes.cx}px ${meshNodes.cy}px` }} />
+            ))}
+            <circle cx={meshNodes.cx} cy={meshNodes.cy} r="6" fill={accentColor}
+              style={{ filter: `drop-shadow(0 0 8px ${accentColor})` }} />
+          </svg>
+        )}
       </div>
       {/* Header */}
       <div style={{ textAlign: "center" }}>
@@ -2356,6 +2374,121 @@ function Sparkline({ history, width = 80, height = 28 }) {
       </span>
     </div>
   );
+}
+
+/* ─────────────────────────────────────────────
+   RADAR CHART — 10-axis privacy heuristic visualization
+───────────────────────────────────────────── */
+function RadarChart({ checks, size = 220 }) {
+  const cx = size / 2, cy = size / 2, r = size * 0.38;
+  const n = checks.length;
+  if (n < 3) return null;
+  const angle = (i) => (Math.PI * 2 * i) / n - Math.PI / 2;
+  const pt = (i, pct) => ({
+    x: cx + r * pct * Math.cos(angle(i)),
+    y: cy + r * pct * Math.sin(angle(i)),
+  });
+  const statusPct = (s) => s === "pass" ? 1 : s === "warn" ? 0.55 : 0.15;
+  const dataPoints = checks.map((c, i) => pt(i, statusPct(c.status)));
+  const poly = dataPoints.map((p, i) => `${i === 0 ? "M" : "L"}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" ") + " Z";
+  const gridLevels = [0.25, 0.5, 0.75, 1];
+  const labelR = r + 18;
+
+  return (
+    <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 16, padding: "18px 10px 10px" }}>
+      <div style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim, letterSpacing: 2, marginBottom: 8, paddingLeft: 12 }}>PRIVACY RADAR</div>
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ display: "block", margin: "0 auto" }}>
+        {gridLevels.map(g => {
+          const gPoly = checks.map((_, i) => pt(i, g)).map((p, i) => `${i === 0 ? "M" : "L"}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" ") + " Z";
+          return <path key={g} d={gPoly} fill="none" stroke={T.border} strokeWidth=".5" />;
+        })}
+        {checks.map((_, i) => (
+          <line key={i} x1={cx} y1={cy} x2={pt(i, 1).x} y2={pt(i, 1).y} stroke={T.borderLo} strokeWidth=".5" />
+        ))}
+        <path d={poly} fill={T.cyan + "18"} stroke={T.cyan} strokeWidth="1.5" strokeLinejoin="round" />
+        {dataPoints.map((p, i) => (
+          <circle key={i} cx={p.x} cy={p.y} r="3" fill={checks[i].status === "pass" ? T.green : checks[i].status === "warn" ? T.btc : T.red} />
+        ))}
+        {checks.map((c, i) => {
+          const lp = { x: cx + labelR * Math.cos(angle(i)), y: cy + labelR * Math.sin(angle(i)) };
+          const anchor = lp.x < cx - 5 ? "end" : lp.x > cx + 5 ? "start" : "middle";
+          const shortName = c.name.split(" ").slice(0, 2).join(" ");
+          return (
+            <text key={i} x={lp.x} y={lp.y} textAnchor={anchor} dominantBaseline="central"
+              style={{ fontFamily: T.mono, fontSize: 7, fill: c.status === "pass" ? T.green : c.status === "warn" ? T.btc : T.red }}>
+              {shortName}
+            </text>
+          );
+        })}
+      </svg>
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────────
+   PARTICLE CANVAS — animated network background
+───────────────────────────────────────────── */
+function ParticleCanvas({ width, height, color = T.cyan }) {
+  const canvasRef = useRef(null);
+  const particles = useRef([]);
+  const raf = useRef(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    const dpr = window.devicePixelRatio || 1;
+    const w = width || canvas.parentElement.offsetWidth;
+    const h = height || canvas.parentElement.offsetHeight;
+    canvas.width = w * dpr;
+    canvas.height = h * dpr;
+    canvas.style.width = w + "px";
+    canvas.style.height = h + "px";
+    ctx.scale(dpr, dpr);
+
+    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
+
+    const N = Math.min(40, Math.floor(w * h / 15000));
+    const LINK_DIST = 120;
+    particles.current = Array.from({ length: N }).map(() => ({
+      x: Math.random() * w, y: Math.random() * h,
+      vx: (Math.random() - 0.5) * 0.25, vy: (Math.random() - 0.5) * 0.25,
+      r: Math.random() * 1.5 + 0.5,
+    }));
+
+    const draw = () => {
+      ctx.clearRect(0, 0, w, h);
+      const pts = particles.current;
+      for (let i = 0; i < pts.length; i++) {
+        const p = pts[i];
+        p.x += p.vx; p.y += p.vy;
+        if (p.x < 0 || p.x > w) p.vx *= -1;
+        if (p.y < 0 || p.y > h) p.vy *= -1;
+        for (let j = i + 1; j < pts.length; j++) {
+          const q = pts[j];
+          const dx = p.x - q.x, dy = p.y - q.y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist < LINK_DIST) {
+            ctx.beginPath();
+            ctx.moveTo(p.x, p.y);
+            ctx.lineTo(q.x, q.y);
+            ctx.strokeStyle = color + Math.round((1 - dist / LINK_DIST) * 30).toString(16).padStart(2, "0");
+            ctx.lineWidth = 0.5;
+            ctx.stroke();
+          }
+        }
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+        ctx.fillStyle = color + "44";
+        ctx.fill();
+      }
+      raf.current = requestAnimationFrame(draw);
+    };
+    raf.current = requestAnimationFrame(draw);
+    return () => { if (raf.current) cancelAnimationFrame(raf.current); };
+  }, [width, height, color]);
+
+  return <canvas ref={canvasRef} style={{ position: "absolute", inset: 0, pointerEvents: "none" }} />;
 }
 
 /* ─────────────────────────────────────────────
@@ -2898,7 +3031,7 @@ function Dashboard({ address, addrInfo, utxos, txs, isMobile, onBack, onRescan, 
           <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
             <ScoreRing score={score} size={52} />
             <div>
-              <div style={{ fontFamily: T.serif, fontSize: 20, color: riskColor, lineHeight: 1, animation: "popIn .55s cubic-bezier(.34,1.56,.64,1) .85s both", transformOrigin: "left center" }}>Grade {grade}</div>
+              <div style={{ fontFamily: T.serif, fontSize: 20, color: riskColor, lineHeight: 1, animation: `popIn .55s cubic-bezier(.34,1.56,.64,1) .85s both${score < 30 ? ", shake .5s ease 2s" : ""}`, transformOrigin: "left center" }}>Grade {grade}</div>
               <div style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim, letterSpacing: 1, marginTop: 2, animation: "fadeIn .35s ease 1.4s both" }}>{score}/100</div>
             </div>
           </div>
@@ -3122,6 +3255,7 @@ function Dashboard({ address, addrInfo, utxos, txs, isMobile, onBack, onRescan, 
                   Share my score →
                 </button>
               </div>
+              {checks.length >= 3 && <RadarChart checks={checks} size={isMobile ? 200 : 220} />}
             </div>
           </div>
         )}
@@ -3818,6 +3952,13 @@ function App() {
     return () => window.removeEventListener("resize", h);
   }, []);
 
+  const [autoDemo, setAutoDemo] = useState(() => {
+    if (typeof window === "undefined") return false;
+    if (localStorage.getItem("anonscore_visited")) return false;
+    if (new URLSearchParams(window.location.search).get("scan")) return false;
+    return true;
+  });
+
   const analyze = useCallback(async (addr, plain = false, inputType = "btc") => {
     const isLn = inputType === "ln_pubkey" || inputType === "ln_address";
     setScanDataReady(false);
@@ -3903,10 +4044,37 @@ function App() {
     }
   }, [toast]);
 
+  useEffect(() => {
+    if (!autoDemo) return;
+    const t = setTimeout(() => {
+      localStorage.setItem("anonscore_visited", "1");
+      setAutoDemo(false);
+      analyze("DEMO", true, "btc");
+    }, 2500);
+    return () => clearTimeout(t);
+  }, [autoDemo, analyze]);
+
+  const dismissAutoDemo = () => {
+    localStorage.setItem("anonscore_visited", "1");
+    setAutoDemo(false);
+  };
+
   return (
     <>
       <style>{CSS}</style>
       <Toast toasts={toast.toasts} />
+
+      {/* Auto-demo banner for first-time visitors */}
+      {autoDemo && page === "landing" && (
+        <div style={{ position: "fixed", bottom: 24, left: "50%", transform: "translateX(-50%)", zIndex: 800, background: T.card, border: `1px solid ${T.cyan}44`, borderRadius: 14, padding: "14px 22px", display: "flex", alignItems: "center", gap: 14, animation: "fadeUp .4s ease .6s both", boxShadow: `0 8px 32px #00000066, 0 0 0 1px ${T.cyan}22` }}>
+          <div style={{ fontSize: 20 }}>🔍</div>
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: T.text }}>Watch AnonScore in action</div>
+            <div style={{ fontSize: 11, color: T.textMid, marginTop: 2 }}>Auto-launching a demo scan in a moment…</div>
+          </div>
+          <button onClick={dismissAutoDemo} style={{ background: "transparent", border: `1px solid ${T.border}`, borderRadius: 8, padding: "6px 12px", color: T.textMid, fontSize: 11, cursor: "pointer", whiteSpace: "nowrap" }}>Dismiss</button>
+        </div>
+      )}
 
       {/* ?scan= confirmation — shown over landing, never auto-fires */}
       {pendingScan && page === "landing" && (
