@@ -22,10 +22,9 @@
   <meta name="twitter:description" content="Is your Bitcoin stack leaking? Find out in 60 seconds. Free, open source." />
   <meta name="twitter:image" content="https://anonscore.com/og.png" />
 
-  <!-- Fonts: preconnect + display=swap (text paints immediately with fallback, then swaps) -->
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Oxanium:wght@400;600;700;800&family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,600;1,9..144,300;1,9..144,400&family=JetBrains+Mono:wght@300;400;500;600&family=Outfit:wght@300;400;500;600;700&display=swap" />
+  <!-- Self-hosted fonts: zero third-party requests (privacy + speed + robustness). -->
+  <link rel="preload" as="style" href="vendor/fonts/fonts.css" />
+  <link rel="stylesheet" href="vendor/fonts/fonts.css" />
 
   <!-- App scripts: self-hosted, deferred (parse-blocking removed). defer preserves order. -->
   <script defer src="vendor/react.production.min.js"></script>

@@ -38,6 +38,9 @@ input,button,select,textarea{font-family:'Outfit',sans-serif;-webkit-tap-highlig
 @keyframes scanRing{0%{transform:scale(.4);opacity:.55}100%{transform:scale(2.4);opacity:0}}
 @keyframes shake{0%,100%{transform:translateX(0)}10%,30%,50%,70%,90%{transform:translateX(-3px)}20%,40%,60%,80%{transform:translateX(3px)}}
 .dot-grid{background-image:radial-gradient(circle,#ffffff06 1px,transparent 1px);background-size:24px 24px}
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+:focus-visible{outline:2px solid #22D3EE;outline-offset:2px;border-radius:4px}
+input:focus-visible,button:focus-visible{outline-offset:2px}
 @media (prefers-reduced-motion: reduce){
   *,*::before,*::after{animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important}
 }
@@ -51,7 +54,7 @@ const T = {
   borderLo: "#1e2130",
   text: "#e8eaf6",
   textMid: "#9096b8",
-  textDim: "#505470",
+  textDim: "#888fae",
   cyan: "#22D3EE",
   cyanLo: "#22D3EE14",
   cyanMid: "#22D3EE28",
@@ -1454,6 +1457,9 @@ function Toast({
   toasts
 }) {
   return React.createElement("div", {
+    role: "region",
+    "aria-label": "Notifications",
+    "aria-live": "polite",
     style: {
       position: "fixed",
       bottom: 80,
@@ -1824,13 +1830,18 @@ function DemoPreview() {
       display: "flex",
       justifyContent: "center",
       gap: 8
-    }
+    },
+    role: "tablist",
+    "aria-label": "Example wallets"
   }, DEMO_EXAMPLES.map((ex, i) => React.createElement("button", {
     key: i,
     onClick: () => {
       setIdx(i);
       setAnimKey(k => k + 1);
     },
+    role: "tab",
+    "aria-selected": i === idx,
+    "aria-label": `Show example ${i + 1} of ${DEMO_EXAMPLES.length}${ex.label ? ": " + ex.label : ""}`,
     style: {
       width: i === idx ? 20 : 8,
       height: 8,
@@ -2820,10 +2831,13 @@ function CaseFiles({
   onBack,
   isMobile
 }) {
+  const PAGE_ROLE_LABEL = "AnonScore case files — notable Bitcoin wallets";
   const [filter, setFilter] = useState("all");
   const categories = ["all", "exchange", "seizure", "miner"];
   const visible = filter === "all" ? CASE_FILES : CASE_FILES.filter(c => c.category === filter);
   return React.createElement("div", {
+    role: "main",
+    "aria-label": PAGE_ROLE_LABEL,
     style: {
       minHeight: "100vh",
       background: T.bg,
@@ -3071,6 +3085,7 @@ function CaseDetail({
   onAnalyze,
   isMobile
 }) {
+  const PAGE_ROLE_LABEL = "AnonScore case file: " + caseFile.title;
   const [shareMode, setShareMode] = useState(null);
   const [copied, setCopied] = useState(false);
   const cat = CATEGORY_META[caseFile.category];
@@ -3083,6 +3098,8 @@ function CaseDetail({
   const scanUrl = `https://anonscore.com/?scan=${encodeURIComponent(caseFile.address)}`;
   const threadText = caseFile.thread.join("\n\n---\n\n");
   return React.createElement("div", {
+    role: "main",
+    "aria-label": PAGE_ROLE_LABEL,
     style: {
       minHeight: "100vh",
       background: T.bg,
@@ -3611,6 +3628,8 @@ function Landing({
     onAnalyze(v, plain, t);
   };
   return React.createElement("div", {
+    role: "main",
+    "aria-label": "AnonScore \u2014 Bitcoin & Lightning privacy audit",
     style: {
       minHeight: "100vh",
       display: "flex",
@@ -4718,7 +4737,7 @@ function Landing({
       e.currentTarget.style.borderColor = T.border;
       e.currentTarget.style.color = T.textMid;
     }
-  }, "Scan my address \u2191")))), React.createElement("footer", {
+  }, "Scan my address \u2191")))), React.createElement("div", {
     style: {
       borderTop: `1px solid ${T.border}`,
       padding: isMobile ? "18px 20px" : "16px 48px",
@@ -4855,6 +4874,9 @@ function Scanning({
     };
   }, []);
   return React.createElement("div", {
+    role: "main",
+    "aria-live": "polite",
+    "aria-label": isLightning ? "Auditing Lightning node" : "Analyzing wallet",
     style: {
       minHeight: "100vh",
       background: T.bg,
@@ -4865,7 +4887,9 @@ function Scanning({
       padding: 32,
       gap: 24
     }
-  }, React.createElement("div", {
+  }, React.createElement("h1", {
+    className: "sr-only"
+  }, isLightning ? "Auditing Lightning node" : "Analyzing Bitcoin wallet"), React.createElement("div", {
     style: {
       width: 180,
       height: 120,
@@ -6163,6 +6187,8 @@ function Dashboard({
     return () => clearTimeout(id);
   }, [score, isEmpty]);
   if (isEmpty) return React.createElement("div", {
+    role: "main",
+    "aria-label": "Empty address",
     style: {
       minHeight: "100vh",
       background: T.bg,
@@ -6173,7 +6199,9 @@ function Dashboard({
       padding: 32,
       gap: 20
     }
-  }, React.createElement("div", {
+  }, React.createElement("h1", {
+    className: "sr-only"
+  }, "This address has no on-chain history"), React.createElement("div", {
     style: {
       fontFamily: T.mono,
       fontSize: 10,
@@ -6237,6 +6265,8 @@ function Dashboard({
     });
   };
   return React.createElement("div", {
+    role: "main",
+    "aria-label": `Privacy audit for ${address === "DEMO" ? "demo wallet" : address}`,
     style: {
       minHeight: "100vh",
       background: T.bg,
@@ -6244,7 +6274,9 @@ function Dashboard({
       flexDirection: "column",
       paddingBottom: isMobile ? 64 : 0
     }
-  }, React.createElement("nav", {
+  }, React.createElement("h1", {
+    className: "sr-only"
+  }, "Privacy score ", score, " of 100, grade ", grade, " \u2014 ", riskLabel), React.createElement("nav", {
     style: {
       display: "flex",
       alignItems: "center",
@@ -8057,13 +8089,17 @@ function LightningDashboard({
   const TABS = isMobile ? ["Fix It", "Checks", "Channels"] : ["Fix It", "Checks", "Channels", "Methodology"];
   const handleRescan = () => onRescan && onRescan(nodeId, false, "ln_pubkey");
   return React.createElement("div", {
+    role: "main",
+    "aria-label": `Lightning privacy audit for ${nodeData?.alias || nodeId.slice(0, 16)}`,
     style: {
       minHeight: "100vh",
       background: T.bg,
       display: "flex",
       flexDirection: "column"
     }
-  }, shareOpen && React.createElement(ShareCard, {
+  }, React.createElement("h1", {
+    className: "sr-only"
+  }, "Lightning privacy score ", score, " of 100, grade ", grade), shareOpen && React.createElement(ShareCard, {
     score: score,
     grade: grade,
     checks: checks,
@@ -9278,6 +9314,8 @@ function App() {
   return React.createElement(React.Fragment, null, React.createElement("style", null, CSS), React.createElement(Toast, {
     toasts: toast.toasts
   }), autoDemo && page === "landing" && React.createElement("div", {
+    role: "status",
+    "aria-label": "Auto-demo notice",
     style: {
       position: "fixed",
       bottom: 24,

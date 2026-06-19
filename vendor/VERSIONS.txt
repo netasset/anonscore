@@ -1,5 +1,15 @@
 Self-hosted vendor libraries (no third-party CDN requests — privacy + speed + robustness)
+
+# Scripts (vendor/)
 react              18.3.1
 react-dom          18.3.1
 canvas-confetti    1.9.3
 dom-to-image-more  3.4.5
+
+# Fonts (vendor/fonts/) — fetched from Google Fonts API, served same-origin.
+# Re-fetch by running:  node scripts/fetch-fonts.mjs
+# Only the weights actually used by the app are included (subsetting matters):
+Oxanium            700, 800
+Outfit             400, 500, 600, 700
+Fraunces           300, 400
+JetBrains Mono     400, 500, 600, 700
