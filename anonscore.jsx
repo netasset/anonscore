@@ -4,7 +4,7 @@ const { useState, useEffect, useCallback, useRef, useMemo } = React;
    GLOBAL CSS
 ───────────────────────────────────────────── */
 const CSS = `
-@import url('https://fonts.googleapis.com/css2?family=Oxanium:wght@400;600;700;800&family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,600;1,9..144,300;1,9..144,400&family=JetBrains+Mono:wght@300;400;500;600&family=Outfit:wght@300;400;500;600;700&display=swap');
+/* Fonts are loaded via a preconnected <link> in index.html (faster than @import). */
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 html{scroll-behavior:smooth}
 body{background:#0b0d14;color:#e6edf3;font-family:'Outfit',sans-serif;-webkit-font-smoothing:antialiased}
@@ -1382,13 +1382,11 @@ function ShareCard({ score, grade, checks, address, isLightning = false, onClose
     if (!cardRef.current || downloading) return;
     setDownloading(true);
     try {
-      // Load dom-to-image-more from cdnjs if not already loaded
+      // Load self-hosted dom-to-image-more on demand (same-origin — no third-party request)
       if (!window.domtoimage) {
         await new Promise((res, rej) => {
           const s = document.createElement("script");
-          s.src = "https://cdnjs.cloudflare.com/ajax/libs/dom-to-image-more/3.4.0/dom-to-image-more.min.js";
-          s.integrity = "sha384-OLBgp1GsljhM2TJ+sbHjaiH9txEUvgdDTAzHv2P24donTt6/529l+9Ua0vFImLlb";
-          s.crossOrigin = "anonymous";
+          s.src = "vendor/dom-to-image-more.min.js";
           s.onload = res; s.onerror = rej;
           document.head.appendChild(s);
         });

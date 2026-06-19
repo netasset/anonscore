@@ -4,21 +4,54 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>AnonScore — Bitcoin & Lightning Privacy Audit</title>
-  <meta name="description" content="Free Bitcoin privacy score for any wallet address. See exactly what blockchain analysts see — then fix it." />
-  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-  <!-- Tailwind CSS CDN -->
-  <script src="https://cdn.tailwindcss.com"></script>
-  <!-- canvas-confetti -->
-  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"></script>
-  <style>
-    @import url('https://fonts.googleapis.com/css2?family=Oxanium:wght@400;600;700;800&family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,600;1,9..144,300;1,9..144,400&family=JetBrains+Mono:wght@300;400;500;600&family=Outfit:wght@300;400;500;600;700&display=swap');
-    /* Additional polish styles can go here if needed */
-  </style>
+  <meta name="description" content="Paste a Bitcoin address or Lightning node pubkey. Get a privacy score, every issue explained, and a ranked fix plan. Free, open source, nothing stored." />
+  <meta name="theme-color" content="#0b0d14" />
+  <link rel="canonical" href="https://anonscore.com/" />
+
+  <!-- Inline SVG favicon (no extra request) -->
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230b0d14'/%3E%3Ctext x='16' y='23' font-size='21' text-anchor='middle' fill='%2322D3EE' font-family='monospace' font-weight='700'%3E%E2%82%BF%3C/text%3E%3C/svg%3E" />
+
+  <!-- Open Graph / Twitter -->
+  <meta property="og:title" content="AnonScore — Free Bitcoin & Lightning Privacy Audit" />
+  <meta property="og:description" content="10 Bitcoin heuristics + 8 Lightning checks. Score 0–100. Free, open source, runs in your browser. No data stored." />
+  <meta property="og:url" content="https://anonscore.com/" />
+  <meta property="og:type" content="website" />
+  <meta property="og:image" content="https://anonscore.com/og.png" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="AnonScore — Bitcoin & Lightning Privacy Score" />
+  <meta name="twitter:description" content="Is your Bitcoin stack leaking? Find out in 60 seconds. Free, open source." />
+  <meta name="twitter:image" content="https://anonscore.com/og.png" />
+
+  <!-- Fonts: preconnect + display=swap (text paints immediately with fallback, then swaps) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Oxanium:wght@400;600;700;800&family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,600;1,9..144,300;1,9..144,400&family=JetBrains+Mono:wght@300;400;500;600&family=Outfit:wght@300;400;500;600;700&display=swap" />
+
+  <!-- App scripts: self-hosted, deferred (parse-blocking removed). defer preserves order. -->
+  <script defer src="vendor/react.production.min.js"></script>
+  <script defer src="vendor/react-dom.production.min.js"></script>
+  <script defer src="vendor/confetti.browser.min.js"></script>
+  <script defer src="anonscore.js"></script>
+
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebApplication",
+    "name": "AnonScore",
+    "url": "https://anonscore.com/",
+    "applicationCategory": "SecurityApplication",
+    "operatingSystem": "Any (web)",
+    "description": "Free client-side Bitcoin & Lightning privacy audit. Scores any address or node 0–100, explains every issue, and gives a ranked fix plan. Nothing is stored.",
+    "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+    "isAccessibleForFree": true
+  }
+  </script>
 </head>
 <body style="margin:0;background:#0b0d14">
   <div id="root"></div>
-  <script type="text/babel" data-presets="react" src="anonscore.jsx"></script>
+  <noscript style="color:#e6edf3;font-family:sans-serif;display:block;max-width:480px;margin:80px auto;padding:0 24px;text-align:center;line-height:1.6">
+    <h1 style="font-weight:600">AnonScore</h1>
+    <p>This Bitcoin &amp; Lightning privacy audit runs entirely in your browser and needs JavaScript enabled. No data is ever sent to a server.</p>
+  </noscript>
 </body>
 </html>
