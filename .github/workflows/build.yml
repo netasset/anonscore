@@ -1,0 +1,34 @@
+name: Build anonscore.js
+
+# Recompiles anonscore.jsx -> anonscore.js on feature branches so the committed
+# build never goes stale. main is updated only via PRs, which therefore always
+# carry a fresh build (avoids pushing to the protected main branch directly).
+on:
+  push:
+    branches-ignore: [main]
+    paths: ["anonscore.jsx"]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm install
+      - run: npm run build
+      - name: Commit rebuilt anonscore.js if changed
+        run: |
+          if git diff --quiet -- anonscore.js; then
+            echo "anonscore.js already up to date."
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add anonscore.js
+            git commit -m "build: recompile anonscore.js [skip ci]"
+            git push
+          fi

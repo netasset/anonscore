@@ -1,0 +1,14 @@
+{
+  "name": "anonscore",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Free Bitcoin & Lightning privacy audit — client-side, nothing stored.",
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.25.0",
+    "@babel/preset-react": "^7.24.0"
+  }
+}
