@@ -35,6 +35,9 @@ input,button,select,textarea{font-family:'Outfit',sans-serif;-webkit-tap-highlig
 @keyframes scanRing{0%{transform:scale(.4);opacity:.55}100%{transform:scale(2.4);opacity:0}}
 @keyframes shake{0%,100%{transform:translateX(0)}10%,30%,50%,70%,90%{transform:translateX(-3px)}20%,40%,60%,80%{transform:translateX(3px)}}
 .dot-grid{background-image:radial-gradient(circle,#ffffff06 1px,transparent 1px);background-size:24px 24px}
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+:focus-visible{outline:2px solid #22D3EE;outline-offset:2px;border-radius:4px}
+input:focus-visible,button:focus-visible{outline-offset:2px}
 @media (prefers-reduced-motion: reduce){
   *,*::before,*::after{animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important}
 }
@@ -52,7 +55,7 @@ const T = {
   borderLo: "#1e2130",
   text:     "#e8eaf6",
   textMid:  "#9096b8",
-  textDim:  "#505470",
+  textDim:  "#888fae",  /* clears WCAG AA 4.5:1 against bg (#0b0d14) and card (#181b27) */
   cyan:     "#22D3EE",
   cyanLo:   "#22D3EE14",
   cyanMid:  "#22D3EE28",
@@ -973,7 +976,7 @@ const Pill = ({ children, active, onClick, color }) => (
 
 function Toast({ toasts }) {
   return (
-    <div style={{ position: "fixed", bottom: 80, right: 20, zIndex: 9999, display: "flex", flexDirection: "column", gap: 8, pointerEvents: "none" }}>
+    <div role="region" aria-label="Notifications" aria-live="polite" style={{ position: "fixed", bottom: 80, right: 20, zIndex: 9999, display: "flex", flexDirection: "column", gap: 8, pointerEvents: "none" }}>
       {toasts.map(t => (
         <div key={t.id} style={{ background: T.card, border: `1px solid ${t.color || T.border}`, borderLeft: `3px solid ${t.color || T.cyan}`, borderRadius: 10, padding: "12px 16px", display: "flex", gap: 10, alignItems: "center", boxShadow: "0 8px 32px #00000066", animation: t.out ? "toastOut .3s ease both" : "toastIn .3s ease both", minWidth: 220 }}>
           <span style={{ fontSize: 16 }}>{t.icon || "ℹ️"}</span>
@@ -1190,9 +1193,10 @@ function DemoPreview() {
         })}
       </div>
       {/* Dot indicators */}
-      <div style={{ display: "flex", justifyContent: "center", gap: 8 }}>
+      <div style={{ display: "flex", justifyContent: "center", gap: 8 }} role="tablist" aria-label="Example wallets">
         {DEMO_EXAMPLES.map((ex, i) => (
           <button key={i} onClick={() => { setIdx(i); setAnimKey(k => k + 1); }}
+            role="tab" aria-selected={i === idx} aria-label={`Show example ${i + 1} of ${DEMO_EXAMPLES.length}${ex.label ? ": " + ex.label : ""}`}
             style={{ width: i === idx ? 20 : 8, height: 8, borderRadius: 4, background: i === idx ? ex.color : T.textDim, border: "none", cursor: "pointer", transition: "all .3s", padding: 0 }} />
         ))}
       </div>
@@ -1565,12 +1569,13 @@ const STATUS_META = {
 };
 
 function CaseFiles({ onOpenCase, onBack, isMobile }) {
+  const PAGE_ROLE_LABEL = "AnonScore case files — notable Bitcoin wallets";
   const [filter, setFilter] = useState("all");
   const categories = ["all", "exchange", "seizure", "miner"];
   const visible = filter === "all" ? CASE_FILES : CASE_FILES.filter(c => c.category === filter);
 
   return (
-    <div style={{ minHeight: "100vh", background: T.bg, display: "flex", flexDirection: "column" }}>
+    <div role="main" aria-label={PAGE_ROLE_LABEL} style={{ minHeight: "100vh", background: T.bg, display: "flex", flexDirection: "column" }}>
       {/* Nav */}
       <nav style={{ display: "flex", alignItems: "center", gap: 10, padding: isMobile ? "12px 16px" : "12px 32px", borderBottom: `1px solid ${T.border}`, background: T.bg, position: "sticky", top: 0, zIndex: 100 }}>
         <button onClick={onBack} style={{ background: "transparent", border: `1.5px solid ${T.border}`, borderRadius: 8, padding: "7px 12px", color: T.textMid, fontFamily: T.sans, fontSize: 13, cursor: "pointer", transition: "border .15s" }}
@@ -1646,6 +1651,7 @@ function CaseFiles({ onOpenCase, onBack, isMobile }) {
    CASE DETAIL — individual case with live scan
 ───────────────────────────────────────────── */
 function CaseDetail({ caseFile, onBack, onAnalyze, isMobile }) {
+  const PAGE_ROLE_LABEL = "AnonScore case file: " + caseFile.title;
   const [shareMode, setShareMode] = useState(null); // null | "thread" | "link"
   const [copied, setCopied] = useState(false);
   const cat = CATEGORY_META[caseFile.category];
@@ -1661,7 +1667,7 @@ function CaseDetail({ caseFile, onBack, onAnalyze, isMobile }) {
   const threadText = caseFile.thread.join("\n\n---\n\n");
 
   return (
-    <div style={{ minHeight: "100vh", background: T.bg, display: "flex", flexDirection: "column" }}>
+    <div role="main" aria-label={PAGE_ROLE_LABEL} style={{ minHeight: "100vh", background: T.bg, display: "flex", flexDirection: "column" }}>
       {/* Nav */}
       <nav style={{ display: "flex", alignItems: "center", gap: 10, padding: isMobile ? "12px 16px" : "12px 32px", borderBottom: `1px solid ${T.border}`, background: T.bg, position: "sticky", top: 0, zIndex: 100 }}>
         <button onClick={onBack} style={{ background: "transparent", border: `1.5px solid ${T.border}`, borderRadius: 8, padding: "7px 12px", color: T.textMid, fontFamily: T.sans, fontSize: 13, cursor: "pointer" }}
@@ -1827,7 +1833,7 @@ function Landing({ onAnalyze, isMobile, onCases }) {
   };
 
   return (
-    <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", background: T.bg }}>
+    <div role="main" aria-label="AnonScore — Bitcoin & Lightning privacy audit" style={{ minHeight: "100vh", display: "flex", flexDirection: "column", background: T.bg }}>
       {/* Nav */}
       <nav style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: isMobile ? "14px 20px" : "14px 48px", borderBottom: `1px solid ${T.border}`, background: T.bg, position: "sticky", top: 0, zIndex: 100 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -2185,7 +2191,7 @@ function Landing({ onAnalyze, isMobile, onCases }) {
       </section>
 
       {/* Footer */}
-      <footer style={{ borderTop: `1px solid ${T.border}`, padding: isMobile ? "18px 20px" : "16px 48px", display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+      <div style={{ borderTop: `1px solid ${T.border}`, padding: isMobile ? "18px 20px" : "16px 48px", display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
           <span style={{ fontFamily: T.display, fontSize: 10, color: T.textDim, letterSpacing: 3 }}>ANONSCORE · MIT</span>
           <a href="https://github.com/netasset/anonscore" target="_blank" rel="noopener noreferrer"
@@ -2201,7 +2207,7 @@ function Landing({ onAnalyze, isMobile, onCases }) {
             by OPNorange ↗
           </a>
         </div>
-      </footer>
+      </div>
     </div>
   );
 }
@@ -2260,7 +2266,8 @@ function Scanning({ address, isLightning, dataReady }) {
   }, []);
 
   return (
-    <div style={{ minHeight: "100vh", background: T.bg, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 32, gap: 24 }}>
+    <div role="main" aria-live="polite" aria-label={isLightning ? "Auditing Lightning node" : "Analyzing wallet"} style={{ minHeight: "100vh", background: T.bg, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 32, gap: 24 }}>
+      <h1 className="sr-only">{isLightning ? "Auditing Lightning node" : "Analyzing Bitcoin wallet"}</h1>
       {/* Decorative animated visual — bolt for Lightning, mesh for Bitcoin */}
       <div style={{ width: 180, height: 120, position: "relative" }} aria-hidden="true">
         {isLightning ? (
@@ -2936,7 +2943,8 @@ function Dashboard({ address, addrInfo, utxos, txs, isMobile, onBack, onRescan, 
 
   // Empty address — show a clear message instead of a misleading score
   if (isEmpty) return (
-    <div style={{ minHeight: "100vh", background: T.bg, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 32, gap: 20 }}>
+    <div role="main" aria-label="Empty address" style={{ minHeight: "100vh", background: T.bg, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 32, gap: 20 }}>
+      <h1 className="sr-only">This address has no on-chain history</h1>
       <div style={{ fontFamily: T.mono, fontSize: 10, color: T.textDim, letterSpacing: 2 }}>NO ON-CHAIN HISTORY</div>
       <div style={{ fontFamily: T.serif, fontSize: 28, color: T.text, textAlign: "center", fontWeight: 400 }}>This address has never been used.</div>
       <div style={{ fontSize: 14, color: T.textMid, maxWidth: 400, textAlign: "center", lineHeight: 1.7 }}>
@@ -2981,7 +2989,8 @@ function Dashboard({ address, addrInfo, utxos, txs, isMobile, onBack, onRescan, 
   };
 
   return (
-    <div style={{ minHeight: "100vh", background: T.bg, display: "flex", flexDirection: "column", paddingBottom: isMobile ? 64 : 0 }}>
+    <div role="main" aria-label={`Privacy audit for ${address === "DEMO" ? "demo wallet" : address}`} style={{ minHeight: "100vh", background: T.bg, display: "flex", flexDirection: "column", paddingBottom: isMobile ? 64 : 0 }}>
+      <h1 className="sr-only">Privacy score {score} of 100, grade {grade} — {riskLabel}</h1>
       {/* Nav */}
       <nav style={{ display: "flex", alignItems: "center", gap: 10, padding: isMobile ? "12px 16px" : "12px 32px", borderBottom: `1px solid ${T.border}`, background: T.bg, position: "sticky", top: 0, zIndex: 100 }}>
         <button onClick={onBack} style={{ background: "transparent", border: `1.5px solid ${T.border}`, borderRadius: 8, padding: "7px 12px", color: T.textMid, fontFamily: T.sans, fontSize: 13, cursor: "pointer", transition: "border .15s" }}
@@ -3556,7 +3565,8 @@ function LightningDashboard({ nodeId, nodeData, channels, isMobile, onBack, onRe
   const handleRescan = () => onRescan && onRescan(nodeId, false, "ln_pubkey");
 
   return (
-    <div style={{ minHeight: "100vh", background: T.bg, display: "flex", flexDirection: "column" }}>
+    <div role="main" aria-label={`Lightning privacy audit for ${nodeData?.alias || nodeId.slice(0, 16)}`} style={{ minHeight: "100vh", background: T.bg, display: "flex", flexDirection: "column" }}>
+      <h1 className="sr-only">Lightning privacy score {score} of 100, grade {grade}</h1>
 
       {/* ── Share modal — unified with BTC ── */}
       {shareOpen && <ShareCard score={score} grade={grade} checks={checks} address={nodeId} isLightning={true} onClose={() => setShareOpen(false)} />}
@@ -4064,7 +4074,7 @@ function App() {
 
       {/* Auto-demo banner for first-time visitors */}
       {autoDemo && page === "landing" && (
-        <div style={{ position: "fixed", bottom: 24, left: "50%", transform: "translateX(-50%)", zIndex: 800, background: T.card, border: `1px solid ${T.cyan}44`, borderRadius: 14, padding: "14px 22px", display: "flex", alignItems: "center", gap: 14, animation: "fadeUp .4s ease .6s both", boxShadow: `0 8px 32px #00000066, 0 0 0 1px ${T.cyan}22` }}>
+        <div role="status" aria-label="Auto-demo notice" style={{ position: "fixed", bottom: 24, left: "50%", transform: "translateX(-50%)", zIndex: 800, background: T.card, border: `1px solid ${T.cyan}44`, borderRadius: 14, padding: "14px 22px", display: "flex", alignItems: "center", gap: 14, animation: "fadeUp .4s ease .6s both", boxShadow: `0 8px 32px #00000066, 0 0 0 1px ${T.cyan}22` }}>
           <div style={{ fontSize: 20 }}>🔍</div>
           <div>
             <div style={{ fontSize: 13, fontWeight: 600, color: T.text }}>Watch AnonScore in action</div>
