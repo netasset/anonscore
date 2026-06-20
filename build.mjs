@@ -34,11 +34,14 @@ const indexHtml = readFileSync(join(root, "index.html"), "utf8");
 const precacheBytes = [
   compiled,
   indexHtml,
+  readFileSync(join(root, "manifest.webmanifest")),
   readFileSync(join(root, "vendor/react.production.min.js")),
   readFileSync(join(root, "vendor/react-dom.production.min.js")),
   readFileSync(join(root, "vendor/confetti.browser.min.js")),
   readFileSync(join(root, "vendor/dom-to-image-more.min.js")),
   readFileSync(join(root, "vendor/fonts/fonts.css")),
+  readFileSync(join(root, "vendor/icon-192.png")),
+  readFileSync(join(root, "vendor/icon-512.png")),
 ];
 const hash = createHash("sha256");
 precacheBytes.forEach((b) => hash.update(b));

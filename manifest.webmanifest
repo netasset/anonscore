@@ -1,0 +1,18 @@
+{
+  "name": "AnonScore — Bitcoin & Lightning Privacy Audit",
+  "short_name": "AnonScore",
+  "description": "Free client-side Bitcoin & Lightning privacy audit. Scores any address or node 0–100, explains every issue, and gives a ranked fix plan. Nothing is stored.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0b0d14",
+  "theme_color": "#0b0d14",
+  "lang": "en",
+  "categories": ["finance", "security", "utilities"],
+  "icons": [
+    { "src": "/vendor/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/vendor/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/vendor/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
