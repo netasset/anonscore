@@ -5,10 +5,14 @@
   "description": "Free Bitcoin & Lightning privacy audit — client-side, nothing stored.",
   "type": "module",
   "scripts": {
-    "build": "node build.mjs"
+    "build": "node build.mjs",
+    "test": "node scripts/test.mjs",
+    "fetch-fonts": "node scripts/fetch-fonts.mjs"
   },
   "devDependencies": {
     "@babel/core": "^7.25.0",
-    "@babel/preset-react": "^7.24.0"
+    "@babel/preset-react": "^7.24.0",
+    "axe-core": "^4.10.0",
+    "playwright": "^1.49.0"
   }
 }

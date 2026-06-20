@@ -2815,7 +2815,7 @@ const STATUS_META = {
   },
   dormant: {
     label: "Dormant",
-    color: "#505470"
+    color: "#888fae"
   },
   liquidating: {
     label: "Liquidating",
@@ -3393,7 +3393,7 @@ function CaseDetail({
     rel: "noopener noreferrer",
     style: {
       color: T.cyan,
-      textDecoration: "none"
+      textDecoration: "underline"
     }
   }, "Verify it in the open source code \u2192"))))), React.createElement("div", {
     style: {
@@ -3611,6 +3611,17 @@ function Landing({
     setHistory(getHistory());
   };
   const inputRef = useRef();
+  useEffect(() => {
+    const onKey = e => {
+      if (e.key !== "/" || e.metaKey || e.ctrlKey || e.altKey) return;
+      const t = e.target;
+      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
+      e.preventDefault();
+      inputRef.current?.focus();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
   const inputType = detectInputType(input);
   const isLn = inputType === "ln_pubkey" || inputType === "ln_address";
   const submit = (val, plain = false) => {

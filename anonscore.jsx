@@ -1563,7 +1563,7 @@ const CATEGORY_META = {
 };
 const STATUS_META = {
   active:     { label: "Active",      color: "#3fb950" },
-  dormant:    { label: "Dormant",     color: "#505470" },
+  dormant:    { label: "Dormant",     color: "#888fae" },
   liquidating:{ label: "Liquidating", color: "#E8A730" },
   liquidated: { label: "Liquidated",  color: "#58a6ff" },
 };
@@ -1733,7 +1733,7 @@ function CaseDetail({ caseFile, onBack, onAnalyze, isMobile }) {
               </div>
               <div style={{ fontSize: 12, color: T.textDim, lineHeight: 1.7, marginTop: 8, paddingTop: 8, borderTop: `1px solid ${T.borderLo}` }}>
                 🔒 <strong style={{ color: T.text }}>Personal wallets work differently.</strong> When you scan your own address, the AI receives only your score and issue names — never transaction IDs, UTXO data, or anything that could identify you. That boundary is enforced in code and shown in the consent screen before every session.{" "}
-                <a href="https://github.com/netasset/anonscore" target="_blank" rel="noopener noreferrer" style={{ color: T.cyan, textDecoration: "none" }}>Verify it in the open source code →</a>
+                <a href="https://github.com/netasset/anonscore" target="_blank" rel="noopener noreferrer" style={{ color: T.cyan, textDecoration: "underline" }}>Verify it in the open source code →</a>
               </div>
             </div>
           </div>
@@ -1816,6 +1816,19 @@ function Landing({ onAnalyze, isMobile, onCases }) {
   const [history, setHistory] = useState(() => getHistory());
   const deleteHistory = (addr) => { removeFromHistory(addr); setHistory(getHistory()); };
   const inputRef = useRef();
+
+  // Keyboard shortcut: "/" focuses the address input (unless the user is already typing somewhere).
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key !== "/" || e.metaKey || e.ctrlKey || e.altKey) return;
+      const t = e.target;
+      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
+      e.preventDefault();
+      inputRef.current?.focus();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   const inputType = detectInputType(input);
   const isLn = inputType === "ln_pubkey" || inputType === "ln_address";
