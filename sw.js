@@ -6,16 +6,19 @@
  * calls (blockstream.info, mempool.space) go straight to the network — the
  * service worker never sees user addresses.
  */
-const CACHE = "anonscore-60d6ca18b1fd";
+const CACHE = "anonscore-5b5b82eecc05";
 const PRECACHE = [
   "/",
   "/index.html",
   "/anonscore.js",
+  "/manifest.webmanifest",
   "/vendor/react.production.min.js",
   "/vendor/react-dom.production.min.js",
   "/vendor/confetti.browser.min.js",
   "/vendor/dom-to-image-more.min.js",
   "/vendor/fonts/fonts.css",
+  "/vendor/icon-192.png",
+  "/vendor/icon-512.png",
 ];
 
 self.addEventListener("install", (e) => {

@@ -62,6 +62,19 @@ if (swCode.includes("__BUILD_HASH__")) fail("sw.js still has __BUILD_HASH__ plac
 else if (!/anonscore-[a-f0-9]{12}/.test(swCode)) fail("sw.js cache key not in expected anonscore-<hash> format");
 else pass(`sw.js cache key stamped (${swCode.match(/anonscore-[a-f0-9]{12}/)[0]})`);
 
+// PWA manifest must be valid JSON with the keys browsers require for "installable".
+try {
+  const m = JSON.parse(readFileSync(join(ROOT, "manifest.webmanifest"), "utf8"));
+  const need = ["name", "short_name", "start_url", "display", "icons"];
+  const missing = need.filter((k) => !m[k]);
+  if (missing.length) fail(`manifest.webmanifest missing keys: ${missing.join(", ")}`);
+  else if (!m.icons.some((i) => i.sizes === "192x192") || !m.icons.some((i) => i.sizes === "512x512"))
+    fail("manifest.webmanifest missing required 192x192 or 512x512 icon");
+  else pass(`PWA manifest valid (${m.icons.length} icons, display=${m.display})`);
+} catch (e) {
+  fail("manifest.webmanifest invalid JSON: " + e.message.slice(0, 100));
+}
+
 // ───────────────────────────────────────────
 // 2. Spin up local server serving the actual production files
 // ───────────────────────────────────────────
