@@ -1,0 +1,6 @@
+Contact: https://github.com/netasset/anonscore/security/advisories/new
+Contact: mailto:netassetpremium@gmail.com
+Expires: 2027-12-31T23:59:59Z
+Preferred-Languages: en
+Canonical: https://anonscore.com/.well-known/security.txt
+Policy: https://github.com/netasset/anonscore#security

@@ -48,10 +48,32 @@
   }
   </script>
 </head>
-<body style="margin:0;background:#0b0d14">
-  <div id="root"></div>
+<body style="margin:0;background:#0b0d14;color:#e8eaf6;font-family:'Outfit',sans-serif">
+  <!-- Pre-rendered hero shell: paints instantly (no need to wait for React to mount).
+       React replaces all of this when it boots, in the same colors → no visible swap. -->
+  <div id="root">
+    <div style="min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px;text-align:center">
+      <div style="font-family:'Oxanium',sans-serif;font-size:18px;letter-spacing:4px;font-weight:700;margin-bottom:32px">
+        <span style="color:#F7931A">₿</span> ANON<span style="color:#22D3EE">SCORE</span>
+      </div>
+      <div style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:2.5px;color:#22D3EE;margin-bottom:18px">
+        FREE BITCOIN &amp; LIGHTNING PRIVACY AUDIT
+      </div>
+      <h1 style="font-family:'Fraunces',serif;font-size:clamp(38px,8vw,56px);line-height:1.06;font-weight:400;max-width:680px;margin:0 0 20px">
+        Is your Bitcoin stack leaking?<br>
+        <em style="color:#22D3EE">Find out in 60 seconds.</em>
+      </h1>
+      <p style="font-size:16px;color:#9096b8;line-height:1.7;max-width:520px;font-weight:300;margin:0 0 28px">
+        Paste a Bitcoin address or a Lightning node pubkey. Get a privacy score, every issue explained, and a ranked fix plan — free, open source, nothing stored.
+      </p>
+      <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#888fae;letter-spacing:1.5px;display:inline-flex;align-items:center;gap:8px">
+        <span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#22D3EE;box-shadow:0 0 8px #22D3EE"></span>
+        LOADING…
+      </div>
+    </div>
+  </div>
   <noscript style="color:#e6edf3;font-family:sans-serif;display:block;max-width:480px;margin:80px auto;padding:0 24px;text-align:center;line-height:1.6">
-    <h1 style="font-weight:600">AnonScore</h1>
+    <h2 style="font-weight:600">JavaScript required</h2>
     <p>This Bitcoin &amp; Lightning privacy audit runs entirely in your browser and needs JavaScript enabled. No data is ever sent to a server.</p>
   </noscript>
   <script>
