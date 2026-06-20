@@ -51,10 +51,16 @@ if (failures.length === 0) pass("index.html references only self-hosted assets")
 
 for (const f of ["vendor/react.production.min.js", "vendor/react-dom.production.min.js",
                  "vendor/confetti.browser.min.js", "vendor/dom-to-image-more.min.js",
-                 "vendor/fonts/fonts.css"]) {
+                 "vendor/fonts/fonts.css", "sw.js"]) {
   if (!existsSync(join(ROOT, f))) fail(`Missing vendor file: ${f}`);
 }
 pass("All vendor files present");
+
+// Service worker must have a build hash injected (not the placeholder).
+const swCode = readFileSync(join(ROOT, "sw.js"), "utf8");
+if (swCode.includes("__BUILD_HASH__")) fail("sw.js still has __BUILD_HASH__ placeholder — run `npm run build`");
+else if (!/anonscore-[a-f0-9]{12}/.test(swCode)) fail("sw.js cache key not in expected anonscore-<hash> format");
+else pass(`sw.js cache key stamped (${swCode.match(/anonscore-[a-f0-9]{12}/)[0]})`);
 
 // ───────────────────────────────────────────
 // 2. Spin up local server serving the actual production files
@@ -110,6 +116,29 @@ await page.keyboard.press("/");
 const focused = await page.evaluate(() => document.activeElement?.tagName);
 if (focused !== "INPUT") fail(`"/" did not focus input (got: ${focused})`);
 else pass(`"/" focuses address input`);
+
+// Service worker should register and precache the static assets.
+await page.waitForFunction(
+  () => navigator.serviceWorker?.controller || navigator.serviceWorker?.ready,
+  { timeout: 8000 }
+).catch(() => {});
+const swInfo = await page.evaluate(async () => {
+  if (!navigator.serviceWorker) return { supported: false };
+  const reg = await navigator.serviceWorker.getRegistration();
+  if (!reg) return { supported: true, registered: false };
+  await navigator.serviceWorker.ready;
+  const keys = await caches.keys();
+  let entryCount = 0;
+  for (const k of keys) {
+    const c = await caches.open(k);
+    entryCount += (await c.keys()).length;
+  }
+  return { supported: true, registered: true, scope: reg.scope, caches: keys, entries: entryCount };
+});
+if (!swInfo.supported) fail("Service worker API not supported in test browser");
+else if (!swInfo.registered) fail("Service worker did not register");
+else if (swInfo.entries < 5) fail(`Service worker registered but precached only ${swInfo.entries} entries (expected ≥5)`);
+else pass(`Service worker registered, ${swInfo.entries} entries cached in ${swInfo.caches[0]}`);
 
 // Run a demo scan end-to-end
 console.log("[4/5] Demo scan flow");
