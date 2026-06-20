@@ -13,3 +13,7 @@
 
 /og.png
   Cache-Control: public, max-age=2592000
+
+# Service worker: must always be re-checked so a new deploy actually rolls out.
+/sw.js
+  Cache-Control: no-cache, max-age=0, must-revalidate
