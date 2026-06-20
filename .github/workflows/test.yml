@@ -1,0 +1,34 @@
+name: Test
+
+# End-to-end safety net on every PR. Catches the kinds of regressions that
+# previously slipped through: the May disaster (source file emptied), the broken
+# PNG export (wrong SRI hash), CDN creep, console errors, a11y regressions.
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install deps
+        run: npm install
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+      - name: Build
+        run: npm run build
+      - name: Verify build is up-to-date (anonscore.js matches source)
+        run: |
+          if ! git diff --quiet -- anonscore.js; then
+            echo "::error::anonscore.js is out of sync with anonscore.jsx. Run 'npm run build' and commit."
+            git --no-pager diff anonscore.js | head -40
+            exit 1
+          fi
+      - name: Run test suite
+        run: npm test
