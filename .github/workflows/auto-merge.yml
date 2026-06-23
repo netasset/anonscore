@@ -33,7 +33,12 @@ jobs:
       - uses: actions/github-script@v7
         with:
           script: |
-            const REQUIRED_CHECKS = ["build", "test"];
+            // "test" is the canonical gate: it builds, verifies the build is
+            // in sync with source, runs the smoke + a11y + network checks, and
+            // is required to run on every PR. "build" only triggers when
+            // anonscore.jsx changes, so requiring it would block workflow-only
+            // or doc-only PRs.
+            const REQUIRED_CHECKS = ["test"];
 
             const { data: prs } = await github.rest.pulls.list({
               owner: context.repo.owner,
