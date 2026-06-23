@@ -4383,26 +4383,7 @@ function Landing({
     },
     onMouseOver: e => e.currentTarget.style.opacity = ".88",
     onMouseOut: e => e.currentTarget.style.opacity = "1"
-  }, isLn ? "⚡ Audit →" : "Analyze →")), !isLn && React.createElement("div", {
-    style: {
-      display: "flex",
-      justifyContent: "flex-end",
-      marginTop: 5
-    }
-  }, React.createElement("button", {
-    onClick: () => submit(null, false),
-    style: {
-      background: "none",
-      border: "none",
-      cursor: "pointer",
-      fontFamily: T.mono,
-      fontSize: 10,
-      color: T.textDim,
-      padding: 0
-    },
-    onMouseOver: e => e.currentTarget.style.color = T.textMid,
-    onMouseOut: e => e.currentTarget.style.color = T.textDim
-  }, "skip plain English \u2192")), isLn && React.createElement("div", {
+  }, isLn ? "⚡ Audit →" : "Analyze →")), isLn && React.createElement("div", {
     style: {
       fontFamily: T.mono,
       fontSize: 10,
@@ -4444,12 +4425,29 @@ function Landing({
   })), React.createElement("div", {
     style: {
       display: "flex",
-      gap: 8
+      gap: 8,
+      flexWrap: "wrap"
     }
-  }, React.createElement("button", {
-    onClick: () => onAnalyze("DEMO", false, "btc"),
+  }, [{
+    addr: "DEMO",
+    label: "₿ Risky wallet",
+    color: T.btc,
+    type: "btc"
+  }, {
+    addr: "DEMO_A",
+    label: "✨ Pristine wallet",
+    color: T.green,
+    type: "btc"
+  }, {
+    addr: "DEMO_LN",
+    label: "⚡ Lightning node",
+    color: T.ln,
+    type: "ln_pubkey"
+  }].map(s => React.createElement("button", {
+    key: s.addr,
+    onClick: () => onAnalyze(s.addr, false, s.type),
     style: {
-      flex: 1,
+      flex: "1 1 30%",
       display: "flex",
       alignItems: "center",
       justifyContent: "center",
@@ -4457,79 +4455,23 @@ function Landing({
       background: T.surface,
       border: `1.5px solid ${T.border}`,
       borderRadius: 12,
-      padding: "11px 16px",
+      padding: "11px 14px",
       color: T.textMid,
       fontFamily: T.sans,
       fontSize: 13,
       fontWeight: 600,
       cursor: "pointer",
-      transition: "all .18s"
+      transition: "border-color .18s, color .18s"
     },
-    onMouseOver: e => e.currentTarget.style.borderColor = T.cyan,
-    onMouseOut: e => e.currentTarget.style.borderColor = T.border
-  }, "\u20BF Bitcoin sample"), React.createElement("button", {
-    onClick: () => onAnalyze("DEMO", true, "btc"),
-    style: {
-      flex: 1,
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-      gap: 8,
-      background: T.cyan,
-      border: "none",
-      borderRadius: 12,
-      padding: "11px 16px",
-      color: T.bg,
-      fontFamily: T.sans,
-      fontSize: 13,
-      fontWeight: 700,
-      cursor: "pointer",
-      transition: "all .18s",
-      boxShadow: `0 2px 14px ${T.cyanMid}`
+    onMouseOver: e => {
+      e.currentTarget.style.borderColor = s.color;
+      e.currentTarget.style.color = s.color;
     },
-    onMouseOver: e => e.currentTarget.style.opacity = ".88",
-    onMouseOut: e => e.currentTarget.style.opacity = "1"
-  }, "\uD83D\uDCAC Plain English")), React.createElement("div", {
-    style: {
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-      gap: 14,
-      flexWrap: "wrap"
+    onMouseOut: e => {
+      e.currentTarget.style.borderColor = T.border;
+      e.currentTarget.style.color = T.textMid;
     }
-  }, React.createElement("button", {
-    onClick: () => onAnalyze("DEMO_A", false, "btc"),
-    style: {
-      background: "none",
-      border: "none",
-      cursor: "pointer",
-      fontFamily: T.mono,
-      fontSize: 10,
-      color: T.green,
-      padding: 0
-    },
-    onMouseOver: e => e.currentTarget.style.opacity = ".7",
-    onMouseOut: e => e.currentTarget.style.opacity = "1"
-  }, "\u2728 See an A-grade wallet \u2192"), React.createElement("span", {
-    style: {
-      color: T.borderLo,
-      fontFamily: T.mono,
-      fontSize: 10
-    }
-  }, "\xB7"), React.createElement("button", {
-    onClick: () => onAnalyze("DEMO_LN", false, "ln_pubkey"),
-    style: {
-      background: "none",
-      border: "none",
-      cursor: "pointer",
-      fontFamily: T.mono,
-      fontSize: 10,
-      color: T.ln,
-      padding: 0
-    },
-    onMouseOver: e => e.currentTarget.style.opacity = ".7",
-    onMouseOut: e => e.currentTarget.style.opacity = "1"
-  }, "\u26A1 Try Lightning node sample \u2192")), React.createElement("div", {
+  }, s.label))), React.createElement("div", {
     style: {
       display: "flex",
       alignItems: "center",
@@ -4546,12 +4488,7 @@ function Landing({
       color: T.cyan,
       textDecoration: "none"
     }
-  }, "Open source"), React.createElement("span", {
-    style: {
-      color: T.textDim,
-      fontSize: 10
-    }
-  }, "\xB7 read-only \xB7 nothing stored"))))), React.createElement("div", {
+  }, "Open source \u2197"))))), React.createElement("div", {
     style: {
       borderTop: `1px solid ${T.border}`,
       borderBottom: `1px solid ${T.border}`,
@@ -4895,23 +4832,13 @@ function Landing({
       justifyContent: "center"
     }
   }, React.createElement("button", {
-    onClick: () => onAnalyze("DEMO", false, "btc"),
-    style: {
-      background: T.surface,
-      border: `1.5px solid ${T.border}`,
-      borderRadius: 12,
-      padding: "15px 28px",
-      color: T.text,
-      fontFamily: T.sans,
-      fontSize: 15,
-      fontWeight: 600,
-      cursor: "pointer",
-      transition: "all .18s"
+    onClick: () => {
+      inputRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "center"
+      });
+      setTimeout(() => inputRef.current?.focus(), 300);
     },
-    onMouseOver: e => e.currentTarget.style.borderColor = T.cyan,
-    onMouseOut: e => e.currentTarget.style.borderColor = T.border
-  }, "\u25B6 Try the demo"), React.createElement("button", {
-    onClick: () => onAnalyze("DEMO", true, "btc"),
     style: {
       background: T.cyan,
       border: "none",
@@ -4927,14 +4854,8 @@ function Landing({
     },
     onMouseOver: e => e.currentTarget.style.opacity = ".88",
     onMouseOut: e => e.currentTarget.style.opacity = "1"
-  }, "\uD83D\uDCAC Try in Plain English"), React.createElement("button", {
-    onClick: () => {
-      inputRef.current?.scrollIntoView({
-        behavior: "smooth",
-        block: "center"
-      });
-      setTimeout(() => inputRef.current?.focus(), 300);
-    },
+  }, "Scan my address \u2191"), React.createElement("button", {
+    onClick: () => onAnalyze("DEMO", false, "btc"),
     style: {
       background: "transparent",
       border: `1.5px solid ${T.border}`,
@@ -4955,7 +4876,7 @@ function Landing({
       e.currentTarget.style.borderColor = T.border;
       e.currentTarget.style.color = T.textMid;
     }
-  }, "Scan my address \u2191")))), React.createElement("div", {
+  }, "\u25B6 See a sample wallet")))), React.createElement("div", {
     style: {
       borderTop: `1px solid ${T.border}`,
       background: T.surface,
@@ -5056,17 +4977,7 @@ function Landing({
       cursor: "pointer",
       letterSpacing: 0.5
     }
-  }, tipCopied === "nostr" ? "Copied!" : "Zap on Nostr")), React.createElement("span", {
-    style: {
-      fontFamily: T.mono,
-      fontSize: 10,
-      color: T.textDim
-    }
-  }, "no cookies \xB7 no analytics \xB7 Tor compatible"), React.createElement("span", {
-    style: {
-      color: T.borderLo
-    }
-  }, "\xB7"), React.createElement("a", {
+  }, tipCopied === "nostr" ? "Copied!" : "Zap on Nostr")), React.createElement("a", {
     href: "https://opnorange.com",
     target: "_blank",
     rel: "noopener noreferrer",
@@ -7558,7 +7469,7 @@ function Dashboard({
         textDecoration: "none",
         cursor: href ? "pointer" : t.note ? "help" : "default"
       };
-      const label = aff ? `${t.name} ↗ · affiliate` : href ? `${t.name} ↗` : t.name;
+      const label = aff ? `${t.name} · affiliate` : t.name;
       return href ? React.createElement("a", {
         key: ti,
         href: href,
@@ -9345,7 +9256,7 @@ function LightningDashboard({
           fontWeight: 600,
           color: T.text
         }
-      }, t.name, href ? " ↗" : "", aff ? " · affiliate" : ""), React.createElement("div", {
+      }, t.name, aff ? " · affiliate" : ""), React.createElement("div", {
         style: {
           fontSize: 10,
           color: T.textDim

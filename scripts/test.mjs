@@ -156,7 +156,7 @@ else pass(`Service worker registered, ${swInfo.entries} entries cached in ${swIn
 // Run a demo scan end-to-end
 console.log("[4/5] Demo scan flow");
 const dismiss = page.getByText("Dismiss"); if (await dismiss.count()) await dismiss.click();
-await page.getByText("Bitcoin sample").click();
+await page.getByText("Risky wallet").click();
 await page.waitForTimeout(3500);
 const dashText = await page.evaluate(() => document.body.innerText);
 if (!dashText.includes("Grade")) fail("Dashboard didn't render after demo scan");
