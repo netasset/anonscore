@@ -180,6 +180,47 @@ const LANDING_FACTS = [{
   source: "AnonScore internal data, 2024",
   url: ""
 }];
+const FUNDING = {
+  lightning: "",
+  nostr: ""
+};
+const NEWSLETTER = {
+  endpoint: "",
+  fallbackMailto: "netassetpremium@gmail.com",
+  name: "On-Chain Forensics",
+  pitch: "Weekly deep-dives on notable wallets, privacy heuristics, and seizure stories."
+};
+const TOOL_URL = {
+  "Wasabi Wallet": "https://wasabiwallet.io",
+  "Sparrow Wallet": "https://sparrowwallet.com",
+  "Bitcoin Core": "https://bitcoincore.org",
+  "Electrum": "https://electrum.org",
+  "Joinmarket": "https://github.com/JoinMarket-Org/joinmarket-clientserver",
+  "JoinStr": "https://github.com/JoinStr",
+  "BTCPay Server": "https://btcpayserver.org",
+  "Blue Wallet": "https://bluewallet.io",
+  "Nunchuk": "https://nunchuk.io",
+  "Phoenix Wallet": "https://phoenix.acinq.co",
+  "Breez": "https://breez.technology",
+  "Zeus": "https://zeusln.app",
+  "Mutiny Wallet": "https://mutinywallet.com",
+  "Blixt Wallet": "https://blixtwallet.github.io",
+  "Alby": "https://getalby.com",
+  "Bisq": "https://bisq.network",
+  "Robosats": "https://learn.robosats.com",
+  "Peach Bitcoin": "https://peachbitcoin.com",
+  "HodlHodl": "https://hodlhodl.com",
+  "AgoraDesk": "https://agoradesk.com",
+  "Umbrel": "https://umbrel.com",
+  "Start9": "https://start9.com",
+  "RaspiBlitz": "https://raspiblitz.com",
+  "MyNode": "https://mynodebtc.com",
+  "Nodl": "https://nodl.it",
+  "mempool.space": "https://mempool.space"
+};
+const TOOL_AFFILIATE_URL = {};
+const toolLink = name => TOOL_AFFILIATE_URL[name] || TOOL_URL[name] || null;
+const toolIsAffiliate = name => !!TOOL_AFFILIATE_URL[name];
 const CASE_FILES = [{
   id: "001",
   slug: "bitfinex-hack-recovery",
@@ -3610,6 +3651,14 @@ function Landing({
     removeFromHistory(addr);
     setHistory(getHistory());
   };
+  const [showFunding, setShowFunding] = useState(false);
+  const [tipCopied, setTipCopied] = useState("");
+  const copyTip = (label, value) => {
+    if (!value) return;
+    navigator.clipboard?.writeText(value).catch(() => {});
+    setTipCopied(label);
+    setTimeout(() => setTipCopied(""), 1800);
+  };
   const inputRef = useRef();
   useEffect(() => {
     const onKey = e => {
@@ -4751,18 +4800,30 @@ function Landing({
   }, "Scan my address \u2191")))), React.createElement("div", {
     style: {
       borderTop: `1px solid ${T.border}`,
+      background: T.surface,
+      padding: isMobile ? "32px 20px" : "44px 48px"
+    }
+  }, React.createElement("div", {
+    style: {
+      maxWidth: 520,
+      margin: "0 auto"
+    }
+  }, React.createElement(NewsletterSignup, null))), React.createElement("div", {
+    style: {
+      borderTop: `1px solid ${T.border}`,
       padding: isMobile ? "18px 20px" : "16px 48px",
       display: "flex",
       flexWrap: "wrap",
       justifyContent: "space-between",
       alignItems: "center",
-      gap: 10
+      gap: 14
     }
   }, React.createElement("div", {
     style: {
       display: "flex",
       alignItems: "center",
-      gap: 14
+      gap: 14,
+      flexWrap: "wrap"
     }
   }, React.createElement("span", {
     style: {
@@ -4781,19 +4842,69 @@ function Landing({
       color: T.cyan,
       textDecoration: "none"
     }
-  }, "GitHub \u2197")), React.createElement("div", {
+  }, "GitHub \u2197"), React.createElement("button", {
+    onClick: () => setShowFunding(true),
+    style: {
+      background: "transparent",
+      border: "none",
+      padding: 0,
+      fontFamily: T.mono,
+      fontSize: 10,
+      color: T.textMid,
+      cursor: "pointer",
+      textDecoration: "underline dotted",
+      textUnderlineOffset: 3
+    },
+    onMouseOver: e => e.currentTarget.style.color = T.cyan,
+    onMouseOut: e => e.currentTarget.style.color = T.textMid
+  }, "How we're paid for")), React.createElement("div", {
     style: {
       display: "flex",
       alignItems: "center",
-      gap: 14
+      gap: 12,
+      flexWrap: "wrap"
     }
-  }, React.createElement("span", {
+  }, (FUNDING.lightning || FUNDING.nostr) && React.createElement("span", {
+    style: {
+      display: "inline-flex",
+      alignItems: "center",
+      gap: 8
+    }
+  }, FUNDING.lightning && React.createElement("button", {
+    onClick: () => copyTip("⚡", FUNDING.lightning),
+    title: `Lightning: ${FUNDING.lightning} — click to copy`,
+    style: {
+      background: "transparent",
+      border: `1px solid ${T.ln}55`,
+      borderRadius: 6,
+      padding: "3px 8px",
+      fontFamily: T.mono,
+      fontSize: 10,
+      color: T.ln,
+      cursor: "pointer",
+      letterSpacing: 0.5
+    }
+  }, tipCopied === "⚡" ? "⚡ Copied!" : "⚡ Tip"), FUNDING.nostr && React.createElement("button", {
+    onClick: () => copyTip("nostr", FUNDING.nostr),
+    title: `Nostr: ${FUNDING.nostr} — click to copy`,
+    style: {
+      background: "transparent",
+      border: `1px solid ${T.cyan}55`,
+      borderRadius: 6,
+      padding: "3px 8px",
+      fontFamily: T.mono,
+      fontSize: 10,
+      color: T.cyan,
+      cursor: "pointer",
+      letterSpacing: 0.5
+    }
+  }, tipCopied === "nostr" ? "Copied!" : "Zap on Nostr")), React.createElement("span", {
     style: {
       fontFamily: T.mono,
       fontSize: 10,
       color: T.textDim
     }
-  }, "Open source \xB7 no cookies \xB7 no analytics \xB7 Tor compatible"), React.createElement("span", {
+  }, "no cookies \xB7 no analytics \xB7 Tor compatible"), React.createElement("span", {
     style: {
       color: T.borderLo
     }
@@ -4810,7 +4921,9 @@ function Landing({
     },
     onMouseOver: e => e.currentTarget.style.color = T.btc,
     onMouseOut: e => e.currentTarget.style.color = T.textDim
-  }, "by OPNorange \u2197"))));
+  }, "by OPNorange \u2197"))), showFunding && React.createElement(FundingDisclosure, {
+    onClose: () => setShowFunding(false)
+  }));
 }
 function Scanning({
   address,
@@ -5344,6 +5457,323 @@ function ParticleCanvas({
       pointerEvents: "none"
     }
   });
+}
+function FundingDisclosure({
+  onClose
+}) {
+  const affiliates = Object.keys(TOOL_AFFILIATE_URL);
+  return React.createElement("div", {
+    role: "dialog",
+    "aria-modal": "true",
+    "aria-label": "How we get paid",
+    onClick: onClose,
+    style: {
+      position: "fixed",
+      inset: 0,
+      zIndex: 950,
+      background: "#000000aa",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      padding: 20
+    }
+  }, React.createElement("div", {
+    onClick: e => e.stopPropagation(),
+    style: {
+      background: T.card,
+      border: `1px solid ${T.border}`,
+      borderRadius: 18,
+      padding: 28,
+      width: "min(560px,94vw)",
+      maxHeight: "88vh",
+      overflow: "auto",
+      animation: "fadeUp .25s ease"
+    }
+  }, React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "space-between",
+      marginBottom: 14
+    }
+  }, React.createElement("div", null, React.createElement("div", {
+    style: {
+      fontFamily: T.mono,
+      fontSize: 9,
+      color: T.textDim,
+      letterSpacing: 2
+    }
+  }, "TRANSPARENCY"), React.createElement("div", {
+    style: {
+      fontFamily: T.serif,
+      fontSize: 22,
+      color: T.text,
+      fontWeight: 400,
+      marginTop: 4
+    }
+  }, "How AnonScore is paid for")), React.createElement("button", {
+    onClick: onClose,
+    "aria-label": "Close",
+    style: {
+      background: "transparent",
+      border: `1px solid ${T.border}`,
+      borderRadius: 8,
+      padding: "6px 10px",
+      color: T.textMid,
+      cursor: "pointer"
+    }
+  }, "\u2715")), React.createElement("div", {
+    style: {
+      fontSize: 14,
+      color: T.textMid,
+      lineHeight: 1.7,
+      marginBottom: 14
+    }
+  }, "AnonScore is free for everyone and always will be. We don't run ads. We don't track you. We don't sell data. There is no account, no email required to scan."), React.createElement("div", {
+    style: {
+      fontSize: 13,
+      color: T.textMid,
+      lineHeight: 1.7,
+      marginBottom: 14
+    }
+  }, "To keep the tool sustainable, we use three (only three) revenue sources:"), React.createElement("ol", {
+    style: {
+      paddingLeft: 22,
+      marginBottom: 18,
+      color: T.textMid,
+      fontSize: 13,
+      lineHeight: 1.75
+    }
+  }, React.createElement("li", {
+    style: {
+      marginBottom: 8
+    }
+  }, React.createElement("strong", {
+    style: {
+      color: T.text
+    }
+  }, "Voluntary tips"), " \u2014 Lightning and Nostr in the footer. Pay if it saved you trouble; ignore otherwise."), React.createElement("li", {
+    style: {
+      marginBottom: 8
+    }
+  }, React.createElement("strong", {
+    style: {
+      color: T.text
+    }
+  }, "Affiliate referrals on wallet recommendations"), " \u2014 when we link to a wallet or tool that offers a referral program, we may earn a small kickback. Recommendations are never changed to favour higher-paying tools; we recommend only what we'd use ourselves."), React.createElement("li", {
+    style: {
+      marginBottom: 8
+    }
+  }, React.createElement("strong", {
+    style: {
+      color: T.text
+    }
+  }, "Grants and B2B audits"), " \u2014 privacy-focused organizations and wallet companies sometimes pay for in-depth audits. The free tool you see is not affected.")), React.createElement("div", {
+    style: {
+      background: T.surface,
+      border: `1px solid ${T.border}`,
+      borderRadius: 12,
+      padding: 16,
+      marginBottom: 14
+    }
+  }, React.createElement("div", {
+    style: {
+      fontFamily: T.mono,
+      fontSize: 9,
+      color: T.textDim,
+      letterSpacing: 2,
+      marginBottom: 8
+    }
+  }, "CURRENT AFFILIATE LIST"), affiliates.length === 0 ? React.createElement("div", {
+    style: {
+      fontSize: 13,
+      color: T.textMid,
+      lineHeight: 1.6
+    }
+  }, React.createElement("strong", {
+    style: {
+      color: T.green
+    }
+  }, "None right now."), " Every wallet link on this site goes directly to the project's official homepage with no kickback to us. If that changes, the tool will be listed here, and each affiliate link will be tagged \"\u2197 affiliate\" next to the tool name.") : React.createElement("ul", {
+    style: {
+      fontSize: 13,
+      color: T.textMid,
+      lineHeight: 1.7,
+      paddingLeft: 18
+    }
+  }, affiliates.map(name => React.createElement("li", {
+    key: name
+  }, React.createElement("a", {
+    href: TOOL_AFFILIATE_URL[name],
+    target: "_blank",
+    rel: "noopener noreferrer nofollow",
+    style: {
+      color: T.cyan,
+      textDecoration: "underline"
+    }
+  }, name))))), React.createElement("div", {
+    style: {
+      fontSize: 12,
+      color: T.textDim,
+      lineHeight: 1.6
+    }
+  }, "Source code is on ", React.createElement("a", {
+    href: "https://github.com/netasset/anonscore",
+    target: "_blank",
+    rel: "noopener noreferrer",
+    style: {
+      color: T.cyan,
+      textDecoration: "underline"
+    }
+  }, "GitHub"), ". The affiliate list above is generated directly from a single config object \u2014 anyone can verify it.")));
+}
+function NewsletterSignup({
+  compact = false
+}) {
+  const [email, setEmail] = useState("");
+  const [status, setStatus] = useState("idle");
+  const [error, setError] = useState("");
+  const submit = async e => {
+    e?.preventDefault();
+    const v = email.trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) {
+      setError("Enter a valid email.");
+      return;
+    }
+    setStatus("submitting");
+    setError("");
+    if (NEWSLETTER.endpoint) {
+      try {
+        const fd = new FormData();
+        fd.append("email", v);
+        const r = await fetch(NEWSLETTER.endpoint, {
+          method: "POST",
+          body: fd,
+          mode: "no-cors"
+        });
+        setStatus("ok");
+      } catch {
+        setStatus("err");
+        setError("Couldn't reach the newsletter service — try again later.");
+      }
+    } else {
+      window.location.href = `mailto:${NEWSLETTER.fallbackMailto}?subject=${encodeURIComponent("Newsletter subscribe")}&body=${encodeURIComponent(v)}`;
+      setStatus("ok");
+    }
+  };
+  if (status === "ok") return React.createElement("div", {
+    style: {
+      background: T.greenLo,
+      border: `1px solid ${T.green}33`,
+      borderRadius: 12,
+      padding: "12px 16px",
+      display: "flex",
+      alignItems: "center",
+      gap: 10
+    }
+  }, React.createElement("span", {
+    style: {
+      color: T.green,
+      fontSize: 18
+    }
+  }, "\u2713"), React.createElement("div", {
+    style: {
+      fontSize: 13,
+      color: T.text
+    }
+  }, "Got it \u2014 you'll receive the next issue."));
+  const inputId = compact ? "nl-email-compact" : "nl-email";
+  return React.createElement("form", {
+    onSubmit: submit,
+    style: {
+      display: "flex",
+      flexDirection: "column",
+      gap: 8
+    }
+  }, !compact && React.createElement(React.Fragment, null, React.createElement("div", {
+    style: {
+      fontFamily: T.serif,
+      fontSize: 22,
+      color: T.text,
+      fontWeight: 400
+    }
+  }, NEWSLETTER.name), React.createElement("div", {
+    style: {
+      fontSize: 13,
+      color: T.textMid,
+      lineHeight: 1.6,
+      marginBottom: 4
+    }
+  }, NEWSLETTER.pitch)), React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 8,
+      flexWrap: "wrap"
+    }
+  }, React.createElement("label", {
+    htmlFor: inputId,
+    className: "sr-only"
+  }, "Email address"), React.createElement("input", {
+    id: inputId,
+    type: "email",
+    value: email,
+    onChange: e => {
+      setEmail(e.target.value);
+      setError("");
+    },
+    placeholder: "you@somewhere.zone",
+    required: true,
+    "aria-invalid": !!error,
+    style: {
+      flex: 1,
+      minWidth: 200,
+      background: T.surface,
+      border: `1.5px solid ${error ? T.red : T.border}`,
+      borderRadius: 10,
+      padding: "11px 14px",
+      color: T.text,
+      fontFamily: T.mono,
+      fontSize: 13,
+      outline: "none",
+      transition: "border .15s, box-shadow .2s"
+    },
+    onFocus: e => {
+      e.target.style.borderColor = T.cyan;
+      e.target.style.boxShadow = `0 0 0 3px ${T.cyan}22`;
+    },
+    onBlur: e => {
+      e.target.style.borderColor = error ? T.red : T.border;
+      e.target.style.boxShadow = "0 0 0 0 transparent";
+    }
+  }), React.createElement("button", {
+    type: "submit",
+    disabled: status === "submitting",
+    style: {
+      background: T.cyan,
+      border: "none",
+      borderRadius: 10,
+      padding: "11px 18px",
+      color: T.bg,
+      fontFamily: T.sans,
+      fontWeight: 700,
+      fontSize: 13,
+      cursor: status === "submitting" ? "wait" : "pointer",
+      opacity: status === "submitting" ? 0.6 : 1,
+      whiteSpace: "nowrap"
+    }
+  }, status === "submitting" ? "…" : "Subscribe")), error && React.createElement("div", {
+    role: "alert",
+    style: {
+      fontSize: 11,
+      color: T.red
+    }
+  }, error), React.createElement("div", {
+    style: {
+      fontSize: 10,
+      color: T.textDim,
+      lineHeight: 1.5
+    }
+  }, "No spam. Unsubscribe link in every issue. We never link your email to a scanned address."));
 }
 function renderMd(text) {
   if (!text) return null;
@@ -6955,21 +7385,35 @@ function Dashboard({
     }, "OPTIONS:"), (r.tools || [{
       name: r.tool,
       note: ""
-    }]).map((t, ti) => React.createElement("span", {
-      key: ti,
-      title: t.note,
-      style: {
+    }]).map((t, ti) => {
+      const href = toolLink(t.name);
+      const aff = toolIsAffiliate(t.name);
+      const base = {
         fontFamily: T.mono,
         fontSize: 9,
         padding: "3px 8px",
         borderRadius: 4,
-        background: T.blue + "18",
-        color: T.blue,
-        border: `1px solid ${T.blue}30`,
+        background: T.cyan + "18",
+        color: T.cyan,
+        border: `1px solid ${T.cyan}30`,
         letterSpacing: 0.3,
-        cursor: t.note ? "help" : "default"
-      }
-    }, t.name))), !simpleMode && (r.tools || []).length > 0 && React.createElement("div", {
+        textDecoration: "none",
+        cursor: href ? "pointer" : t.note ? "help" : "default"
+      };
+      const label = aff ? `${t.name} ↗ · affiliate` : href ? `${t.name} ↗` : t.name;
+      return href ? React.createElement("a", {
+        key: ti,
+        href: href,
+        target: "_blank",
+        rel: "noopener noreferrer nofollow",
+        title: aff ? `${t.note ? t.note + " · " : ""}AnonScore earns a referral when you sign up — see /how-we-get-paid` : t.note,
+        style: base
+      }, label) : React.createElement("span", {
+        key: ti,
+        title: t.note,
+        style: base
+      }, t.name);
+    })), !simpleMode && (r.tools || []).length > 0 && React.createElement("div", {
       style: {
         marginTop: 6,
         fontSize: 11,
@@ -8734,26 +9178,40 @@ function LightningDashboard({
         flexWrap: "wrap",
         gap: 6
       }
-    }, r.tools.map(t => React.createElement("div", {
-      key: t.name,
-      style: {
+    }, r.tools.map(t => {
+      const href = toolLink(t.name);
+      const aff = toolIsAffiliate(t.name);
+      const inner = React.createElement(React.Fragment, null, React.createElement("div", {
+        style: {
+          fontSize: 11,
+          fontWeight: 600,
+          color: T.text
+        }
+      }, t.name, href ? " ↗" : "", aff ? " · affiliate" : ""), React.createElement("div", {
+        style: {
+          fontSize: 10,
+          color: T.textDim
+        }
+      }, t.note));
+      const base = {
         background: T.surface,
         border: `1px solid ${T.border}`,
         borderRadius: 8,
-        padding: "5px 10px"
-      }
-    }, React.createElement("div", {
-      style: {
-        fontSize: 11,
-        fontWeight: 600,
-        color: T.text
-      }
-    }, t.name), React.createElement("div", {
-      style: {
-        fontSize: 10,
-        color: T.textDim
-      }
-    }, t.note))))), React.createElement("button", {
+        padding: "5px 10px",
+        textDecoration: "none",
+        display: "block"
+      };
+      return href ? React.createElement("a", {
+        key: t.name,
+        href: href,
+        target: "_blank",
+        rel: "noopener noreferrer nofollow",
+        style: base
+      }, inner) : React.createElement("div", {
+        key: t.name,
+        style: base
+      }, inner);
+    }))), React.createElement("button", {
       onClick: () => toggleDone(r.key),
       style: {
         background: done ? T.green : "transparent",
