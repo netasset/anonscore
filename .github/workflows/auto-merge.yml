@@ -1,0 +1,126 @@
+name: Auto-merge claude PRs
+
+# Eliminates pipeline build-up. Any open PR from a claude/* branch (the
+# only branches Claude opens; user PRs are unaffected) is merged the moment
+# all required status checks pass, and its head branch is deleted. So:
+#
+#   push to claude/foo → PR opens → CI runs → green → auto-merge → branch gone
+#
+# No manual merge step, no stale branches accumulating in the repo.
+#
+# Required-check names live in REQUIRED_CHECKS below. If a check is missing
+# OR not yet completed OR conclusion != "success", the PR is left alone.
+
+on:
+  check_suite:
+    types: [completed]
+  workflow_run:
+    workflows: ["Test", "Build anonscore.js"]
+    types: [completed]
+  pull_request:
+    types: [opened, reopened, synchronize]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  auto-merge:
+    # Skip if this fired from a PR that isn't claude/* (small optimisation)
+    if: github.event_name != 'pull_request' || startsWith(github.event.pull_request.head.ref, 'claude/')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const REQUIRED_CHECKS = ["build", "test"];
+
+            const { data: prs } = await github.rest.pulls.list({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: "open",
+              per_page: 50,
+            });
+            const candidates = prs.filter(p => p.head.ref.startsWith("claude/"));
+            console.log(`Found ${candidates.length} open claude/* PR(s).`);
+
+            const tryDeleteBranch = async (name) => {
+              try {
+                await github.rest.git.deleteRef({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  ref: `heads/${name}`,
+                });
+                console.log(`✓ Deleted branch ${name}`);
+              } catch (e) {
+                console.log(`Could not delete ${name}: ${e.message}`);
+              }
+            };
+
+            for (const pr of candidates) {
+              const tag = `#${pr.number} (${pr.head.ref})`;
+              if (pr.draft) { console.log(`Skip ${tag}: draft`); continue; }
+              if (pr.mergeable_state === "dirty") { console.log(`Skip ${tag}: conflicts`); continue; }
+
+              const { data: { check_runs } } = await github.rest.checks.listForRef({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                ref: pr.head.sha,
+              });
+              const byName = {};
+              for (const r of check_runs) byName[r.name] = r;
+              const missing = REQUIRED_CHECKS.filter(n => !byName[n]);
+              if (missing.length) { console.log(`Skip ${tag}: required checks missing: ${missing.join(", ")}`); continue; }
+              const failing = REQUIRED_CHECKS.filter(n => byName[n].status !== "completed" || byName[n].conclusion !== "success");
+              if (failing.length) { console.log(`Skip ${tag}: required checks not green: ${failing.map(n => `${n}=${byName[n].status}/${byName[n].conclusion}`).join(", ")}`); continue; }
+
+              try {
+                await github.rest.pulls.merge({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  pull_number: pr.number,
+                  merge_method: "merge",
+                });
+                console.log(`✓ Merged ${tag}`);
+              } catch (e) {
+                console.log(`Skip ${tag}: merge failed: ${e.message}`);
+                continue;
+              }
+              await tryDeleteBranch(pr.head.ref);
+            }
+
+            // Sweep stale branches: any claude/* branch whose tip commit is
+            // already reachable from main (i.e. merged) but the branch still
+            // exists. Catches both pre-workflow buildup AND post-merge cases
+            // where the in-line delete above failed transiently.
+            const { data: branches } = await github.rest.repos.listBranches({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              per_page: 100,
+            });
+            const mainSha = (await github.rest.git.getRef({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              ref: "heads/main",
+            })).data.object.sha;
+            const openPrBranches = new Set(prs.map(p => p.head.ref));
+            for (const b of branches) {
+              if (!b.name.startsWith("claude/")) continue;
+              if (openPrBranches.has(b.name)) continue;  // Don't touch open-PR branches
+              try {
+                const { data: cmp } = await github.rest.repos.compareCommits({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  base: mainSha,
+                  head: b.commit.sha,
+                });
+                // If main is ahead-or-equal of branch tip, branch is already merged
+                if (cmp.status === "behind" || cmp.status === "identical") {
+                  await tryDeleteBranch(b.name);
+                } else {
+                  console.log(`Skip ${b.name}: not merged (status: ${cmp.status})`);
+                }
+              } catch (e) {
+                console.log(`Skip ${b.name}: compare failed: ${e.message}`);
+              }
+            }
