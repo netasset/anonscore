@@ -705,6 +705,47 @@ async function fetchAddress(addr) {
 }
 
 const now = () => Math.floor(Date.now() / 1000);
+// Pristine demo — designed to score A. CoinJoin-mixed, no dust, no round
+// amounts, single script type, balanced UTXO set, low tx count, no
+// consolidation. This is what the audit is trying to teach users to look like.
+const DEMO_A = {
+  addrInfo: { chain_stats: { tx_count: 3 } },
+  utxos: [
+    { txid:"7a82bc91e3411d05",vout:1,value:17431892,scriptpubkey_type:"v0_p2wpkh",status:{confirmed:true,block_time:now()-86400*30}},
+    { txid:"2e91a4bc77f01122",vout:2,value:11254731,scriptpubkey_type:"v0_p2wpkh",status:{confirmed:true,block_time:now()-86400*60}},
+    { txid:"d4f1b206c8a99933",vout:0,value:8721400, scriptpubkey_type:"v0_p2wpkh",status:{confirmed:true,block_time:now()-86400*90}},
+    { txid:"a51cc1f4d0118855",vout:3,value:15182374,scriptpubkey_type:"v0_p2wpkh",status:{confirmed:true,block_time:now()-86400*45}},
+    { txid:"38ee9c7be5f02266",vout:1,value:9847251, scriptpubkey_type:"v0_p2wpkh",status:{confirmed:true,block_time:now()-86400*15}},
+  ],
+  txs: [
+    // CoinJoin #1 — 8 outputs, 5 share the 5,000,000-sat denomination
+    { txid:"7a82bc91",vin:[{txid:"src1",vout:0}],vout:[
+      {value:5000000,scriptpubkey_address:"bc1qcj1"},
+      {value:5000000,scriptpubkey_address:"bc1qcj2"},
+      {value:5000000,scriptpubkey_address:"bc1qcj3"},
+      {value:5000000,scriptpubkey_address:"bc1qcj4"},
+      {value:5000000,scriptpubkey_address:"bc1qcj5"},
+      {value:17431892,scriptpubkey_address:"bc1qme1"},
+      {value:3214557,scriptpubkey_address:"bc1qch1"},
+      {value:1024113,scriptpubkey_address:"bc1qch2"},
+    ],fee:8923,size:545,status:{block_time:now()-86400*30}},
+    // CoinJoin #2 — 6 outputs, 4 share the 1,000,000-sat denomination
+    { txid:"2e91a4bc",vin:[{txid:"src2",vout:0}],vout:[
+      {value:1000000,scriptpubkey_address:"bc1qcj6"},
+      {value:1000000,scriptpubkey_address:"bc1qcj7"},
+      {value:1000000,scriptpubkey_address:"bc1qcj8"},
+      {value:1000000,scriptpubkey_address:"bc1qcj9"},
+      {value:11254731,scriptpubkey_address:"bc1qme2"},
+      {value:887621, scriptpubkey_address:"bc1qch3"},
+    ],fee:7824,size:482,status:{block_time:now()-86400*60}},
+    // Normal Lightning-funded send (varied fees, no consolidation)
+    { txid:"d4f1b206",vin:[{txid:"src3",vout:0}],vout:[
+      {value:8721400,scriptpubkey_address:"bc1qme3"},
+      {value:2189412,scriptpubkey_address:"bc1qrx1"},
+    ],fee:1437,size:223,status:{block_time:now()-86400*90}},
+  ],
+};
+
 const DEMO = {
   addrInfo: { chain_stats: { tx_count: 7 } },
   utxos: [
@@ -1021,7 +1062,7 @@ function detectInputType(val) {
   if (!v) return null;
   if (isValidLightningPubkey(v)) return "ln_pubkey";
   if (isLightningAddress(v)) return "ln_address";
-  if (isValidBitcoinAddress(v) || v === "DEMO") return "btc";
+  if (isValidBitcoinAddress(v) || v === "DEMO" || v === "DEMO_A") return "btc";
   return null;
 }
 
@@ -2047,7 +2088,7 @@ function Landing({ onAnalyze, isMobile, onCases }) {
                         style={{ display: "flex", alignItems: "center", gap: 10, flex: 1, background: "none", border: "none", cursor: "pointer", textAlign: "left", minWidth: 0 }}>
                         <div style={{ width: 6, height: 6, borderRadius: "50%", background: col, flexShrink: 0 }} />
                         <div style={{ fontFamily: T.mono, fontSize: 10, color: T.textDim, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                          {h.isLightning ? "⚡ " : "₿ "}{h.addr === "DEMO" || h.addr === "DEMO_LN" ? "Demo" : h.addr.slice(0, 14) + "…"}
+                          {h.isLightning ? "⚡ " : "₿ "}{h.addr === "DEMO" || h.addr === "DEMO_A" || h.addr === "DEMO_LN" ? "Demo" : h.addr.slice(0, 14) + "…"}
                         </div>
                         <div style={{ fontFamily: T.serif, fontSize: 14, color: col, flexShrink: 0 }}>{h.grade}</div>
                         <div style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim, flexShrink: 0 }}>{h.score}/100</div>
@@ -2144,7 +2185,13 @@ function Landing({ onAnalyze, isMobile, onCases }) {
                 💬 Plain English
               </button>
             </div>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 14, flexWrap: "wrap" }}>
+              <button onClick={() => onAnalyze("DEMO_A", false, "btc")} style={{ background: "none", border: "none", cursor: "pointer", fontFamily: T.mono, fontSize: 10, color: T.green, padding: 0 }}
+                onMouseOver={e => e.currentTarget.style.opacity = ".7"}
+                onMouseOut={e => e.currentTarget.style.opacity = "1"}>
+                ✨ See an A-grade wallet →
+              </button>
+              <span style={{ color: T.borderLo, fontFamily: T.mono, fontSize: 10 }}>·</span>
               <button onClick={() => onAnalyze("DEMO_LN", false, "ln_pubkey")} style={{ background: "none", border: "none", cursor: "pointer", fontFamily: T.mono, fontSize: 10, color: T.ln, padding: 0 }}
                 onMouseOver={e => e.currentTarget.style.opacity = ".7"}
                 onMouseOut={e => e.currentTarget.style.opacity = "1"}>
@@ -2441,7 +2488,7 @@ function Scanning({ address, isLightning, dataReady }) {
           {isLightning ? "Auditing your node…" : "Analyzing your wallet…"}
         </div>
         <div style={{ fontFamily: T.mono, fontSize: 11, color: T.textDim, letterSpacing: 1 }}>
-          {address === "DEMO" || address === "DEMO_LN" ? (isLightning ? "Demo Lightning node" : "Demo wallet") : fmt.addr(address)}
+          {address === "DEMO" || address === "DEMO_A" || address === "DEMO_LN" ? (isLightning ? "Demo Lightning node" : "Demo wallet") : fmt.addr(address)}
         </div>
       </div>
 
@@ -3194,7 +3241,7 @@ function Dashboard({ address, addrInfo, utxos, txs, isMobile, onBack, onRescan, 
         No transactions, no UTXOs. There's nothing to score yet — paste an address that has received Bitcoin at least once.
       </div>
       <div style={{ fontFamily: T.mono, fontSize: 11, color: T.textDim, background: T.surface, border: `1px solid ${T.border}`, borderRadius: 10, padding: "10px 16px" }}>
-        {address === "DEMO" ? "Demo Wallet" : address}
+        {address === "DEMO" || address === "DEMO_A" ? "Demo Wallet" : address}
       </div>
       <button onClick={onBack} style={{ background: T.cyan, border: "none", borderRadius: 10, padding: "12px 24px", color: T.bg, fontFamily: T.sans, fontWeight: 700, fontSize: 14, cursor: "pointer" }}>
         ← Try a different address
@@ -3232,7 +3279,7 @@ function Dashboard({ address, addrInfo, utxos, txs, isMobile, onBack, onRescan, 
   };
 
   return (
-    <div role="main" aria-label={`Privacy audit for ${address === "DEMO" ? "demo wallet" : address}`} style={{ minHeight: "100vh", background: T.bg, display: "flex", flexDirection: "column", paddingBottom: isMobile ? 64 : 0 }}>
+    <div role="main" aria-label={`Privacy audit for ${address === "DEMO" || address === "DEMO_A" ? "demo wallet" : address}`} style={{ minHeight: "100vh", background: T.bg, display: "flex", flexDirection: "column", paddingBottom: isMobile ? 64 : 0 }}>
       <h1 className="sr-only">Privacy score {score} of 100, grade {grade} — {riskLabel}</h1>
       {/* Nav */}
       <nav style={{ display: "flex", alignItems: "center", gap: 10, padding: isMobile ? "12px 16px" : "12px 32px", borderBottom: `1px solid ${T.border}`, background: T.bg, position: "sticky", top: 0, zIndex: 100 }}>
@@ -3241,7 +3288,7 @@ function Dashboard({ address, addrInfo, utxos, txs, isMobile, onBack, onRescan, 
           onMouseOut={e => e.currentTarget.style.borderColor = T.border}>← Back</button>
         {!isMobile && <div style={{ fontFamily: T.display, fontSize: 15, letterSpacing: 4, fontWeight: 700 }}>ANON<span style={{ color: T.cyan }}>SCORE</span></div>}
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontFamily: T.mono, fontSize: 11, color: T.textDim, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{address === "DEMO" ? "Demo Wallet" : fmt.addr(address)}</div>
+          <div style={{ fontFamily: T.mono, fontSize: 11, color: T.textDim, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{address === "DEMO" || address === "DEMO_A" ? "Demo Wallet" : fmt.addr(address)}</div>
           {scanAt && <div style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim, marginTop: 2 }}>Scanned {fmt.age(scanAt / 1000)}</div>}
         </div>
         <div style={{ display: "flex", gap: 8, flexShrink: 0, alignItems: "center" }}>
@@ -4179,7 +4226,9 @@ function App() {
     set('meta[name="twitter:image"]',  "content", "https://anonscore.com/og.png");
   }, []);
 
-  // Parse ?scan= param — store for user confirmation, never auto-fire
+  // Parse ?scan= and ?case= params. Scan stores for user confirmation (never
+  // auto-fires). Case deep-links to a specific case file (makes case URLs
+  // shareable + indexable per the SEO sitemap entries).
   useEffect(() => {
     try {
       const params = new URLSearchParams(window.location.search);
@@ -4187,6 +4236,11 @@ function App() {
       if (addr) {
         const t = detectInputType(addr);
         if (t) setPendingScan({ addr, inputType: t });
+      }
+      const caseSlug = params.get("case");
+      if (caseSlug) {
+        const found = CASE_FILES.find(c => c.id === caseSlug || c.slug === caseSlug);
+        if (found) { setActiveCaseFile(found); setPage("case_detail"); }
       }
     } catch {}
   }, []);
@@ -4269,16 +4323,18 @@ function App() {
     setDefaultSimple(plain);
 
     try {
-      if (addr === "DEMO") {
+      if (addr === "DEMO" || addr === "DEMO_A") {
+        const demoData = addr === "DEMO_A" ? DEMO_A : DEMO;
+        const isPristine = addr === "DEMO_A";
         await new Promise(r => setTimeout(r, 1400));
-        setAddrInfo(DEMO.addrInfo);
-        setUtxos(DEMO.utxos);
-        setTxs(DEMO.txs);
+        setAddrInfo(demoData.addrInfo);
+        setUtxos(demoData.utxos);
+        setTxs(demoData.txs);
         setScanAt(Date.now());
         setScanDataReady(true);
         await new Promise(r => setTimeout(r, 300));
         setPage("dashboard");
-        toast.show("Demo loaded", { icon: "🔍", color: T.cyan, msg: "Showing a sample high-risk wallet" });
+        toast.show("Demo loaded", { icon: isPristine ? "✨" : "🔍", color: isPristine ? T.green : T.cyan, msg: isPristine ? "Showing a pristine, CoinJoin-mixed wallet" : "Showing a sample high-risk wallet" });
         return;
       }
 

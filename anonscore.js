@@ -934,6 +934,144 @@ async function fetchAddress(addr) {
   };
 }
 const now = () => Math.floor(Date.now() / 1000);
+const DEMO_A = {
+  addrInfo: {
+    chain_stats: {
+      tx_count: 3
+    }
+  },
+  utxos: [{
+    txid: "7a82bc91e3411d05",
+    vout: 1,
+    value: 17431892,
+    scriptpubkey_type: "v0_p2wpkh",
+    status: {
+      confirmed: true,
+      block_time: now() - 86400 * 30
+    }
+  }, {
+    txid: "2e91a4bc77f01122",
+    vout: 2,
+    value: 11254731,
+    scriptpubkey_type: "v0_p2wpkh",
+    status: {
+      confirmed: true,
+      block_time: now() - 86400 * 60
+    }
+  }, {
+    txid: "d4f1b206c8a99933",
+    vout: 0,
+    value: 8721400,
+    scriptpubkey_type: "v0_p2wpkh",
+    status: {
+      confirmed: true,
+      block_time: now() - 86400 * 90
+    }
+  }, {
+    txid: "a51cc1f4d0118855",
+    vout: 3,
+    value: 15182374,
+    scriptpubkey_type: "v0_p2wpkh",
+    status: {
+      confirmed: true,
+      block_time: now() - 86400 * 45
+    }
+  }, {
+    txid: "38ee9c7be5f02266",
+    vout: 1,
+    value: 9847251,
+    scriptpubkey_type: "v0_p2wpkh",
+    status: {
+      confirmed: true,
+      block_time: now() - 86400 * 15
+    }
+  }],
+  txs: [{
+    txid: "7a82bc91",
+    vin: [{
+      txid: "src1",
+      vout: 0
+    }],
+    vout: [{
+      value: 5000000,
+      scriptpubkey_address: "bc1qcj1"
+    }, {
+      value: 5000000,
+      scriptpubkey_address: "bc1qcj2"
+    }, {
+      value: 5000000,
+      scriptpubkey_address: "bc1qcj3"
+    }, {
+      value: 5000000,
+      scriptpubkey_address: "bc1qcj4"
+    }, {
+      value: 5000000,
+      scriptpubkey_address: "bc1qcj5"
+    }, {
+      value: 17431892,
+      scriptpubkey_address: "bc1qme1"
+    }, {
+      value: 3214557,
+      scriptpubkey_address: "bc1qch1"
+    }, {
+      value: 1024113,
+      scriptpubkey_address: "bc1qch2"
+    }],
+    fee: 8923,
+    size: 545,
+    status: {
+      block_time: now() - 86400 * 30
+    }
+  }, {
+    txid: "2e91a4bc",
+    vin: [{
+      txid: "src2",
+      vout: 0
+    }],
+    vout: [{
+      value: 1000000,
+      scriptpubkey_address: "bc1qcj6"
+    }, {
+      value: 1000000,
+      scriptpubkey_address: "bc1qcj7"
+    }, {
+      value: 1000000,
+      scriptpubkey_address: "bc1qcj8"
+    }, {
+      value: 1000000,
+      scriptpubkey_address: "bc1qcj9"
+    }, {
+      value: 11254731,
+      scriptpubkey_address: "bc1qme2"
+    }, {
+      value: 887621,
+      scriptpubkey_address: "bc1qch3"
+    }],
+    fee: 7824,
+    size: 482,
+    status: {
+      block_time: now() - 86400 * 60
+    }
+  }, {
+    txid: "d4f1b206",
+    vin: [{
+      txid: "src3",
+      vout: 0
+    }],
+    vout: [{
+      value: 8721400,
+      scriptpubkey_address: "bc1qme3"
+    }, {
+      value: 2189412,
+      scriptpubkey_address: "bc1qrx1"
+    }],
+    fee: 1437,
+    size: 223,
+    status: {
+      block_time: now() - 86400 * 90
+    }
+  }]
+};
 const DEMO = {
   addrInfo: {
     chain_stats: {
@@ -1444,7 +1582,7 @@ function detectInputType(val) {
   if (!v) return null;
   if (isValidLightningPubkey(v)) return "ln_pubkey";
   if (isLightningAddress(v)) return "ln_address";
-  if (isValidBitcoinAddress(v) || v === "DEMO") return "btc";
+  if (isValidBitcoinAddress(v) || v === "DEMO" || v === "DEMO_A") return "btc";
   return null;
 }
 const Tag = ({
@@ -4105,7 +4243,7 @@ function Landing({
         textOverflow: "ellipsis",
         whiteSpace: "nowrap"
       }
-    }, h.isLightning ? "⚡ " : "₿ ", h.addr === "DEMO" || h.addr === "DEMO_LN" ? "Demo" : h.addr.slice(0, 14) + "…"), React.createElement("div", {
+    }, h.isLightning ? "⚡ " : "₿ ", h.addr === "DEMO" || h.addr === "DEMO_A" || h.addr === "DEMO_LN" ? "Demo" : h.addr.slice(0, 14) + "…"), React.createElement("div", {
       style: {
         fontFamily: T.serif,
         fontSize: 14,
@@ -4356,9 +4494,29 @@ function Landing({
       display: "flex",
       alignItems: "center",
       justifyContent: "center",
-      gap: 8
+      gap: 14,
+      flexWrap: "wrap"
     }
   }, React.createElement("button", {
+    onClick: () => onAnalyze("DEMO_A", false, "btc"),
+    style: {
+      background: "none",
+      border: "none",
+      cursor: "pointer",
+      fontFamily: T.mono,
+      fontSize: 10,
+      color: T.green,
+      padding: 0
+    },
+    onMouseOver: e => e.currentTarget.style.opacity = ".7",
+    onMouseOut: e => e.currentTarget.style.opacity = "1"
+  }, "\u2728 See an A-grade wallet \u2192"), React.createElement("span", {
+    style: {
+      color: T.borderLo,
+      fontFamily: T.mono,
+      fontSize: 10
+    }
+  }, "\xB7"), React.createElement("button", {
     onClick: () => onAnalyze("DEMO_LN", false, "ln_pubkey"),
     style: {
       background: "none",
@@ -5134,7 +5292,7 @@ function Scanning({
       color: T.textDim,
       letterSpacing: 1
     }
-  }, address === "DEMO" || address === "DEMO_LN" ? isLightning ? "Demo Lightning node" : "Demo wallet" : fmt.addr(address))), React.createElement("div", {
+  }, address === "DEMO" || address === "DEMO_A" || address === "DEMO_LN" ? isLightning ? "Demo Lightning node" : "Demo wallet" : fmt.addr(address))), React.createElement("div", {
     style: {
       width: "min(480px,90vw)"
     }
@@ -6675,7 +6833,7 @@ function Dashboard({
       borderRadius: 10,
       padding: "10px 16px"
     }
-  }, address === "DEMO" ? "Demo Wallet" : address), React.createElement("button", {
+  }, address === "DEMO" || address === "DEMO_A" ? "Demo Wallet" : address), React.createElement("button", {
     onClick: onBack,
     style: {
       background: T.cyan,
@@ -6707,7 +6865,7 @@ function Dashboard({
   };
   return React.createElement("div", {
     role: "main",
-    "aria-label": `Privacy audit for ${address === "DEMO" ? "demo wallet" : address}`,
+    "aria-label": `Privacy audit for ${address === "DEMO" || address === "DEMO_A" ? "demo wallet" : address}`,
     style: {
       minHeight: "100vh",
       background: T.bg,
@@ -6769,7 +6927,7 @@ function Dashboard({
       textOverflow: "ellipsis",
       whiteSpace: "nowrap"
     }
-  }, address === "DEMO" ? "Demo Wallet" : fmt.addr(address)), scanAt && React.createElement("div", {
+  }, address === "DEMO" || address === "DEMO_A" ? "Demo Wallet" : fmt.addr(address)), scanAt && React.createElement("div", {
     style: {
       fontFamily: T.mono,
       fontSize: 9,
@@ -9620,6 +9778,14 @@ function App() {
           inputType: t
         });
       }
+      const caseSlug = params.get("case");
+      if (caseSlug) {
+        const found = CASE_FILES.find(c => c.id === caseSlug || c.slug === caseSlug);
+        if (found) {
+          setActiveCaseFile(found);
+          setPage("case_detail");
+        }
+      }
     } catch {}
   }, []);
   const [address, setAddress] = useState("");
@@ -9712,19 +9878,21 @@ function App() {
     setAutoShare(false);
     setDefaultSimple(plain);
     try {
-      if (addr === "DEMO") {
+      if (addr === "DEMO" || addr === "DEMO_A") {
+        const demoData = addr === "DEMO_A" ? DEMO_A : DEMO;
+        const isPristine = addr === "DEMO_A";
         await new Promise(r => setTimeout(r, 1400));
-        setAddrInfo(DEMO.addrInfo);
-        setUtxos(DEMO.utxos);
-        setTxs(DEMO.txs);
+        setAddrInfo(demoData.addrInfo);
+        setUtxos(demoData.utxos);
+        setTxs(demoData.txs);
         setScanAt(Date.now());
         setScanDataReady(true);
         await new Promise(r => setTimeout(r, 300));
         setPage("dashboard");
         toast.show("Demo loaded", {
-          icon: "🔍",
-          color: T.cyan,
-          msg: "Showing a sample high-risk wallet"
+          icon: isPristine ? "✨" : "🔍",
+          color: isPristine ? T.green : T.cyan,
+          msg: isPristine ? "Showing a pristine, CoinJoin-mixed wallet" : "Showing a sample high-risk wallet"
         });
         return;
       }
