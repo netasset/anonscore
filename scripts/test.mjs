@@ -170,6 +170,25 @@ for (const tab of ["Fix It", "Overview", "UTXOs", "Transactions", "Methodology"]
 }
 pass("All 5 dashboard tabs rendered");
 
+// Wallet recommendations should be real outbound links (affiliate scaffolding).
+// Find Sparrow links and verify they point to a real URL.
+const fixIt = page.getByText("Fix It", { exact: true }).first();
+if (await fixIt.count()) await fixIt.click();
+// Wait for the staggered fadeUp animation on the rec cards to fully complete
+// (≈ recCount * .06s delay + .35s duration). Otherwise the a11y audit below
+// races the animation and axe sees mid-opacity colors that fail contrast.
+await page.waitForTimeout(1200);
+const walletLinks = await page.evaluate(() => {
+  const anchors = Array.from(document.querySelectorAll("a"));
+  return anchors
+    .filter(a => /Sparrow|Wasabi|Phoenix|Electrum/.test(a.textContent || ""))
+    .map(a => ({ text: a.textContent?.slice(0, 30), href: a.href }))
+    .slice(0, 3);
+});
+if (walletLinks.length === 0) fail("No wallet recommendation links found on dashboard");
+else if (walletLinks.some(l => !l.href || !l.href.startsWith("http"))) fail("Wallet recommendation links don't have URLs: " + JSON.stringify(walletLinks));
+else pass(`Wallet recommendations link out (${walletLinks.length} samples checked)`);
+
 // PNG export: the script tag uses vendor/dom-to-image-more.min.js (no broken SRI).
 // Verifies the source path in the bundle matches a real file — guards against the
 // exact bug we previously had silently broken (the famous MDN placeholder SRI hash).

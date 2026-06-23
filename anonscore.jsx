@@ -117,6 +117,81 @@ const LANDING_FACTS = [
 ];
 
 /* ─────────────────────────────────────────────
+   FUNDING — how AnonScore is sustained.
+   Mission: free for everyone, never tracks users, never sells data.
+   This config is the *only* place to wire monetization in.
+   See /how-we-get-paid (FundingDisclosure component) for the public-facing
+   transparency page.
+───────────────────────────────────────────── */
+
+// Lightning + Nostr tip jar. Set these to real values when ready.
+// Leave them empty strings to hide the tip jar (graceful fallback).
+const FUNDING = {
+  lightning: "",  // e.g. "anonscore@getalby.com" or "anonscore@strike.me"
+  nostr:     "",  // e.g. "npub1..." — set to enable a "Zap on Nostr" button
+};
+
+// Newsletter signup. POSTs the email to this endpoint (set up Buttondown /
+// Beehiiv / Substack / mailerlite later and drop the URL in here). Until
+// then, the signup form falls back to a clean mailto: link.
+const NEWSLETTER = {
+  endpoint: "",                                  // e.g. "https://buttondown.email/api/emails/embed-subscribe/anonscore"
+  fallbackMailto: "netassetpremium@gmail.com",   // until provider is set up
+  name: "On-Chain Forensics",
+  pitch: "Weekly deep-dives on notable wallets, privacy heuristics, and seizure stories.",
+};
+
+// Canonical homepage for each tool we recommend. Source of truth for outbound
+// links — the recommendation text in `recs[].tools[].name` looks up here at
+// render time. Adding a new tool name without a URL is fine; it just renders
+// as plain text (graceful fallback).
+const TOOL_URL = {
+  // Desktop wallets
+  "Wasabi Wallet":   "https://wasabiwallet.io",
+  "Sparrow Wallet":  "https://sparrowwallet.com",
+  "Bitcoin Core":    "https://bitcoincore.org",
+  "Electrum":        "https://electrum.org",
+  "Joinmarket":      "https://github.com/JoinMarket-Org/joinmarket-clientserver",
+  "JoinStr":         "https://github.com/JoinStr",
+  "BTCPay Server":   "https://btcpayserver.org",
+  // Mobile wallets
+  "Blue Wallet":     "https://bluewallet.io",
+  "Nunchuk":         "https://nunchuk.io",
+  // Lightning wallets
+  "Phoenix Wallet":  "https://phoenix.acinq.co",
+  "Breez":           "https://breez.technology",
+  "Zeus":            "https://zeusln.app",
+  "Mutiny Wallet":   "https://mutinywallet.com",
+  "Blixt Wallet":    "https://blixtwallet.github.io",
+  "Alby":            "https://getalby.com",
+  // Non-KYC exchanges / P2P
+  "Bisq":            "https://bisq.network",
+  "Robosats":        "https://learn.robosats.com",
+  "Peach Bitcoin":   "https://peachbitcoin.com",
+  "HodlHodl":        "https://hodlhodl.com",
+  "AgoraDesk":       "https://agoradesk.com",
+  // Nodes / infra
+  "Umbrel":          "https://umbrel.com",
+  "Start9":          "https://start9.com",
+  "RaspiBlitz":      "https://raspiblitz.com",
+  "MyNode":          "https://mynodebtc.com",
+  "Nodl":            "https://nodl.it",
+  // Fee tools
+  "mempool.space":   "https://mempool.space",
+};
+
+// When an affiliate program is signed up for, drop the affiliate URL here and
+// it overrides the canonical TOOL_URL for that tool. Empty by default —
+// every recommendation today links to the official homepage with no kickback.
+// See /how-we-get-paid for the public disclosure page (lists whatever's in here).
+const TOOL_AFFILIATE_URL = {
+  // e.g. "Phoenix Wallet": "https://phoenix.acinq.co?ref=anonscore",
+};
+
+const toolLink = (name) => TOOL_AFFILIATE_URL[name] || TOOL_URL[name] || null;
+const toolIsAffiliate = (name) => !!TOOL_AFFILIATE_URL[name];
+
+/* ─────────────────────────────────────────────
    CASE FILES — notable Bitcoin wallets
 ───────────────────────────────────────────── */
 const CASE_FILES = [
@@ -1815,6 +1890,14 @@ function Landing({ onAnalyze, isMobile, onCases }) {
   const [error, setError] = useState("");
   const [history, setHistory] = useState(() => getHistory());
   const deleteHistory = (addr) => { removeFromHistory(addr); setHistory(getHistory()); };
+  const [showFunding, setShowFunding] = useState(false);
+  const [tipCopied, setTipCopied] = useState("");
+  const copyTip = (label, value) => {
+    if (!value) return;
+    navigator.clipboard?.writeText(value).catch(() => {});
+    setTipCopied(label);
+    setTimeout(() => setTipCopied(""), 1800);
+  };
   const inputRef = useRef();
 
   // Keyboard shortcut: "/" focuses the address input (unless the user is already typing somewhere).
@@ -2203,15 +2286,46 @@ function Landing({ onAnalyze, isMobile, onCases }) {
         </div>
       </section>
 
+      {/* Newsletter — captures audience for the case files / forensics content */}
+      <div style={{ borderTop: `1px solid ${T.border}`, background: T.surface, padding: isMobile ? "32px 20px" : "44px 48px" }}>
+        <div style={{ maxWidth: 520, margin: "0 auto" }}>
+          <NewsletterSignup />
+        </div>
+      </div>
+
       {/* Footer */}
-      <div style={{ borderTop: `1px solid ${T.border}`, padding: isMobile ? "18px 20px" : "16px 48px", display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+      <div style={{ borderTop: `1px solid ${T.border}`, padding: isMobile ? "18px 20px" : "16px 48px", display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center", gap: 14 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
           <span style={{ fontFamily: T.display, fontSize: 10, color: T.textDim, letterSpacing: 3 }}>ANONSCORE · MIT</span>
           <a href="https://github.com/netasset/anonscore" target="_blank" rel="noopener noreferrer"
             style={{ fontFamily: T.mono, fontSize: 10, color: T.cyan, textDecoration: "none" }}>GitHub ↗</a>
+          <button onClick={() => setShowFunding(true)}
+            style={{ background: "transparent", border: "none", padding: 0, fontFamily: T.mono, fontSize: 10, color: T.textMid, cursor: "pointer", textDecoration: "underline dotted", textUnderlineOffset: 3 }}
+            onMouseOver={e => e.currentTarget.style.color = T.cyan}
+            onMouseOut={e => e.currentTarget.style.color = T.textMid}>
+            How we're paid for
+          </button>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-          <span style={{ fontFamily: T.mono, fontSize: 10, color: T.textDim }}>Open source · no cookies · no analytics · Tor compatible</span>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+          {(FUNDING.lightning || FUNDING.nostr) && (
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+              {FUNDING.lightning && (
+                <button onClick={() => copyTip("⚡", FUNDING.lightning)}
+                  title={`Lightning: ${FUNDING.lightning} — click to copy`}
+                  style={{ background: "transparent", border: `1px solid ${T.ln}55`, borderRadius: 6, padding: "3px 8px", fontFamily: T.mono, fontSize: 10, color: T.ln, cursor: "pointer", letterSpacing: 0.5 }}>
+                  {tipCopied === "⚡" ? "⚡ Copied!" : "⚡ Tip"}
+                </button>
+              )}
+              {FUNDING.nostr && (
+                <button onClick={() => copyTip("nostr", FUNDING.nostr)}
+                  title={`Nostr: ${FUNDING.nostr} — click to copy`}
+                  style={{ background: "transparent", border: `1px solid ${T.cyan}55`, borderRadius: 6, padding: "3px 8px", fontFamily: T.mono, fontSize: 10, color: T.cyan, cursor: "pointer", letterSpacing: 0.5 }}>
+                  {tipCopied === "nostr" ? "Copied!" : "Zap on Nostr"}
+                </button>
+              )}
+            </span>
+          )}
+          <span style={{ fontFamily: T.mono, fontSize: 10, color: T.textDim }}>no cookies · no analytics · Tor compatible</span>
           <span style={{ color: T.borderLo }}>·</span>
           <a href="https://opnorange.com" target="_blank" rel="noopener noreferrer"
             style={{ fontFamily: T.mono, fontSize: 10, color: T.textDim, textDecoration: "none", transition: "color .15s" }}
@@ -2221,6 +2335,7 @@ function Landing({ onAnalyze, isMobile, onCases }) {
           </a>
         </div>
       </div>
+      {showFunding && <FundingDisclosure onClose={() => setShowFunding(false)} />}
     </div>
   );
 }
@@ -2507,6 +2622,121 @@ function ParticleCanvas({ width, height, color = T.cyan }) {
   }, [width, height, color]);
 
   return <canvas ref={canvasRef} style={{ position: "absolute", inset: 0, pointerEvents: "none" }} />;
+}
+
+/* ─────────────────────────────────────────────
+   FUNDING DISCLOSURE — public transparency about how AnonScore is paid for.
+   Linked from the footer. Lists exactly which wallet recommendations are
+   currently kicking a referral back to us (read from TOOL_AFFILIATE_URL).
+───────────────────────────────────────────── */
+function FundingDisclosure({ onClose }) {
+  const affiliates = Object.keys(TOOL_AFFILIATE_URL);
+  return (
+    <div role="dialog" aria-modal="true" aria-label="How we get paid"
+      onClick={onClose}
+      style={{ position: "fixed", inset: 0, zIndex: 950, background: "#000000aa", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+      <div onClick={e => e.stopPropagation()}
+        style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 18, padding: 28, width: "min(560px,94vw)", maxHeight: "88vh", overflow: "auto", animation: "fadeUp .25s ease" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+          <div>
+            <div style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim, letterSpacing: 2 }}>TRANSPARENCY</div>
+            <div style={{ fontFamily: T.serif, fontSize: 22, color: T.text, fontWeight: 400, marginTop: 4 }}>How AnonScore is paid for</div>
+          </div>
+          <button onClick={onClose} aria-label="Close" style={{ background: "transparent", border: `1px solid ${T.border}`, borderRadius: 8, padding: "6px 10px", color: T.textMid, cursor: "pointer" }}>✕</button>
+        </div>
+        <div style={{ fontSize: 14, color: T.textMid, lineHeight: 1.7, marginBottom: 14 }}>
+          AnonScore is free for everyone and always will be. We don't run ads. We don't track you. We don't sell data. There is no account, no email required to scan.
+        </div>
+        <div style={{ fontSize: 13, color: T.textMid, lineHeight: 1.7, marginBottom: 14 }}>
+          To keep the tool sustainable, we use three (only three) revenue sources:
+        </div>
+        <ol style={{ paddingLeft: 22, marginBottom: 18, color: T.textMid, fontSize: 13, lineHeight: 1.75 }}>
+          <li style={{ marginBottom: 8 }}><strong style={{ color: T.text }}>Voluntary tips</strong> — Lightning and Nostr in the footer. Pay if it saved you trouble; ignore otherwise.</li>
+          <li style={{ marginBottom: 8 }}><strong style={{ color: T.text }}>Affiliate referrals on wallet recommendations</strong> — when we link to a wallet or tool that offers a referral program, we may earn a small kickback. Recommendations are never changed to favour higher-paying tools; we recommend only what we'd use ourselves.</li>
+          <li style={{ marginBottom: 8 }}><strong style={{ color: T.text }}>Grants and B2B audits</strong> — privacy-focused organizations and wallet companies sometimes pay for in-depth audits. The free tool you see is not affected.</li>
+        </ol>
+        <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: 12, padding: 16, marginBottom: 14 }}>
+          <div style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim, letterSpacing: 2, marginBottom: 8 }}>CURRENT AFFILIATE LIST</div>
+          {affiliates.length === 0
+            ? <div style={{ fontSize: 13, color: T.textMid, lineHeight: 1.6 }}>
+                <strong style={{ color: T.green }}>None right now.</strong> Every wallet link on this site goes directly to the project's official homepage with no kickback to us. If that changes, the tool will be listed here, and each affiliate link will be tagged "↗ affiliate" next to the tool name.
+              </div>
+            : <ul style={{ fontSize: 13, color: T.textMid, lineHeight: 1.7, paddingLeft: 18 }}>
+                {affiliates.map(name => (
+                  <li key={name}><a href={TOOL_AFFILIATE_URL[name]} target="_blank" rel="noopener noreferrer nofollow" style={{ color: T.cyan, textDecoration: "underline" }}>{name}</a></li>
+                ))}
+              </ul>}
+        </div>
+        <div style={{ fontSize: 12, color: T.textDim, lineHeight: 1.6 }}>
+          Source code is on <a href="https://github.com/netasset/anonscore" target="_blank" rel="noopener noreferrer" style={{ color: T.cyan, textDecoration: "underline" }}>GitHub</a>. The affiliate list above is generated directly from a single config object — anyone can verify it.
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────────
+   NEWSLETTER SIGNUP — minimal form, POSTs to NEWSLETTER.endpoint when set.
+   Until then, falls back to a clean mailto: link so it still works.
+───────────────────────────────────────────── */
+function NewsletterSignup({ compact = false }) {
+  const [email, setEmail] = useState("");
+  const [status, setStatus] = useState("idle"); // idle | submitting | ok | err
+  const [error, setError] = useState("");
+  const submit = async (e) => {
+    e?.preventDefault();
+    const v = email.trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) { setError("Enter a valid email."); return; }
+    setStatus("submitting"); setError("");
+    if (NEWSLETTER.endpoint) {
+      try {
+        const fd = new FormData(); fd.append("email", v);
+        const r = await fetch(NEWSLETTER.endpoint, { method: "POST", body: fd, mode: "no-cors" });
+        // no-cors gives us an opaque response; assume success unless network error fires
+        setStatus("ok");
+      } catch { setStatus("err"); setError("Couldn't reach the newsletter service — try again later."); }
+    } else {
+      // Graceful fallback: open the user's mail client pre-addressed
+      window.location.href = `mailto:${NEWSLETTER.fallbackMailto}?subject=${encodeURIComponent("Newsletter subscribe")}&body=${encodeURIComponent(v)}`;
+      setStatus("ok");
+    }
+  };
+  if (status === "ok") return (
+    <div style={{ background: T.greenLo, border: `1px solid ${T.green}33`, borderRadius: 12, padding: "12px 16px", display: "flex", alignItems: "center", gap: 10 }}>
+      <span style={{ color: T.green, fontSize: 18 }}>✓</span>
+      <div style={{ fontSize: 13, color: T.text }}>Got it — you'll receive the next issue.</div>
+    </div>
+  );
+  const inputId = compact ? "nl-email-compact" : "nl-email";
+  return (
+    <form onSubmit={submit} style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      {!compact && (
+        <>
+          <div style={{ fontFamily: T.serif, fontSize: 22, color: T.text, fontWeight: 400 }}>
+            {NEWSLETTER.name}
+          </div>
+          <div style={{ fontSize: 13, color: T.textMid, lineHeight: 1.6, marginBottom: 4 }}>{NEWSLETTER.pitch}</div>
+        </>
+      )}
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <label htmlFor={inputId} className="sr-only">Email address</label>
+        <input id={inputId} type="email" value={email} onChange={e => { setEmail(e.target.value); setError(""); }}
+          placeholder="you@somewhere.zone"
+          required aria-invalid={!!error}
+          style={{ flex: 1, minWidth: 200, background: T.surface, border: `1.5px solid ${error ? T.red : T.border}`, borderRadius: 10, padding: "11px 14px", color: T.text, fontFamily: T.mono, fontSize: 13, outline: "none", transition: "border .15s, box-shadow .2s" }}
+          onFocus={e => { e.target.style.borderColor = T.cyan; e.target.style.boxShadow = `0 0 0 3px ${T.cyan}22`; }}
+          onBlur={e => { e.target.style.borderColor = error ? T.red : T.border; e.target.style.boxShadow = "0 0 0 0 transparent"; }} />
+        <button type="submit" disabled={status === "submitting"}
+          style={{ background: T.cyan, border: "none", borderRadius: 10, padding: "11px 18px", color: T.bg, fontFamily: T.sans, fontWeight: 700, fontSize: 13, cursor: status === "submitting" ? "wait" : "pointer", opacity: status === "submitting" ? 0.6 : 1, whiteSpace: "nowrap" }}>
+          {status === "submitting" ? "…" : "Subscribe"}
+        </button>
+      </div>
+      {error && <div role="alert" style={{ fontSize: 11, color: T.red }}>{error}</div>}
+      <div style={{ fontSize: 10, color: T.textDim, lineHeight: 1.5 }}>
+        No spam. Unsubscribe link in every issue. We never link your email to a scanned address.
+      </div>
+    </form>
+  );
 }
 
 /* ─────────────────────────────────────────────
@@ -3171,11 +3401,15 @@ function Dashboard({ address, addrInfo, utxos, txs, isMobile, onBack, onRescan, 
                     {!simpleMode && <div style={{ fontSize: 12, color: T.textDim, lineHeight: 1.6, background: T.surface, borderRadius: 8, padding: "10px 14px" }}><strong style={{ color: T.textMid }}>How:</strong> {r.detail}</div>}
                     <div style={{ marginTop: 10, display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
                       <span style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim, letterSpacing: 1 }}>OPTIONS:</span>
-                      {(r.tools || [{ name: r.tool, note: "" }]).map((t, ti) => (
-                        <span key={ti} title={t.note} style={{ fontFamily: T.mono, fontSize: 9, padding: "3px 8px", borderRadius: 4, background: T.blue + "18", color: T.blue, border: `1px solid ${T.blue}30`, letterSpacing: 0.3, cursor: t.note ? "help" : "default" }}>
-                          {t.name}
-                        </span>
-                      ))}
+                      {(r.tools || [{ name: r.tool, note: "" }]).map((t, ti) => {
+                        const href = toolLink(t.name);
+                        const aff = toolIsAffiliate(t.name);
+                        const base = { fontFamily: T.mono, fontSize: 9, padding: "3px 8px", borderRadius: 4, background: T.cyan + "18", color: T.cyan, border: `1px solid ${T.cyan}30`, letterSpacing: 0.3, textDecoration: "none", cursor: href ? "pointer" : (t.note ? "help" : "default") };
+                        const label = aff ? `${t.name} ↗ · affiliate` : (href ? `${t.name} ↗` : t.name);
+                        return href
+                          ? <a key={ti} href={href} target="_blank" rel="noopener noreferrer nofollow" title={aff ? `${t.note ? t.note + " · " : ""}AnonScore earns a referral when you sign up — see /how-we-get-paid` : t.note} style={base}>{label}</a>
+                          : <span key={ti} title={t.note} style={base}>{t.name}</span>;
+                      })}
                     </div>
                     {!simpleMode && (r.tools || []).length > 0 && (
                       <div style={{ marginTop: 6, fontSize: 11, color: T.textDim, lineHeight: 1.55 }}>
@@ -3768,12 +4002,20 @@ function LightningDashboard({ nodeId, nodeData, channels, isMobile, onBack, onRe
                       <div style={{ fontSize: 13, color: T.textMid, lineHeight: 1.6, marginBottom: r.tools?.length ? 12 : 0 }}>{r.detail}</div>
                       {r.tools?.length > 0 && (
                         <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                          {r.tools.map(t => (
-                            <div key={t.name} style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: 8, padding: "5px 10px" }}>
-                              <div style={{ fontSize: 11, fontWeight: 600, color: T.text }}>{t.name}</div>
-                              <div style={{ fontSize: 10, color: T.textDim }}>{t.note}</div>
-                            </div>
-                          ))}
+                          {r.tools.map(t => {
+                            const href = toolLink(t.name);
+                            const aff = toolIsAffiliate(t.name);
+                            const inner = (
+                              <>
+                                <div style={{ fontSize: 11, fontWeight: 600, color: T.text }}>{t.name}{href ? " ↗" : ""}{aff ? " · affiliate" : ""}</div>
+                                <div style={{ fontSize: 10, color: T.textDim }}>{t.note}</div>
+                              </>
+                            );
+                            const base = { background: T.surface, border: `1px solid ${T.border}`, borderRadius: 8, padding: "5px 10px", textDecoration: "none", display: "block" };
+                            return href
+                              ? <a key={t.name} href={href} target="_blank" rel="noopener noreferrer nofollow" style={base}>{inner}</a>
+                              : <div key={t.name} style={base}>{inner}</div>;
+                          })}
                         </div>
                       )}
                     </div>
