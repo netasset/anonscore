@@ -2150,15 +2150,6 @@ function Landing({ onAnalyze, isMobile, onCases }) {
                   {isLn ? "⚡ Audit →" : "Analyze →"}
                 </button>
               </div>
-              {!isLn && (
-                <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 5 }}>
-                  <button onClick={() => submit(null, false)} style={{ background: "none", border: "none", cursor: "pointer", fontFamily: T.mono, fontSize: 10, color: T.textDim, padding: 0 }}
-                    onMouseOver={e => e.currentTarget.style.color = T.textMid}
-                    onMouseOut={e => e.currentTarget.style.color = T.textDim}>
-                    skip plain English →
-                  </button>
-                </div>
-              )}
               {isLn && (
                 <div style={{ fontFamily: T.mono, fontSize: 10, color: T.textDim, marginTop: 5, textAlign: "left" }}>
                   ⚡ Node pubkeys only work if you run your own node — Umbrel, Start9, Citadel, RaspiBlitz, etc.
@@ -2171,37 +2162,23 @@ function Landing({ onAnalyze, isMobile, onCases }) {
               <span style={{ fontFamily: T.mono, fontSize: 10, color: T.textDim }}>or try a sample</span>
               <div style={{ flex: 1, height: 1, background: T.borderLo }} />
             </div>
-            <div style={{ display: "flex", gap: 8 }}>
-              <button onClick={() => onAnalyze("DEMO", false, "btc")}
-                style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, background: T.surface, border: `1.5px solid ${T.border}`, borderRadius: 12, padding: "11px 16px", color: T.textMid, fontFamily: T.sans, fontSize: 13, fontWeight: 600, cursor: "pointer", transition: "all .18s" }}
-                onMouseOver={e => e.currentTarget.style.borderColor = T.cyan}
-                onMouseOut={e => e.currentTarget.style.borderColor = T.border}>
-                ₿ Bitcoin sample
-              </button>
-              <button onClick={() => onAnalyze("DEMO", true, "btc")}
-                style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, background: T.cyan, border: "none", borderRadius: 12, padding: "11px 16px", color: T.bg, fontFamily: T.sans, fontSize: 13, fontWeight: 700, cursor: "pointer", transition: "all .18s", boxShadow: `0 2px 14px ${T.cyanMid}` }}
-                onMouseOver={e => e.currentTarget.style.opacity = ".88"}
-                onMouseOut={e => e.currentTarget.style.opacity = "1"}>
-                💬 Plain English
-              </button>
-            </div>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 14, flexWrap: "wrap" }}>
-              <button onClick={() => onAnalyze("DEMO_A", false, "btc")} style={{ background: "none", border: "none", cursor: "pointer", fontFamily: T.mono, fontSize: 10, color: T.green, padding: 0 }}
-                onMouseOver={e => e.currentTarget.style.opacity = ".7"}
-                onMouseOut={e => e.currentTarget.style.opacity = "1"}>
-                ✨ See an A-grade wallet →
-              </button>
-              <span style={{ color: T.borderLo, fontFamily: T.mono, fontSize: 10 }}>·</span>
-              <button onClick={() => onAnalyze("DEMO_LN", false, "ln_pubkey")} style={{ background: "none", border: "none", cursor: "pointer", fontFamily: T.mono, fontSize: 10, color: T.ln, padding: 0 }}
-                onMouseOver={e => e.currentTarget.style.opacity = ".7"}
-                onMouseOut={e => e.currentTarget.style.opacity = "1"}>
-                ⚡ Try Lightning node sample →
-              </button>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              {[
+                { addr: "DEMO",    label: "₿ Risky wallet",    color: T.btc,  type: "btc" },
+                { addr: "DEMO_A",  label: "✨ Pristine wallet", color: T.green, type: "btc" },
+                { addr: "DEMO_LN", label: "⚡ Lightning node",  color: T.ln,   type: "ln_pubkey" },
+              ].map(s => (
+                <button key={s.addr} onClick={() => onAnalyze(s.addr, false, s.type)}
+                  style={{ flex: "1 1 30%", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, background: T.surface, border: `1.5px solid ${T.border}`, borderRadius: 12, padding: "11px 14px", color: T.textMid, fontFamily: T.sans, fontSize: 13, fontWeight: 600, cursor: "pointer", transition: "border-color .18s, color .18s" }}
+                  onMouseOver={e => { e.currentTarget.style.borderColor = s.color; e.currentTarget.style.color = s.color; }}
+                  onMouseOut={e => { e.currentTarget.style.borderColor = T.border; e.currentTarget.style.color = T.textMid; }}>
+                  {s.label}
+                </button>
+              ))}
             </div>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
               <a href="https://github.com/netasset/anonscore" target="_blank" rel="noopener noreferrer"
-                style={{ fontFamily: T.mono, fontSize: 10, color: T.cyan, textDecoration: "none" }}>Open source</a>
-              <span style={{ color: T.textDim, fontSize: 10 }}>· read-only · nothing stored</span>
+                style={{ fontFamily: T.mono, fontSize: 10, color: T.cyan, textDecoration: "none" }}>Open source ↗</a>
             </div>
           </div>
         </section>
@@ -2311,23 +2288,17 @@ function Landing({ onAnalyze, isMobile, onCases }) {
             Free, open source, nothing stored. Takes 60 seconds.
           </p>
           <div style={{ display: "flex", flexDirection: isMobile ? "column" : "row", gap: 10, justifyContent: "center" }}>
-            <button onClick={() => onAnalyze("DEMO", false, "btc")}
-              style={{ background: T.surface, border: `1.5px solid ${T.border}`, borderRadius: 12, padding: "15px 28px", color: T.text, fontFamily: T.sans, fontSize: 15, fontWeight: 600, cursor: "pointer", transition: "all .18s" }}
-              onMouseOver={e => e.currentTarget.style.borderColor = T.cyan}
-              onMouseOut={e => e.currentTarget.style.borderColor = T.border}>
-              ▶ Try the demo
-            </button>
-            <button onClick={() => onAnalyze("DEMO", true, "btc")}
+            <button onClick={() => { inputRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }); setTimeout(() => inputRef.current?.focus(), 300); }}
               style={{ background: T.cyan, border: "none", borderRadius: 12, padding: "15px 28px", color: T.bg, fontFamily: T.sans, fontSize: 15, fontWeight: 700, cursor: "pointer", transition: "all .18s", boxShadow: `0 4px 24px ${T.cyanMid}` }}
               onMouseOver={e => e.currentTarget.style.opacity = ".88"}
               onMouseOut={e => e.currentTarget.style.opacity = "1"}>
-              💬 Try in Plain English
+              Scan my address ↑
             </button>
-            <button onClick={() => { inputRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }); setTimeout(() => inputRef.current?.focus(), 300); }}
+            <button onClick={() => onAnalyze("DEMO", false, "btc")}
               style={{ background: "transparent", border: `1.5px solid ${T.border}`, borderRadius: 12, padding: "15px 28px", color: T.textMid, fontFamily: T.sans, fontSize: 15, fontWeight: 500, cursor: "pointer", transition: "all .18s" }}
               onMouseOver={e => { e.currentTarget.style.borderColor = T.cyan; e.currentTarget.style.color = T.cyan; }}
               onMouseOut={e => { e.currentTarget.style.borderColor = T.border; e.currentTarget.style.color = T.textMid; }}>
-              Scan my address ↑
+              ▶ See a sample wallet
             </button>
           </div>
         </div>
@@ -2372,8 +2343,6 @@ function Landing({ onAnalyze, isMobile, onCases }) {
               )}
             </span>
           )}
-          <span style={{ fontFamily: T.mono, fontSize: 10, color: T.textDim }}>no cookies · no analytics · Tor compatible</span>
-          <span style={{ color: T.borderLo }}>·</span>
           <a href="https://opnorange.com" target="_blank" rel="noopener noreferrer"
             style={{ fontFamily: T.mono, fontSize: 10, color: T.textDim, textDecoration: "none", transition: "color .15s" }}
             onMouseOver={e => e.currentTarget.style.color = T.btc}
@@ -3452,7 +3421,7 @@ function Dashboard({ address, addrInfo, utxos, txs, isMobile, onBack, onRescan, 
                         const href = toolLink(t.name);
                         const aff = toolIsAffiliate(t.name);
                         const base = { fontFamily: T.mono, fontSize: 9, padding: "3px 8px", borderRadius: 4, background: T.cyan + "18", color: T.cyan, border: `1px solid ${T.cyan}30`, letterSpacing: 0.3, textDecoration: "none", cursor: href ? "pointer" : (t.note ? "help" : "default") };
-                        const label = aff ? `${t.name} ↗ · affiliate` : (href ? `${t.name} ↗` : t.name);
+                        const label = aff ? `${t.name} · affiliate` : t.name;
                         return href
                           ? <a key={ti} href={href} target="_blank" rel="noopener noreferrer nofollow" title={aff ? `${t.note ? t.note + " · " : ""}AnonScore earns a referral when you sign up — see /how-we-get-paid` : t.note} style={base}>{label}</a>
                           : <span key={ti} title={t.note} style={base}>{t.name}</span>;
@@ -4054,7 +4023,7 @@ function LightningDashboard({ nodeId, nodeData, channels, isMobile, onBack, onRe
                             const aff = toolIsAffiliate(t.name);
                             const inner = (
                               <>
-                                <div style={{ fontSize: 11, fontWeight: 600, color: T.text }}>{t.name}{href ? " ↗" : ""}{aff ? " · affiliate" : ""}</div>
+                                <div style={{ fontSize: 11, fontWeight: 600, color: T.text }}>{t.name}{aff ? " · affiliate" : ""}</div>
                                 <div style={{ fontSize: 10, color: T.textDim }}>{t.note}</div>
                               </>
                             );
