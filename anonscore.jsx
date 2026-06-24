@@ -141,6 +141,25 @@ const NEWSLETTER = {
   pitch: "Weekly deep-dives on notable wallets, privacy heuristics, and seizure stories.",
 };
 
+// Privacy Coach — Pillar 1 paid product (per strategy doc). The waitlist
+// landing page validates demand BEFORE we build the full Coach product.
+// Reachable at /?page=coach and linked from the AI assistant card.
+// Per strategy gate: ship the waitlist first; build the real Coach only
+// after we see >= 5% homepage→waitlist conversion.
+const COACH = {
+  price:        "$10",
+  unit:         "/mo",
+  launchTarget: "Q4 2026",
+  endpoint:     "",                                // Same provider as NEWSLETTER once chosen — or a separate list
+  fallbackMailto: "netassetpremium@gmail.com",
+  benefits: [
+    { icon: "∞",  title: "Unlimited messages",  desc: "Today's 5/day cap → none. Ask as much as you need." },
+    { icon: "⏱",  title: "Persistent memory",   desc: "The Coach remembers your scans, the fixes you've shipped, and what's next." },
+    { icon: "⌂",  title: "Multi-device",        desc: "Pick up where you left off across devices. Memory is passphrase-encrypted; the server can't read it." },
+    { icon: "✓",  title: "Personal fix queue",  desc: "Tracked plan across all your wallets, with progress markers." },
+  ],
+};
+
 // Canonical homepage for each tool we recommend. Source of truth for outbound
 // links — the recommendation text in `recs[].tools[].name` looks up here at
 // render time. Adding a new tool name without a URL is fine; it just renders
@@ -2756,6 +2775,169 @@ function NewsletterSignup({ compact = false }) {
 }
 
 /* ─────────────────────────────────────────────
+   COACH WAITLIST — paid AI tier (Pillar 1, validation gate).
+   Reachable at /?page=coach. Linked from the AI assistant card.
+   No payment yet — just collects waitlist intent to validate demand
+   before we build the full Coach product. Strategy gate: ≥5%
+   homepage→waitlist conversion before committing to build.
+───────────────────────────────────────────── */
+function CoachWaitlist({ onBack, isMobile }) {
+  const [email, setEmail] = useState("");
+  const [status, setStatus] = useState("idle"); // idle | submitting | ok | err
+  const [error, setError] = useState("");
+
+  const submit = async (e) => {
+    e?.preventDefault();
+    const v = email.trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) { setError("Enter a valid email."); return; }
+    setStatus("submitting"); setError("");
+    if (COACH.endpoint) {
+      try {
+        const fd = new FormData();
+        fd.append("email", v);
+        fd.append("list", "coach-waitlist");
+        await fetch(COACH.endpoint, { method: "POST", body: fd, mode: "no-cors" });
+        setStatus("ok");
+      } catch { setStatus("err"); setError("Couldn't reach the waitlist service. Try again later."); }
+    } else {
+      window.location.href = `mailto:${COACH.fallbackMailto}?subject=${encodeURIComponent("Coach waitlist")}&body=${encodeURIComponent(v + "\n\n(Add me to the Privacy Coach early-access list.)")}`;
+      setStatus("ok");
+    }
+  };
+
+  // Meta + tab title for shareability
+  useEffect(() => {
+    const prev = document.title;
+    document.title = "Privacy Coach (early access) — AnonScore";
+    return () => { document.title = prev; };
+  }, []);
+
+  return (
+    <div role="main" aria-label="Privacy Coach — early access waitlist" style={{ minHeight: "100vh", background: T.bg, display: "flex", flexDirection: "column" }}>
+      <h1 className="sr-only">Privacy Coach — paid AI tier (early access waitlist)</h1>
+
+      {/* Nav */}
+      <nav style={{ display: "flex", alignItems: "center", gap: 10, padding: isMobile ? "12px 16px" : "14px 32px", borderBottom: `1px solid ${T.border}`, background: T.bg, position: "sticky", top: 0, zIndex: 100 }}>
+        <button onClick={onBack} style={{ background: "transparent", border: `1.5px solid ${T.border}`, borderRadius: 8, padding: "7px 12px", color: T.textMid, fontFamily: T.sans, fontSize: 13, cursor: "pointer", transition: "border .15s" }}
+          onMouseOver={e => e.currentTarget.style.borderColor = T.cyan}
+          onMouseOut={e => e.currentTarget.style.borderColor = T.border}>← Back</button>
+        <div style={{ fontFamily: T.display, fontSize: 15, letterSpacing: 4, fontWeight: 700 }}>ANON<span style={{ color: T.cyan }}>SCORE</span></div>
+        <div style={{ flex: 1 }} />
+        <span style={{ fontFamily: T.mono, fontSize: 9, color: T.cyan, background: T.cyanLo, border: `1px solid ${T.cyanMid}`, borderRadius: 6, padding: "4px 9px", letterSpacing: 1 }}>EARLY ACCESS</span>
+      </nav>
+
+      <div style={{ flex: 1, maxWidth: 760, margin: "0 auto", width: "100%", padding: isMobile ? "32px 20px" : "56px 32px" }}>
+        {/* Hero */}
+        <div style={{ textAlign: "center", marginBottom: 40 }}>
+          <div style={{ fontFamily: T.mono, fontSize: 10, color: T.cyan, letterSpacing: 2.5, marginBottom: 16 }}>✦ AI PRIVACY ASSISTANT — UPGRADED</div>
+          <div style={{ fontFamily: T.serif, fontSize: isMobile ? 36 : 52, color: T.text, lineHeight: 1.1, fontWeight: 400, marginBottom: 18 }}>
+            A coach that remembers<br /><em style={{ color: T.cyan }}>every scan, every fix, every step.</em>
+          </div>
+          <p style={{ fontSize: isMobile ? 15 : 17, color: T.textMid, lineHeight: 1.7, maxWidth: 560, margin: "0 auto", fontWeight: 300 }}>
+            The free AI assistant answers 5 questions per session. The Coach has no cap, remembers your history across scans, and tracks a personal fix queue that follows you across devices.
+          </p>
+        </div>
+
+        {/* Pricing card */}
+        <div style={{ background: T.card, border: `1.5px solid ${T.cyan}55`, borderRadius: 18, padding: isMobile ? "24px 20px" : "32px 36px", marginBottom: 28, boxShadow: `0 8px 32px ${T.cyanMid}, 0 0 0 1px ${T.cyan}22` }}>
+          <div style={{ display: "flex", alignItems: "baseline", justifyContent: "center", gap: 4, marginBottom: 10 }}>
+            <span style={{ fontFamily: T.serif, fontSize: isMobile ? 44 : 56, color: T.text, fontWeight: 400 }}>{COACH.price}</span>
+            <span style={{ fontFamily: T.mono, fontSize: 14, color: T.textMid }}>{COACH.unit}</span>
+          </div>
+          <div style={{ textAlign: "center", fontSize: 13, color: T.textDim, marginBottom: 24, fontFamily: T.mono, letterSpacing: 0.5 }}>
+            Pay in Bitcoin (Lightning) or card. Cancel anytime.
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 14, marginBottom: 28 }}>
+            {COACH.benefits.map(b => (
+              <div key={b.title} style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
+                <div style={{ flexShrink: 0, width: 28, height: 28, borderRadius: 8, background: T.cyan + "18", border: `1px solid ${T.cyan}33`, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: T.mono, fontSize: 14, color: T.cyan }}>
+                  {b.icon}
+                </div>
+                <div>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: T.text, marginBottom: 3 }}>{b.title}</div>
+                  <div style={{ fontSize: 12, color: T.textMid, lineHeight: 1.55 }}>{b.desc}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Waitlist form */}
+          {status === "ok" ? (
+            <div style={{ background: T.greenLo, border: `1px solid ${T.green}44`, borderRadius: 12, padding: "16px 20px", display: "flex", alignItems: "center", gap: 12 }}>
+              <span style={{ color: T.green, fontSize: 20 }}>✓</span>
+              <div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: T.text }}>You're on the list.</div>
+                <div style={{ fontSize: 12, color: T.textMid, marginTop: 2 }}>We'll email when the Coach opens for early access — no spam in between.</div>
+              </div>
+            </div>
+          ) : (
+            <form onSubmit={submit}>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <label htmlFor="coach-email" className="sr-only">Email address for early-access waitlist</label>
+                <input id="coach-email" type="email" value={email} onChange={e => { setEmail(e.target.value); setError(""); }}
+                  placeholder="you@somewhere.zone"
+                  required aria-invalid={!!error}
+                  style={{ flex: 1, minWidth: 220, background: T.surface, border: `1.5px solid ${error ? T.red : T.border}`, borderRadius: 10, padding: "13px 16px", color: T.text, fontFamily: T.mono, fontSize: 13, outline: "none", transition: "border .15s, box-shadow .2s" }}
+                  onFocus={e => { e.target.style.borderColor = T.cyan; e.target.style.boxShadow = `0 0 0 3px ${T.cyan}22`; }}
+                  onBlur={e => { e.target.style.borderColor = error ? T.red : T.border; e.target.style.boxShadow = "0 0 0 0 transparent"; }} />
+                <button type="submit" disabled={status === "submitting"}
+                  style={{ background: T.cyan, border: "none", borderRadius: 10, padding: "13px 22px", color: T.bg, fontFamily: T.sans, fontWeight: 700, fontSize: 14, cursor: status === "submitting" ? "wait" : "pointer", opacity: status === "submitting" ? 0.6 : 1, whiteSpace: "nowrap" }}>
+                  {status === "submitting" ? "…" : "Join waitlist"}
+                </button>
+              </div>
+              {error && <div role="alert" style={{ fontSize: 11, color: T.red, marginTop: 8 }}>{error}</div>}
+              <div style={{ fontSize: 11, color: T.textDim, marginTop: 10, lineHeight: 1.55 }}>
+                Target opening: <span style={{ color: T.textMid }}>{COACH.launchTarget}</span>. We'll email once. No spam. Your email is never linked to a scanned address.
+              </div>
+            </form>
+          )}
+        </div>
+
+        {/* Comparison table */}
+        <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: 14, overflow: "hidden", marginBottom: 28 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", borderBottom: `1px solid ${T.border}` }}>
+            <div style={{ padding: "14px 18px", fontFamily: T.mono, fontSize: 9, color: T.textDim, letterSpacing: 2 }}>WHAT YOU GET</div>
+            <div style={{ padding: "14px 18px", fontFamily: T.mono, fontSize: 9, color: T.textMid, letterSpacing: 2, borderLeft: `1px solid ${T.border}` }}>FREE</div>
+            <div style={{ padding: "14px 18px", fontFamily: T.mono, fontSize: 9, color: T.cyan, letterSpacing: 2, borderLeft: `1px solid ${T.border}`, background: T.cyanLo }}>COACH</div>
+          </div>
+          {[
+            ["The full audit (10 BTC + 8 LN heuristics)", "✓ always free", "✓ always free"],
+            ["AI assistant — messages per session",       "5",            "Unlimited"],
+            ["Memory across scans",                       "—",            "✓ passphrase-encrypted"],
+            ["Multi-device continuity",                   "—",            "✓"],
+            ["Personal fix queue with progress",          "Per address",  "✓ across every wallet"],
+            ["Address ever sent to the AI",               "Never",        "Never"],
+          ].map(([what, free, coach], i, arr) => (
+            <div key={what} style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", borderBottom: i < arr.length - 1 ? `1px solid ${T.borderLo}` : undefined }}>
+              <div style={{ padding: "12px 18px", fontSize: 13, color: T.text }}>{what}</div>
+              <div style={{ padding: "12px 18px", fontSize: 12, color: T.textMid, borderLeft: `1px solid ${T.borderLo}`, fontFamily: T.mono }}>{free}</div>
+              <div style={{ padding: "12px 18px", fontSize: 12, color: coach.includes("Never") ? T.textMid : T.text, borderLeft: `1px solid ${T.borderLo}`, fontFamily: T.mono, background: T.cyan + "08" }}>{coach}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Trust copy */}
+        <div style={{ background: T.greenLo, border: `1px solid ${T.green}33`, borderRadius: 12, padding: "16px 20px" }}>
+          <div style={{ fontFamily: T.mono, fontSize: 9, color: T.green, letterSpacing: 2, marginBottom: 8 }}>HOW PRIVACY HOLDS UP UNDER A PAID TIER</div>
+          <div style={{ fontSize: 13, color: T.textMid, lineHeight: 1.7 }}>
+            Coach memory is encrypted client-side with a passphrase you choose — the server stores only ciphertext it can't read. Wallet addresses you scan are <strong style={{ color: T.text }}>never</strong> sent to the AI; only your score and issue names are. Free or paid, this stays the same.
+          </div>
+        </div>
+
+        <div style={{ textAlign: "center", marginTop: 32 }}>
+          <button onClick={onBack} style={{ background: "transparent", border: "none", color: T.textMid, fontFamily: T.mono, fontSize: 12, cursor: "pointer", padding: 8 }}
+            onMouseOver={e => e.currentTarget.style.color = T.cyan}
+            onMouseOut={e => e.currentTarget.style.color = T.textMid}>
+            ← Back to scanner
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────────
    AI FIX ASSISTANT — privacy-first design
    • Address NEVER sent to API
    • Explicit consent gate before first request
@@ -3134,7 +3316,7 @@ function AiAssistant({ checks, recommendations, score, grade, onClose, starters:
 /* ─────────────────────────────────────────────
    DASHBOARD
 ───────────────────────────────────────────── */
-function Dashboard({ address, addrInfo, utxos, txs, isMobile, onBack, onRescan, toast, autoShare, scanAt, defaultSimple, simpleMode: simpleModeFromApp, onSimpleModeChange }) {
+function Dashboard({ address, addrInfo, utxos, txs, isMobile, onBack, onRescan, toast, autoShare, scanAt, defaultSimple, simpleMode: simpleModeFromApp, onSimpleModeChange, onCoach }) {
   const [tab, setTab] = useState("Fix It");
   const [simpleMode, setSimpleMode] = useState(simpleModeFromApp !== undefined ? simpleModeFromApp : (defaultSimple || false));
   const setSimpleModeSync = (val) => { setSimpleMode(val); onSimpleModeChange && onSimpleModeChange(val); };
@@ -3396,6 +3578,16 @@ function Dashboard({ address, addrInfo, utxos, txs, isMobile, onBack, onRescan, 
                   <div style={{ background: T.cyan, borderRadius: 8, padding: "7px 14px", color: T.bg, fontSize: 12, fontWeight: 700, whiteSpace: "nowrap" }}>Ask now →</div>
                 </div>
               </button>
+              {/* Coach upsell — subtle, single line, validates demand */}
+              {onCoach && (
+                <div style={{ borderTop: `1px solid ${T.borderLo}`, padding: "8px 18px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                  <span style={{ fontFamily: T.mono, fontSize: 10, color: T.textDim }}>Hit the 5-question cap?</span>
+                  <button onClick={onCoach}
+                    style={{ background: "none", border: "none", padding: 0, fontFamily: T.mono, fontSize: 10, color: T.cyan, cursor: "pointer", textDecoration: "underline", textUnderlineOffset: 3 }}>
+                    Join the Coach early-access waitlist →
+                  </button>
+                </div>
+              )}
             </div>
             {recommendations.map((r, i) => {
               const done = doneFixes.has(r.key);
@@ -4211,6 +4403,7 @@ function App() {
         const found = CASE_FILES.find(c => c.id === caseSlug || c.slug === caseSlug);
         if (found) { setActiveCaseFile(found); setPage("case_detail"); }
       }
+      if (params.get("page") === "coach") setPage("coach");
     } catch {}
   }, []);
   // Bitcoin state
@@ -4395,8 +4588,9 @@ function App() {
       {page === "cases"        && <CaseFiles onOpenCase={c => { setActiveCaseFile(c); setPage("case_detail"); }} onBack={() => setPage("landing")} isMobile={isMobile} />}
       {page === "case_detail"  && activeCaseFile && <CaseDetail caseFile={activeCaseFile} onBack={() => setPage("cases")} onAnalyze={analyze} isMobile={isMobile} />}
       {page === "scanning"     && <Scanning address={address || lnNodeId} isLightning={isScanningLightning} dataReady={scanDataReady} />}
-      {page === "dashboard"    && <Dashboard address={address} addrInfo={addrInfo} utxos={utxos} txs={txs} isMobile={isMobile} onBack={() => setPage("landing")} onRescan={analyze} toast={toast} autoShare={autoShare} scanAt={scanAt} defaultSimple={defaultSimple} simpleMode={simpleMode} onSimpleModeChange={setSimpleMode} />}
+      {page === "dashboard"    && <Dashboard address={address} addrInfo={addrInfo} utxos={utxos} txs={txs} isMobile={isMobile} onBack={() => setPage("landing")} onRescan={analyze} toast={toast} autoShare={autoShare} scanAt={scanAt} defaultSimple={defaultSimple} simpleMode={simpleMode} onSimpleModeChange={setSimpleMode} onCoach={() => setPage("coach")} />}
       {page === "ln_dashboard" && <LightningDashboard nodeId={lnNodeId} nodeData={lnNodeData} channels={lnChannels} isMobile={isMobile} onBack={() => setPage("landing")} onRescan={analyze} toast={toast} />}
+      {page === "coach"        && <CoachWaitlist onBack={() => setPage("landing")} isMobile={isMobile} />}
     </>
   );
 }
