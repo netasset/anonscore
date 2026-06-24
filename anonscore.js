@@ -214,6 +214,121 @@ const COACH = {
     desc: "Tracked plan across all your wallets, with progress markers."
   }]
 };
+const STRINGS = {
+  en: {
+    "nav.free": "Free",
+    "nav.nocookies": "✓ No cookies",
+    "nav.nothingstored": "✓ Nothing stored",
+    "nav.tor": "✓ Tor compatible",
+    "hero.eyebrow": "FREE BITCOIN & LIGHTNING PRIVACY AUDIT",
+    "hero.h1.line1": "Is your Bitcoin",
+    "hero.h1.line2": "stack leaking?",
+    "hero.h1.em": "Find out in 60 seconds.",
+    "hero.sub": "Paste a Bitcoin address or a Lightning node pubkey. Get a privacy score, every issue explained, and a ranked fix plan — free, open source, nothing stored.",
+    "spectrum.low": "0 · Fully traceable",
+    "spectrum.avg": "avg wallet: 38",
+    "spectrum.high": "100 · Invisible",
+    "trust.btc": "₿ Bitcoin addresses are public by design — we read the blockchain like a block explorer. Your address is never logged or stored.",
+    "trust.ln": "⚡ Lightning node pubkeys are public on the gossip network — we query mempool.space's public API. Your pubkey is never logged or stored.",
+    "cta.analyze": "Analyze →",
+    "cta.audit": "⚡ Audit →",
+    "sample.divider": "or try a sample",
+    "sample.risky": "₿ Risky wallet",
+    "sample.pristine": "✨ Pristine wallet",
+    "sample.lightning": "⚡ Lightning node",
+    "recent.title": "RECENT SCANS",
+    "err.empty": "Please enter a Bitcoin address or Lightning node pubkey.",
+    "err.invalid": "Paste a Bitcoin address (bc1…, 1…, 3…) or a Lightning node pubkey (66-char hex).",
+    "finalcta.h2.a": "Most wallets score 38/100.",
+    "finalcta.h2.b": "Where does yours land?",
+    "finalcta.sub": "Free, open source, nothing stored. Takes 60 seconds.",
+    "finalcta.scan": "Scan my address ↑",
+    "finalcta.sample": "▶ See a sample wallet",
+    "scanning.btc.title": "Analyzing your wallet…",
+    "scanning.ln.title": "Auditing your node…",
+    "scanning.btc.checks": "RUNNING 10 CHECKS",
+    "scanning.ln.checks": "⚡ RUNNING 8 LIGHTNING CHECKS",
+    "scanning.didyouknow": "DID YOU KNOW"
+  },
+  es: {
+    "nav.free": "Gratis",
+    "nav.nocookies": "✓ Sin cookies",
+    "nav.nothingstored": "✓ Nada se guarda",
+    "nav.tor": "✓ Compatible con Tor",
+    "hero.eyebrow": "AUDITORÍA GRATUITA DE PRIVACIDAD BITCOIN Y LIGHTNING",
+    "hero.h1.line1": "¿Tu stack de Bitcoin",
+    "hero.h1.line2": "está filtrando datos?",
+    "hero.h1.em": "Descúbrelo en 60 segundos.",
+    "hero.sub": "Pega una dirección de Bitcoin o la clave pública de un nodo Lightning. Obtén una puntuación de privacidad, cada problema explicado y un plan de mejora priorizado — gratis, código abierto, nada se guarda.",
+    "spectrum.low": "0 · Totalmente rastreable",
+    "spectrum.avg": "billetera promedio: 38",
+    "spectrum.high": "100 · Invisible",
+    "trust.btc": "₿ Las direcciones de Bitcoin son públicas por diseño — leemos la blockchain como un explorador de bloques. Tu dirección nunca se registra ni se guarda.",
+    "trust.ln": "⚡ Las claves públicas de nodos Lightning son públicas en la red de gossip — consultamos la API pública de mempool.space. Tu clave nunca se registra ni se guarda.",
+    "cta.analyze": "Analizar →",
+    "cta.audit": "⚡ Auditar →",
+    "sample.divider": "o prueba un ejemplo",
+    "sample.risky": "₿ Billetera riesgosa",
+    "sample.pristine": "✨ Billetera impecable",
+    "sample.lightning": "⚡ Nodo Lightning",
+    "recent.title": "ESCANEOS RECIENTES",
+    "err.empty": "Ingresa una dirección de Bitcoin o la clave pública de un nodo Lightning.",
+    "err.invalid": "Pega una dirección de Bitcoin (bc1…, 1…, 3…) o una clave pública de nodo Lightning (66 caracteres hex).",
+    "finalcta.h2.a": "La mayoría de billeteras puntúa 38/100.",
+    "finalcta.h2.b": "¿Dónde queda la tuya?",
+    "finalcta.sub": "Gratis, código abierto, nada se guarda. Toma 60 segundos.",
+    "finalcta.scan": "Escanear mi dirección ↑",
+    "finalcta.sample": "▶ Ver una billetera de ejemplo",
+    "scanning.btc.title": "Analizando tu billetera…",
+    "scanning.ln.title": "Auditando tu nodo…",
+    "scanning.btc.checks": "EJECUTANDO 10 VERIFICACIONES",
+    "scanning.ln.checks": "⚡ EJECUTANDO 8 VERIFICACIONES LIGHTNING",
+    "scanning.didyouknow": "¿SABÍAS QUE?"
+  }
+};
+const SUPPORTED_LANGS = Object.keys(STRINGS);
+const LANG_LABEL = {
+  en: "EN",
+  es: "ES"
+};
+function detectLang() {
+  try {
+    const q = new URLSearchParams(window.location.search).get("lang");
+    if (q && SUPPORTED_LANGS.includes(q)) return q;
+    const saved = localStorage.getItem("anonscore_lang");
+    if (saved && SUPPORTED_LANGS.includes(saved)) return saved;
+    const nav = (navigator.language || "en").slice(0, 2).toLowerCase();
+    if (SUPPORTED_LANGS.includes(nav)) return nav;
+  } catch {}
+  return "en";
+}
+let _lang = typeof window !== "undefined" ? detectLang() : "en";
+const _langListeners = new Set();
+function setLang(l) {
+  if (!SUPPORTED_LANGS.includes(l) || l === _lang) return;
+  _lang = l;
+  try {
+    localStorage.setItem("anonscore_lang", l);
+  } catch {}
+  try {
+    document.documentElement.lang = l;
+  } catch {}
+  _langListeners.forEach(fn => fn());
+}
+function t(key) {
+  return STRINGS[_lang] && STRINGS[_lang][key] || STRINGS.en[key] || key;
+}
+function useLang() {
+  const [, force] = useState(0);
+  useEffect(() => {
+    const fn = () => force(x => x + 1);
+    _langListeners.add(fn);
+    return () => {
+      _langListeners.delete(fn);
+    };
+  }, []);
+  return _lang;
+}
 const TOOL_URL = {
   "Wasabi Wallet": "https://wasabiwallet.io",
   "Sparrow Wallet": "https://sparrowwallet.com",
@@ -3801,11 +3916,47 @@ function CaseDetail({
     }
   }, "Further reading \u2197"))));
 }
+function LangSwitcher({
+  compact = false
+}) {
+  const lang = useLang();
+  if (SUPPORTED_LANGS.length < 2) return null;
+  return React.createElement("div", {
+    role: "group",
+    "aria-label": "Language",
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: 2,
+      border: `1px solid ${T.border}`,
+      borderRadius: 7,
+      overflow: "hidden"
+    }
+  }, SUPPORTED_LANGS.map(l => React.createElement("button", {
+    key: l,
+    onClick: () => setLang(l),
+    "aria-pressed": lang === l,
+    "aria-label": `Switch language to ${LANG_LABEL[l]}`,
+    style: {
+      background: lang === l ? T.cyan : "transparent",
+      border: "none",
+      padding: compact ? "4px 7px" : "5px 9px",
+      color: lang === l ? T.bg : T.textDim,
+      fontFamily: T.mono,
+      fontSize: 10,
+      fontWeight: 700,
+      cursor: "pointer",
+      letterSpacing: 0.5,
+      transition: "background .15s, color .15s"
+    }
+  }, LANG_LABEL[l])));
+}
 function Landing({
   onAnalyze,
   isMobile,
   onCases
 }) {
+  useLang();
   const [input, setInput] = useState("");
   const [error, setError] = useState("");
   const [history, setHistory] = useState(() => getHistory());
@@ -3838,16 +3989,16 @@ function Landing({
   const submit = (val, plain = false) => {
     const v = (val || input).trim();
     if (!v) {
-      setError("Please enter a Bitcoin address or Lightning node pubkey.");
+      setError(t("err.empty"));
       return;
     }
-    const t = detectInputType(v);
-    if (!t) {
-      setError("Paste a Bitcoin address (bc1…, 1…, 3…) or a Lightning node pubkey (66-char hex).");
+    const detected = detectInputType(v);
+    if (!detected) {
+      setError(t("err.invalid"));
       return;
     }
     setError("");
-    onAnalyze(v, plain, t);
+    onAnalyze(v, plain, detected);
   };
   return React.createElement("div", {
     role: "main",
@@ -3908,7 +4059,7 @@ function Landing({
       fontSize: 10,
       color: T.textDim
     }
-  }, "\u2713 No cookies"), React.createElement("span", {
+  }, t("nav.nocookies")), React.createElement("span", {
     style: {
       color: T.borderLo
     }
@@ -3918,7 +4069,7 @@ function Landing({
       fontSize: 10,
       color: T.textDim
     }
-  }, "\u2713 Nothing stored"), React.createElement("span", {
+  }, t("nav.nothingstored")), React.createElement("span", {
     style: {
       color: T.borderLo
     }
@@ -3928,7 +4079,7 @@ function Landing({
       fontSize: 10,
       color: T.textDim
     }
-  }, "\u2713 Tor compatible"), React.createElement("span", {
+  }, t("nav.tor")), React.createElement("span", {
     style: {
       color: T.borderLo,
       margin: "0 4px"
@@ -3954,10 +4105,10 @@ function Landing({
     onMouseOver: e => e.currentTarget.style.borderColor = T.cyan,
     onMouseOut: e => e.currentTarget.style.borderColor = T.border
   }, "GitHub \u2197"), React.createElement(Tag, {
-    label: "Free",
+    label: t("nav.free"),
     color: T.green,
     size: 10
-  }))), React.createElement("div", {
+  }), React.createElement(LangSwitcher, null))), React.createElement("div", {
     style: {
       background: T.surface,
       borderBottom: `1px solid ${T.border}`,
@@ -4099,7 +4250,7 @@ function Landing({
     style: {
       color: T.cyan
     }
-  }, "FREE BITCOIN & LIGHTNING PRIVACY AUDIT")), React.createElement("h1", {
+  }, t("hero.eyebrow"))), React.createElement("h1", {
     style: {
       fontFamily: T.serif,
       fontSize: isMobile ? 38 : 56,
@@ -4109,11 +4260,11 @@ function Landing({
       animation: "fadeUp .5s ease .08s both",
       fontWeight: 400
     }
-  }, "Is your Bitcoin", React.createElement("br", null), "stack leaking?", React.createElement("br", null), React.createElement("em", {
+  }, t("hero.h1.line1"), React.createElement("br", null), t("hero.h1.line2"), React.createElement("br", null), React.createElement("em", {
     style: {
       color: T.cyan
     }
-  }, "Find out in 60 seconds.")), React.createElement("p", {
+  }, t("hero.h1.em"))), React.createElement("p", {
     style: {
       fontSize: isMobile ? 15 : 18,
       color: T.textMid,
@@ -4124,7 +4275,7 @@ function Landing({
       maxWidth: 560,
       margin: "0 auto 32px"
     }
-  }, "Paste a Bitcoin address or a Lightning node pubkey. Get a privacy score, every issue explained, and a ranked fix plan \u2014 free, open source, nothing stored."), !isLn && React.createElement("div", {
+  }, t("hero.sub")), !isLn && React.createElement("div", {
     style: {
       maxWidth: 480,
       margin: "0 auto 28px",
@@ -4162,19 +4313,19 @@ function Landing({
       fontSize: 9,
       color: T.red
     }
-  }, "0 \xB7 Fully traceable"), React.createElement("span", {
+  }, t("spectrum.low")), React.createElement("span", {
     style: {
       fontFamily: T.mono,
       fontSize: 9,
       color: T.btc
     }
-  }, "avg wallet: 38"), React.createElement("span", {
+  }, t("spectrum.avg")), React.createElement("span", {
     style: {
       fontFamily: T.mono,
       fontSize: 9,
       color: T.green
     }
-  }, "100 \xB7 Invisible"))), React.createElement("div", {
+  }, t("spectrum.high")))), React.createElement("div", {
     style: {
       maxWidth: 480,
       margin: "0 auto 12px",
@@ -4190,7 +4341,7 @@ function Landing({
       textAlign: "left",
       transition: "border-color .2s"
     }
-  }, isLn ? "⚡ Lightning node pubkeys are public on the gossip network — we query mempool.space's public API. Your pubkey is never logged or stored." : "₿ Bitcoin addresses are public by design — we read the blockchain like a block explorer. Your address is never logged or stored."), history.length > 0 && React.createElement("div", {
+  }, isLn ? t("trust.ln") : t("trust.btc")), history.length > 0 && React.createElement("div", {
     style: {
       maxWidth: 480,
       margin: "0 auto 12px",
@@ -4210,7 +4361,7 @@ function Landing({
       color: T.textDim,
       letterSpacing: 1.5
     }
-  }, "RECENT SCANS"), history.length >= 2 && React.createElement(Sparkline, {
+  }, t("recent.title")), history.length >= 2 && React.createElement(Sparkline, {
     history: history.map(h => h.score),
     width: 64,
     height: 22
@@ -4407,7 +4558,7 @@ function Landing({
     },
     onMouseOver: e => e.currentTarget.style.opacity = ".88",
     onMouseOut: e => e.currentTarget.style.opacity = "1"
-  }, isLn ? "⚡ Audit →" : "Analyze →")), isLn && React.createElement("div", {
+  }, isLn ? t("cta.audit") : t("cta.analyze"))), isLn && React.createElement("div", {
     style: {
       fontFamily: T.mono,
       fontSize: 10,
@@ -4440,7 +4591,7 @@ function Landing({
       fontSize: 10,
       color: T.textDim
     }
-  }, "or try a sample"), React.createElement("div", {
+  }, t("sample.divider")), React.createElement("div", {
     style: {
       flex: 1,
       height: 1,
@@ -4454,17 +4605,17 @@ function Landing({
     }
   }, [{
     addr: "DEMO",
-    label: "₿ Risky wallet",
+    label: t("sample.risky"),
     color: T.btc,
     type: "btc"
   }, {
     addr: "DEMO_A",
-    label: "✨ Pristine wallet",
+    label: t("sample.pristine"),
     color: T.green,
     type: "btc"
   }, {
     addr: "DEMO_LN",
-    label: "⚡ Lightning node",
+    label: t("sample.lightning"),
     color: T.ln,
     type: "ln_pubkey"
   }].map(s => React.createElement("button", {
@@ -4835,11 +4986,11 @@ function Landing({
       marginBottom: 14,
       fontWeight: 400
     }
-  }, "Most wallets score 38/100.", React.createElement("br", null), React.createElement("em", {
+  }, t("finalcta.h2.a"), React.createElement("br", null), React.createElement("em", {
     style: {
       color: T.cyan
     }
-  }, "Where does yours land?")), React.createElement("p", {
+  }, t("finalcta.h2.b"))), React.createElement("p", {
     style: {
       fontSize: isMobile ? 14 : 16,
       color: T.textMid,
@@ -4848,7 +4999,7 @@ function Landing({
       margin: "0 auto 32px",
       fontWeight: 300
     }
-  }, "Free, open source, nothing stored. Takes 60 seconds."), React.createElement("div", {
+  }, t("finalcta.sub")), React.createElement("div", {
     style: {
       display: "flex",
       flexDirection: isMobile ? "column" : "row",
@@ -4878,7 +5029,7 @@ function Landing({
     },
     onMouseOver: e => e.currentTarget.style.opacity = ".88",
     onMouseOut: e => e.currentTarget.style.opacity = "1"
-  }, "Scan my address \u2191"), React.createElement("button", {
+  }, t("finalcta.scan")), React.createElement("button", {
     onClick: () => onAnalyze("DEMO", false, "btc"),
     style: {
       background: "transparent",
@@ -4900,7 +5051,7 @@ function Landing({
       e.currentTarget.style.borderColor = T.border;
       e.currentTarget.style.color = T.textMid;
     }
-  }, "\u25B6 See a sample wallet")))), React.createElement("div", {
+  }, t("finalcta.sample"))))), React.createElement("div", {
     style: {
       borderTop: `1px solid ${T.border}`,
       background: T.surface,
@@ -5023,6 +5174,7 @@ function Scanning({
   isLightning,
   dataReady
 }) {
+  useLang();
   const [step, setStep] = useState(0);
   const intervalRef = useRef(null);
   const LN_STEPS = [{
@@ -5212,7 +5364,7 @@ function Scanning({
       letterSpacing: 2,
       marginBottom: 12
     }
-  }, isLightning ? "⚡ RUNNING 8 LIGHTNING CHECKS" : "RUNNING 10 CHECKS"), React.createElement("div", {
+  }, isLightning ? t("scanning.ln.checks") : t("scanning.btc.checks")), React.createElement("div", {
     style: {
       fontFamily: T.serif,
       fontSize: 26,
@@ -5220,7 +5372,7 @@ function Scanning({
       marginBottom: 8,
       fontWeight: 400
     }
-  }, isLightning ? "Auditing your node…" : "Analyzing your wallet…"), React.createElement("div", {
+  }, isLightning ? t("scanning.ln.title") : t("scanning.btc.title")), React.createElement("div", {
     style: {
       fontFamily: T.mono,
       fontSize: 11,
@@ -5309,7 +5461,7 @@ function Scanning({
       letterSpacing: 2,
       marginBottom: 6
     }
-  }, "DID YOU KNOW"), React.createElement("div", {
+  }, t("scanning.didyouknow")), React.createElement("div", {
     style: {
       fontSize: 13,
       color: T.textMid,
@@ -10163,6 +10315,9 @@ function App() {
   const [activeCaseFile, setActiveCaseFile] = useState(null);
   const [pendingScan, setPendingScan] = useState(null);
   useEffect(() => {
+    try {
+      document.documentElement.lang = _lang;
+    } catch {}
     const set = (sel, attr, val) => {
       let el = document.querySelector(sel);
       if (!el) {
