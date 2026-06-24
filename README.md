@@ -105,6 +105,22 @@ Recommended provider order: **Buttondown** (privacy-first, $9/mo, RSS for paid t
 
 The AI worker URL (`anonscore-ai.netassetpremium.workers.dev`) is wired in. The 5-message daily cap is enforced server-side. To upgrade to a paid Coach tier later, see the strategy doc.
 
+### 5. Languages (i18n)
+
+The site auto-detects the visitor's language (`?lang=` → saved choice → browser → English) and shows a switcher in the nav. English is always the fallback, so a partially-translated locale degrades gracefully — untranslated strings just render in English.
+
+To add or extend a locale, edit the `STRINGS` map near the top of `anonscore.jsx`:
+
+```js
+const STRINGS = {
+  en: { "hero.h1.em": "Find out in 60 seconds.", ... },
+  es: { "hero.h1.em": "Descúbrelo en 60 segundos.", ... },
+  // add e.g. pt, ru, fr here — copy the en keys, translate the values
+};
+```
+
+Spanish currently covers the landing + scanning surfaces. The dashboard/case-files still fall back to English. **Before promoting a locale, get a native-speaker pass** — for a security tool, a mistranslated privacy instruction can mislead someone in a high-stakes situation. The strategy doc earmarks this for grant funding (HRF/Open Sats).
+
 ---
 
 ## Privacy stance (what makes this site different)

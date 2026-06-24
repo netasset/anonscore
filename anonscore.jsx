@@ -160,6 +160,126 @@ const COACH = {
   ],
 };
 
+/* ─────────────────────────────────────────────
+   i18n — minimal, dependency-free.
+   English is the default and the fallback for every key, so partial
+   translations degrade gracefully (an untranslated string just renders
+   in English). Locale is chosen by, in order: ?lang= param → saved
+   preference → browser language → "en". Adding a locale = add its key
+   map below; adding a string = add an "en" entry and reference it via t().
+   Spanish first: largest non-English Bitcoin-adoption population
+   (Argentina, Venezuela, El Salvador) — the capital-controls persona.
+───────────────────────────────────────────── */
+const STRINGS = {
+  en: {
+    "nav.free": "Free",
+    "nav.nocookies": "✓ No cookies",
+    "nav.nothingstored": "✓ Nothing stored",
+    "nav.tor": "✓ Tor compatible",
+    "hero.eyebrow": "FREE BITCOIN & LIGHTNING PRIVACY AUDIT",
+    "hero.h1.line1": "Is your Bitcoin",
+    "hero.h1.line2": "stack leaking?",
+    "hero.h1.em": "Find out in 60 seconds.",
+    "hero.sub": "Paste a Bitcoin address or a Lightning node pubkey. Get a privacy score, every issue explained, and a ranked fix plan — free, open source, nothing stored.",
+    "spectrum.low": "0 · Fully traceable",
+    "spectrum.avg": "avg wallet: 38",
+    "spectrum.high": "100 · Invisible",
+    "trust.btc": "₿ Bitcoin addresses are public by design — we read the blockchain like a block explorer. Your address is never logged or stored.",
+    "trust.ln": "⚡ Lightning node pubkeys are public on the gossip network — we query mempool.space's public API. Your pubkey is never logged or stored.",
+    "cta.analyze": "Analyze →",
+    "cta.audit": "⚡ Audit →",
+    "sample.divider": "or try a sample",
+    "sample.risky": "₿ Risky wallet",
+    "sample.pristine": "✨ Pristine wallet",
+    "sample.lightning": "⚡ Lightning node",
+    "recent.title": "RECENT SCANS",
+    "err.empty": "Please enter a Bitcoin address or Lightning node pubkey.",
+    "err.invalid": "Paste a Bitcoin address (bc1…, 1…, 3…) or a Lightning node pubkey (66-char hex).",
+    "finalcta.h2.a": "Most wallets score 38/100.",
+    "finalcta.h2.b": "Where does yours land?",
+    "finalcta.sub": "Free, open source, nothing stored. Takes 60 seconds.",
+    "finalcta.scan": "Scan my address ↑",
+    "finalcta.sample": "▶ See a sample wallet",
+    "scanning.btc.title": "Analyzing your wallet…",
+    "scanning.ln.title": "Auditing your node…",
+    "scanning.btc.checks": "RUNNING 10 CHECKS",
+    "scanning.ln.checks": "⚡ RUNNING 8 LIGHTNING CHECKS",
+    "scanning.didyouknow": "DID YOU KNOW",
+  },
+  es: {
+    "nav.free": "Gratis",
+    "nav.nocookies": "✓ Sin cookies",
+    "nav.nothingstored": "✓ Nada se guarda",
+    "nav.tor": "✓ Compatible con Tor",
+    "hero.eyebrow": "AUDITORÍA GRATUITA DE PRIVACIDAD BITCOIN Y LIGHTNING",
+    "hero.h1.line1": "¿Tu stack de Bitcoin",
+    "hero.h1.line2": "está filtrando datos?",
+    "hero.h1.em": "Descúbrelo en 60 segundos.",
+    "hero.sub": "Pega una dirección de Bitcoin o la clave pública de un nodo Lightning. Obtén una puntuación de privacidad, cada problema explicado y un plan de mejora priorizado — gratis, código abierto, nada se guarda.",
+    "spectrum.low": "0 · Totalmente rastreable",
+    "spectrum.avg": "billetera promedio: 38",
+    "spectrum.high": "100 · Invisible",
+    "trust.btc": "₿ Las direcciones de Bitcoin son públicas por diseño — leemos la blockchain como un explorador de bloques. Tu dirección nunca se registra ni se guarda.",
+    "trust.ln": "⚡ Las claves públicas de nodos Lightning son públicas en la red de gossip — consultamos la API pública de mempool.space. Tu clave nunca se registra ni se guarda.",
+    "cta.analyze": "Analizar →",
+    "cta.audit": "⚡ Auditar →",
+    "sample.divider": "o prueba un ejemplo",
+    "sample.risky": "₿ Billetera riesgosa",
+    "sample.pristine": "✨ Billetera impecable",
+    "sample.lightning": "⚡ Nodo Lightning",
+    "recent.title": "ESCANEOS RECIENTES",
+    "err.empty": "Ingresa una dirección de Bitcoin o la clave pública de un nodo Lightning.",
+    "err.invalid": "Pega una dirección de Bitcoin (bc1…, 1…, 3…) o una clave pública de nodo Lightning (66 caracteres hex).",
+    "finalcta.h2.a": "La mayoría de billeteras puntúa 38/100.",
+    "finalcta.h2.b": "¿Dónde queda la tuya?",
+    "finalcta.sub": "Gratis, código abierto, nada se guarda. Toma 60 segundos.",
+    "finalcta.scan": "Escanear mi dirección ↑",
+    "finalcta.sample": "▶ Ver una billetera de ejemplo",
+    "scanning.btc.title": "Analizando tu billetera…",
+    "scanning.ln.title": "Auditando tu nodo…",
+    "scanning.btc.checks": "EJECUTANDO 10 VERIFICACIONES",
+    "scanning.ln.checks": "⚡ EJECUTANDO 8 VERIFICACIONES LIGHTNING",
+    "scanning.didyouknow": "¿SABÍAS QUE?",
+  },
+};
+const SUPPORTED_LANGS = Object.keys(STRINGS);
+const LANG_LABEL = { en: "EN", es: "ES" };
+
+function detectLang() {
+  try {
+    const q = new URLSearchParams(window.location.search).get("lang");
+    if (q && SUPPORTED_LANGS.includes(q)) return q;
+    const saved = localStorage.getItem("anonscore_lang");
+    if (saved && SUPPORTED_LANGS.includes(saved)) return saved;
+    const nav = (navigator.language || "en").slice(0, 2).toLowerCase();
+    if (SUPPORTED_LANGS.includes(nav)) return nav;
+  } catch {}
+  return "en";
+}
+
+let _lang = (typeof window !== "undefined") ? detectLang() : "en";
+const _langListeners = new Set();
+function setLang(l) {
+  if (!SUPPORTED_LANGS.includes(l) || l === _lang) return;
+  _lang = l;
+  try { localStorage.setItem("anonscore_lang", l); } catch {}
+  try { document.documentElement.lang = l; } catch {}
+  _langListeners.forEach(fn => fn());
+}
+function t(key) {
+  return (STRINGS[_lang] && STRINGS[_lang][key]) || STRINGS.en[key] || key;
+}
+// Hook: re-renders the calling component whenever the language changes.
+function useLang() {
+  const [, force] = useState(0);
+  useEffect(() => {
+    const fn = () => force(x => x + 1);
+    _langListeners.add(fn);
+    return () => { _langListeners.delete(fn); };
+  }, []);
+  return _lang;
+}
+
 // Canonical homepage for each tool we recommend. Source of truth for outbound
 // links — the recommendation text in `recs[].tools[].name` looks up here at
 // render time. Adding a new tool name without a URL is fine; it just renders
@@ -1945,7 +2065,25 @@ function CaseDetail({ caseFile, onBack, onAnalyze, isMobile }) {
 }
 
 
+// Compact language switcher — cycles/exposes supported locales. Only renders
+// when more than one locale exists, so it stays invisible until translations land.
+function LangSwitcher({ compact = false }) {
+  const lang = useLang();
+  if (SUPPORTED_LANGS.length < 2) return null;
+  return (
+    <div role="group" aria-label="Language" style={{ display: "flex", alignItems: "center", gap: 2, border: `1px solid ${T.border}`, borderRadius: 7, overflow: "hidden" }}>
+      {SUPPORTED_LANGS.map(l => (
+        <button key={l} onClick={() => setLang(l)} aria-pressed={lang === l} aria-label={`Switch language to ${LANG_LABEL[l]}`}
+          style={{ background: lang === l ? T.cyan : "transparent", border: "none", padding: compact ? "4px 7px" : "5px 9px", color: lang === l ? T.bg : T.textDim, fontFamily: T.mono, fontSize: 10, fontWeight: 700, cursor: "pointer", letterSpacing: 0.5, transition: "background .15s, color .15s" }}>
+          {LANG_LABEL[l]}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function Landing({ onAnalyze, isMobile, onCases }) {
+  useLang(); // re-render this subtree when language changes
   const [input, setInput] = useState("");
   const [error, setError] = useState("");
   const [history, setHistory] = useState(() => getHistory());
@@ -1978,14 +2116,14 @@ function Landing({ onAnalyze, isMobile, onCases }) {
 
   const submit = (val, plain = false) => {
     const v = (val || input).trim();
-    if (!v) { setError("Please enter a Bitcoin address or Lightning node pubkey."); return; }
-    const t = detectInputType(v);
-    if (!t) {
-      setError("Paste a Bitcoin address (bc1…, 1…, 3…) or a Lightning node pubkey (66-char hex).");
+    if (!v) { setError(t("err.empty")); return; }
+    const detected = detectInputType(v);
+    if (!detected) {
+      setError(t("err.invalid"));
       return;
     }
     setError("");
-    onAnalyze(v, plain, t);
+    onAnalyze(v, plain, detected);
   };
 
   return (
@@ -1999,11 +2137,11 @@ function Landing({ onAnalyze, isMobile, onCases }) {
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
           {/* Trust signals in nav — seen by everyone, no scroll required */}
           {!isMobile && <>
-            <span style={{ fontFamily: T.mono, fontSize: 10, color: T.textDim }}>✓ No cookies</span>
+            <span style={{ fontFamily: T.mono, fontSize: 10, color: T.textDim }}>{t("nav.nocookies")}</span>
             <span style={{ color: T.borderLo }}>·</span>
-            <span style={{ fontFamily: T.mono, fontSize: 10, color: T.textDim }}>✓ Nothing stored</span>
+            <span style={{ fontFamily: T.mono, fontSize: 10, color: T.textDim }}>{t("nav.nothingstored")}</span>
             <span style={{ color: T.borderLo }}>·</span>
-            <span style={{ fontFamily: T.mono, fontSize: 10, color: T.textDim }}>✓ Tor compatible</span>
+            <span style={{ fontFamily: T.mono, fontSize: 10, color: T.textDim }}>{t("nav.tor")}</span>
             <span style={{ color: T.borderLo, margin: "0 4px" }}>|</span>
           </>}
           <a href="https://github.com/netasset/anonscore" target="_blank" rel="noopener noreferrer"
@@ -2012,7 +2150,8 @@ function Landing({ onAnalyze, isMobile, onCases }) {
             onMouseOut={e => e.currentTarget.style.borderColor = T.border}>
             GitHub ↗
           </a>
-          <Tag label="Free" color={T.green} size={10} />
+          <Tag label={t("nav.free")} color={T.green} size={10} />
+          <LangSwitcher />
         </div>
       </nav>
 
@@ -2055,16 +2194,16 @@ function Landing({ onAnalyze, isMobile, onCases }) {
           {/* Eyebrow */}
           <div style={{ fontFamily: T.mono, fontSize: 10, letterSpacing: 2.5, marginBottom: 18, animation: "fadeUp .5s ease both", display: "flex", gap: 8, alignItems: "center", justifyContent: "center" }}>
             <span style={{ color: T.btc }}>₿</span>
-            <span style={{ color: T.cyan }}>FREE BITCOIN &amp; LIGHTNING PRIVACY AUDIT</span>
+            <span style={{ color: T.cyan }}>{t("hero.eyebrow")}</span>
           </div>
 
           {/* Headline */}
           <h1 style={{ fontFamily: T.serif, fontSize: isMobile ? 38 : 56, lineHeight: 1.06, color: T.text, marginBottom: 20, animation: "fadeUp .5s ease .08s both", fontWeight: 400 }}>
-            Is your Bitcoin<br />stack leaking?<br /><em style={{ color: T.cyan }}>Find out in 60 seconds.</em>
+            {t("hero.h1.line1")}<br />{t("hero.h1.line2")}<br /><em style={{ color: T.cyan }}>{t("hero.h1.em")}</em>
           </h1>
 
           <p style={{ fontSize: isMobile ? 15 : 18, color: T.textMid, lineHeight: 1.7, marginBottom: 32, fontWeight: 300, animation: "fadeUp .5s ease .14s both", maxWidth: 560, margin: "0 auto 32px" }}>
-            Paste a Bitcoin address or a Lightning node pubkey. Get a privacy score, every issue explained, and a ranked fix plan — free, open source, nothing stored.
+            {t("hero.sub")}
           </p>
 
           {/* Score spectrum — slim, inline — hidden when Lightning detected */}
@@ -2074,26 +2213,23 @@ function Landing({ onAnalyze, isMobile, onCases }) {
                 <div style={{ position: "absolute", top: "50%", left: "38%", transform: "translate(-50%,-50%)", width: 12, height: 12, borderRadius: "50%", background: T.bg, border: `2px solid ${T.btc}`, boxShadow: `0 0 8px ${T.btc}` }} />
               </div>
               <div style={{ display: "flex", justifyContent: "space-between" }}>
-                <span style={{ fontFamily: T.mono, fontSize: 9, color: T.red }}>0 · Fully traceable</span>
-                <span style={{ fontFamily: T.mono, fontSize: 9, color: T.btc }}>avg wallet: 38</span>
-                <span style={{ fontFamily: T.mono, fontSize: 9, color: T.green }}>100 · Invisible</span>
+                <span style={{ fontFamily: T.mono, fontSize: 9, color: T.red }}>{t("spectrum.low")}</span>
+                <span style={{ fontFamily: T.mono, fontSize: 9, color: T.btc }}>{t("spectrum.avg")}</span>
+                <span style={{ fontFamily: T.mono, fontSize: 9, color: T.green }}>{t("spectrum.high")}</span>
               </div>
             </div>
           )}
 
           {/* Trust callout — updates based on detected type */}
           <div style={{ maxWidth: 480, margin: "0 auto 12px", animation: "fadeUp .5s ease .20s both", background: T.surface, border: `1px solid ${isLn ? T.ln + "44" : T.border}`, borderRadius: 10, padding: "10px 14px", fontFamily: T.sans, fontSize: 12, color: T.textMid, lineHeight: 1.5, textAlign: "left", transition: "border-color .2s" }}>
-            {isLn
-              ? "⚡ Lightning node pubkeys are public on the gossip network — we query mempool.space's public API. Your pubkey is never logged or stored."
-              : "₿ Bitcoin addresses are public by design — we read the blockchain like a block explorer. Your address is never logged or stored."
-            }
+            {isLn ? t("trust.ln") : t("trust.btc")}
           </div>
 
           {/* Recent scans history — only shown if they have prior scans */}
           {history.length > 0 && (
             <div style={{ maxWidth: 480, margin: "0 auto 12px", animation: "fadeUp .5s ease .21s both" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-                <div style={{ fontFamily: T.mono, fontSize: 8, color: T.textDim, letterSpacing: 1.5 }}>RECENT SCANS</div>
+                <div style={{ fontFamily: T.mono, fontSize: 8, color: T.textDim, letterSpacing: 1.5 }}>{t("recent.title")}</div>
                 {history.length >= 2 && <Sparkline history={history.map(h => h.score)} width={64} height={22} />}
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
@@ -2166,7 +2302,7 @@ function Landing({ onAnalyze, isMobile, onCases }) {
                     color: T.bg, fontFamily: T.sans, fontWeight: 700, fontSize: 14, cursor: "pointer", whiteSpace: "nowrap", transition: "all .15s" }}
                   onMouseOver={e => e.currentTarget.style.opacity = ".88"}
                   onMouseOut={e => e.currentTarget.style.opacity = "1"}>
-                  {isLn ? "⚡ Audit →" : "Analyze →"}
+                  {isLn ? t("cta.audit") : t("cta.analyze")}
                 </button>
               </div>
               {isLn && (
@@ -2178,14 +2314,14 @@ function Landing({ onAnalyze, isMobile, onCases }) {
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
               <div style={{ flex: 1, height: 1, background: T.borderLo }} />
-              <span style={{ fontFamily: T.mono, fontSize: 10, color: T.textDim }}>or try a sample</span>
+              <span style={{ fontFamily: T.mono, fontSize: 10, color: T.textDim }}>{t("sample.divider")}</span>
               <div style={{ flex: 1, height: 1, background: T.borderLo }} />
             </div>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               {[
-                { addr: "DEMO",    label: "₿ Risky wallet",    color: T.btc,  type: "btc" },
-                { addr: "DEMO_A",  label: "✨ Pristine wallet", color: T.green, type: "btc" },
-                { addr: "DEMO_LN", label: "⚡ Lightning node",  color: T.ln,   type: "ln_pubkey" },
+                { addr: "DEMO",    label: t("sample.risky"),    color: T.btc,  type: "btc" },
+                { addr: "DEMO_A",  label: t("sample.pristine"), color: T.green, type: "btc" },
+                { addr: "DEMO_LN", label: t("sample.lightning"),color: T.ln,   type: "ln_pubkey" },
               ].map(s => (
                 <button key={s.addr} onClick={() => onAnalyze(s.addr, false, s.type)}
                   style={{ flex: "1 1 30%", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, background: T.surface, border: `1.5px solid ${T.border}`, borderRadius: 12, padding: "11px 14px", color: T.textMid, fontFamily: T.sans, fontSize: 13, fontWeight: 600, cursor: "pointer", transition: "border-color .18s, color .18s" }}
@@ -2301,23 +2437,23 @@ function Landing({ onAnalyze, isMobile, onCases }) {
         <div className="dot-grid" style={{ position: "absolute", inset: 0, opacity: .3, pointerEvents: "none" }} />
         <div style={{ maxWidth: 700, margin: "0 auto", textAlign: "center", position: "relative" }}>
           <h2 style={{ fontFamily: T.serif, fontSize: isMobile ? 28 : 40, color: T.text, marginBottom: 14, fontWeight: 400 }}>
-            Most wallets score 38/100.<br /><em style={{ color: T.cyan }}>Where does yours land?</em>
+            {t("finalcta.h2.a")}<br /><em style={{ color: T.cyan }}>{t("finalcta.h2.b")}</em>
           </h2>
           <p style={{ fontSize: isMobile ? 14 : 16, color: T.textMid, lineHeight: 1.7, maxWidth: 480, margin: "0 auto 32px", fontWeight: 300 }}>
-            Free, open source, nothing stored. Takes 60 seconds.
+            {t("finalcta.sub")}
           </p>
           <div style={{ display: "flex", flexDirection: isMobile ? "column" : "row", gap: 10, justifyContent: "center" }}>
             <button onClick={() => { inputRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }); setTimeout(() => inputRef.current?.focus(), 300); }}
               style={{ background: T.cyan, border: "none", borderRadius: 12, padding: "15px 28px", color: T.bg, fontFamily: T.sans, fontSize: 15, fontWeight: 700, cursor: "pointer", transition: "all .18s", boxShadow: `0 4px 24px ${T.cyanMid}` }}
               onMouseOver={e => e.currentTarget.style.opacity = ".88"}
               onMouseOut={e => e.currentTarget.style.opacity = "1"}>
-              Scan my address ↑
+              {t("finalcta.scan")}
             </button>
             <button onClick={() => onAnalyze("DEMO", false, "btc")}
               style={{ background: "transparent", border: `1.5px solid ${T.border}`, borderRadius: 12, padding: "15px 28px", color: T.textMid, fontFamily: T.sans, fontSize: 15, fontWeight: 500, cursor: "pointer", transition: "all .18s" }}
               onMouseOver={e => { e.currentTarget.style.borderColor = T.cyan; e.currentTarget.style.color = T.cyan; }}
               onMouseOut={e => { e.currentTarget.style.borderColor = T.border; e.currentTarget.style.color = T.textMid; }}>
-              ▶ See a sample wallet
+              {t("finalcta.sample")}
             </button>
           </div>
         </div>
@@ -2379,6 +2515,7 @@ function Landing({ onAnalyze, isMobile, onCases }) {
    SCANNING — with educational facts
 ───────────────────────────────────────────── */
 function Scanning({ address, isLightning, dataReady }) {
+  useLang(); // re-render on language change
   const [step, setStep] = useState(0);
   const intervalRef = useRef(null);
 
@@ -2470,10 +2607,10 @@ function Scanning({ address, isLightning, dataReady }) {
       {/* Header */}
       <div style={{ textAlign: "center" }}>
         <div style={{ fontFamily: T.mono, fontSize: 10, color: accentColor, letterSpacing: 2, marginBottom: 12 }}>
-          {isLightning ? "⚡ RUNNING 8 LIGHTNING CHECKS" : "RUNNING 10 CHECKS"}
+          {isLightning ? t("scanning.ln.checks") : t("scanning.btc.checks")}
         </div>
         <div style={{ fontFamily: T.serif, fontSize: 26, color: T.text, marginBottom: 8, fontWeight: 400 }}>
-          {isLightning ? "Auditing your node…" : "Analyzing your wallet…"}
+          {isLightning ? t("scanning.ln.title") : t("scanning.btc.title")}
         </div>
         <div style={{ fontFamily: T.mono, fontSize: 11, color: T.textDim, letterSpacing: 1 }}>
           {address === "DEMO" || address === "DEMO_A" || address === "DEMO_LN" ? (isLightning ? "Demo Lightning node" : "Demo wallet") : fmt.addr(address)}
@@ -2503,7 +2640,7 @@ function Scanning({ address, isLightning, dataReady }) {
 
       {/* Did you know */}
       <div key={step} style={{ width: "min(480px,90vw)", background: T.surface, border: `1px solid ${T.border}`, borderLeft: `3px solid ${accentColor}`, borderRadius: 10, padding: "14px 18px", animation: "factIn .4s ease both" }}>
-        <div style={{ fontFamily: T.mono, fontSize: 9, color: accentColor, letterSpacing: 2, marginBottom: 6 }}>DID YOU KNOW</div>
+        <div style={{ fontFamily: T.mono, fontSize: 9, color: accentColor, letterSpacing: 2, marginBottom: 6 }}>{t("scanning.didyouknow")}</div>
         <div style={{ fontSize: 13, color: T.textMid, lineHeight: 1.65 }}>{currentFact}</div>
       </div>
     </div>
@@ -4373,6 +4510,7 @@ function App() {
 
   // Inject meta/OG tags
   useEffect(() => {
+    try { document.documentElement.lang = _lang; } catch {}
     const set = (sel, attr, val) => { let el = document.querySelector(sel); if (!el) { el = document.createElement("meta"); document.head.appendChild(el); } el.setAttribute(attr, val); };
     document.title = "AnonScore — Free Bitcoin & Lightning Privacy Audit";
     set('meta[name="description"]',    "content", "Paste a Bitcoin address or Lightning node pubkey. Get a privacy score, every issue explained, and a ranked fix plan. Free, open source, nothing stored.");

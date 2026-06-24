@@ -130,6 +130,29 @@ const focused = await page.evaluate(() => document.activeElement?.tagName);
 if (focused !== "INPUT") fail(`"/" did not focus input (got: ${focused})`);
 else pass(`"/" focuses address input`);
 
+// i18n: switching to Spanish swaps hero copy + sets <html lang>, and English
+// is the default. Then switch back so the rest of the run sees English labels.
+const enHero = await page.evaluate(() => document.body.innerText.includes("Is your Bitcoin"));
+if (!enHero) fail("i18n: default English hero not found");
+const esBtn = page.getByRole("button", { name: /Switch language to ES/i });
+if (await esBtn.count() === 0) fail("i18n: language switcher (ES) not found");
+else {
+  await esBtn.click();
+  await page.waitForTimeout(200);
+  const esState = await page.evaluate(() => ({
+    htmlLang: document.documentElement.lang,
+    hasEs: document.body.innerText.includes("Descúbrelo en 60 segundos"),
+    hasEnGone: !document.body.innerText.includes("Is your Bitcoin"),
+  }));
+  if (esState.htmlLang !== "es") fail(`i18n: <html lang> not "es" (got "${esState.htmlLang}")`);
+  else if (!esState.hasEs) fail("i18n: Spanish hero copy not rendered after switch");
+  else if (!esState.hasEnGone) fail("i18n: English hero still present after switching to ES");
+  else pass("i18n: ES switch swaps hero copy + sets <html lang=es>");
+  // Back to English for the remaining assertions/labels
+  await page.getByRole("button", { name: /Switch language to EN/i }).click();
+  await page.waitForTimeout(200);
+}
+
 // Service worker should register and precache the static assets.
 await page.waitForFunction(
   () => navigator.serviceWorker?.controller || navigator.serviceWorker?.ready,
