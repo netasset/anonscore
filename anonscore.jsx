@@ -331,6 +331,107 @@ const toolLink = (name) => TOOL_AFFILIATE_URL[name] || TOOL_URL[name] || null;
 const toolIsAffiliate = (name) => !!TOOL_AFFILIATE_URL[name];
 
 /* ─────────────────────────────────────────────
+   WALLET DIRECTORY — curated reviews of every tool the audit recommends.
+   Standalone SEO destination at /?page=wallets (Pillar 2 of the strategy
+   doc). Each entry: factual pitch + the privacy STRENGTHS the tool actually
+   delivers, plus honest WATCH-OUTS so visitors trust the list isn't
+   pay-to-play. Categories let the page double as comparison material.
+   When TOOL_AFFILIATE_URL adds an entry, that tool's "Visit" link
+   auto-becomes affiliate + the page surfaces the disclosure.
+───────────────────────────────────────────── */
+const WALLET_CATEGORIES = [
+  { key: "desktop",   label: "Desktop wallets",    icon: "🖥",  blurb: "Full coin control, the strongest privacy primitives."          },
+  { key: "mobile",    label: "Mobile wallets",     icon: "📱",  blurb: "On-chain BTC in your pocket. Less privacy than desktop — pick carefully." },
+  { key: "lightning", label: "Lightning wallets",  icon: "⚡",  blurb: "Off-chain payments. Self-custodial > custodial for privacy."   },
+  { key: "p2p",       label: "Non-KYC exchanges",  icon: "🤝",  blurb: "Source Bitcoin without doxxing yourself to a centralised gatekeeper." },
+  { key: "node",      label: "Self-hosted nodes",  icon: "📡",  blurb: "Stop leaking every address you query to public Electrum servers." },
+];
+
+const WALLET_REVIEWS = [
+  // ─ Desktop ──────────────────────────────────────────
+  { name: "Sparrow Wallet", category: "desktop", os: "macOS · Windows · Linux", pitch: "The pro's desktop Bitcoin wallet. Best-in-class coin control, UTXO labelling, hardware-wallet support, and Tor / your-own-node connectivity by default.",
+    strengths: ["Per-UTXO freeze, label, and select before every spend", "Connects to your own Electrum server or Bitcoin Core out of the box — no leaking queries", "Strong hardware wallet support (Coldcard, Trezor, Ledger, Foundation, BitBox, Jade)"],
+    watchOuts:  ["Desktop only — there is no mobile app", "Whirlpool CoinJoin coordinator (Samourai) was shut down in 2024; CoinJoin features require Whirlpool-compatible alternatives or manual joins"] },
+  { name: "Wasabi Wallet", category: "desktop", os: "macOS · Windows · Linux", pitch: "Privacy-first desktop Bitcoin wallet with built-in WabiSabi CoinJoin and automatic coin labelling. Beginner-friendlier than Sparrow.",
+    strengths: ["WabiSabi CoinJoin runs automatically once configured", "Default labels every coin by source, helping avoid accidental cluster merges", "Built-in Tor"],
+    watchOuts:  ["WabiSabi coordinator is operator-run (zkSNACKs) — review their blacklisting / sanctions policy before relying on it", "Desktop only"] },
+  { name: "Bitcoin Core", category: "desktop", os: "macOS · Windows · Linux · BSD", pitch: "The reference Bitcoin implementation. The wallet is bundled with a full node, so by definition you query no one but yourself.",
+    strengths: ["You ARE your own node — no third-party query leaks possible", "Maximum sovereignty + verification", "Free and battle-tested since 2009"],
+    watchOuts:  ["Initial block download requires ~600GB and several days", "UX is functional, not friendly — best paired with a wallet front-end (Sparrow, Electrum, Specter)"] },
+  { name: "Electrum", category: "desktop", os: "macOS · Windows · Linux · Android", pitch: "Long-standing lightweight Bitcoin wallet. Fast, scriptable, deeply customisable, with manual coin control.",
+    strengths: ["Lightweight — no full-node download needed", "Manual coin control via the Coins tab + UTXO freezing", "Connects to your own Electrum / Bitcoin-Core-with-Electrs server"],
+    watchOuts:  ["Default connects to public Electrum servers — change this to your own node before scanning real addresses", "Multiple lookalike fake-Electrum scam wallets exist; verify download signatures"] },
+  { name: "Joinmarket", category: "desktop", os: "macOS · Windows · Linux", pitch: "Peer-to-peer CoinJoin protocol where 'makers' earn fees and 'takers' pay them. No operator-run coordinator.",
+    strengths: ["No central coordinator — fully P2P, harder to censor or seize", "Earn yield as a maker while improving network-wide privacy", "Mature codebase (since 2015)"],
+    watchOuts:  ["Steep learning curve — CLI-first; the YieldGenerator GUI is improving but rough", "Best for users comfortable running a Bitcoin Core node"] },
+  { name: "BTCPay Server", category: "desktop", os: "Self-hosted (Docker / Lightning Node)", pitch: "Self-hosted Bitcoin + Lightning payment processor. Merchants own their keys and node — no third-party seeing every payment.",
+    strengths: ["Replaces BitPay-style processors that doxx every customer", "Built-in Payjoin + CoinJoin support for merchant flows", "Plugin ecosystem (point-of-sale, accounting, gift cards)"],
+    watchOuts:  ["You're running infrastructure — backups, updates, and uptime are on you", "Best for merchants and power users; not a personal wallet"] },
+
+  // ─ Mobile ──────────────────────────────────────────
+  { name: "Blue Wallet", category: "mobile", os: "iOS · Android", pitch: "Open-source mobile Bitcoin wallet with HD support, multisig, Lightning (via LndHub), and Tor.",
+    strengths: ["HD wallet — fresh address per receive by default", "Optional Tor for connection privacy", "Multisig (Vault) support"],
+    watchOuts:  ["Default Lightning is custodial (LndHub) — fine for spending money, not savings", "Mobile means limited coin control vs. desktop"] },
+  { name: "Nunchuk", category: "mobile", os: "iOS · Android · macOS · Windows · Linux", pitch: "Privacy-focused multisig wallet with strong UTXO management and collaborative custody.",
+    strengths: ["First-class multisig + assisted recovery", "Per-UTXO tagging and coin control", "Works with most hardware wallets"],
+    watchOuts:  ["Some features (key recovery service) involve trusting Nunchuk Pro — read the model before enabling", "Best for users already comfortable with multisig concepts"] },
+
+  // ─ Lightning ──────────────────────────────────────────
+  { name: "Phoenix Wallet", category: "lightning", os: "iOS · Android", pitch: "Self-custodial mobile Lightning by ACINQ. Channels managed automatically — feels custodial, but the keys are yours.",
+    strengths: ["You hold the keys — true self-custody", "Channels open and rebalance themselves; no liquidity management needed", "Tor-friendly"],
+    watchOuts:  ["ACINQ is the only LSP — single peer is fine for spending, less so for receiving large amounts", "Splice/channel fees are unavoidable when on-chain settlement happens"] },
+  { name: "Breez", category: "lightning", os: "iOS · Android", pitch: "Self-custodial mobile Lightning wallet with a built-in podcast player and merchant point-of-sale.",
+    strengths: ["Self-custodial Lightning + on-chain in one app", "Built-in keysend & podcast support (LN over RSS)", "POS mode for merchants"],
+    watchOuts:  ["Like all auto-channel-opening LN wallets, you trust the LSP not to grief during channel opens", "Receive UX can be confusing for first-timers (channel-open fees on first receive)"] },
+  { name: "Zeus", category: "lightning", os: "iOS · Android", pitch: "Connect your own LND, CLN, or Eclair node from your phone. Power-user remote control.",
+    strengths: ["You run the node — zero LSP / operator trust", "Supports LND, Core Lightning (CLN), Eclair, Embedded LND", "Per-channel routing controls"],
+    watchOuts:  ["Requires you to already have a Lightning node — not a beginner starting point", "Mobile connection back to your node needs careful Tor / VPN setup"] },
+  { name: "Mutiny Wallet", category: "lightning", os: "Web (PWA) · Android", pitch: "Self-custodial Lightning + on-chain wallet that runs in your browser. No app store.",
+    strengths: ["PWA — no app store to deplatform you", "Self-custodial Lightning via LDK", "Built-in Nostr Wallet Connect (NWC) for zaps"],
+    watchOuts:  ["Browser environment means cookies/storage hygiene matters", "Younger codebase than Phoenix or Breez; treat as 'spending money', not 'cold storage'"] },
+  { name: "Blixt Wallet", category: "lightning", os: "Android · macOS · Windows · Linux", pitch: "Runs a full LND node directly on your phone — no LSP, no custodian, no compromises.",
+    strengths: ["Embedded LND node — you ARE the Lightning node", "Full feature set: keysend, AMP, MPP, splicing, BOLT-12", "Open source, no telemetry"],
+    watchOuts:  ["You must manage channels and liquidity yourself", "Battery drain higher than auto-channel wallets — needs to stay online to route"] },
+  { name: "Alby", category: "lightning", os: "Browser extension (Chrome / Firefox / Safari)", pitch: "Browser-side Lightning + Nostr identity. Zaps, podcasting, and WebLN-enabled apps without leaving the page.",
+    strengths: ["WebLN brings one-click LN payments to web apps", "Nostr signing built in — one extension covers both protocols", "Account → Alby Hub option lets you self-host the back-end"],
+    watchOuts:  ["The hosted Alby account is custodial unless you migrate to Alby Hub", "Browser extension model means an attacker who compromises the browser sees your keys"] },
+
+  // ─ Non-KYC exchanges / P2P ──────────────────────────────────────────
+  { name: "Bisq", category: "p2p", os: "macOS · Windows · Linux", pitch: "Decentralised peer-to-peer Bitcoin exchange. Trades happen over Tor with two-of-two multisig escrow — no custodian.",
+    strengths: ["No KYC, no account, no operator that can be subpoenaed", "Tor-only by default", "Multisig escrow means even a fraudulent counterparty can't take your funds"],
+    watchOuts:  ["Liquidity is thinner than KYC venues — expect higher spreads and slower fills", "Bisq2 (the rewrite) is still maturing; Bisq1 will sunset eventually"] },
+  { name: "Robosats", category: "p2p", os: "Web (Tor) · Android", pitch: "Lightning-based peer-to-peer Bitcoin exchange. Trades complete in minutes via hold invoices — no custody, no signup.",
+    strengths: ["Tor-native + Lightning-fast settlement", "No account, no email, no KYC ever", "Reputation system built around hashed-key identities, not real names"],
+    watchOuts:  ["Lower-volume than Bisq for large trades", "You need a Lightning wallet that supports hold invoices (most do, some don't)"] },
+  { name: "Peach Bitcoin", category: "p2p", os: "iOS · Android", pitch: "Mobile peer-to-peer Bitcoin marketplace. SEPA, cash-by-mail, and many other payment methods supported.",
+    strengths: ["Mobile-first — easier than Bisq for non-technical users", "Wide payment-method support per region", "Optional escrow"],
+    watchOuts:  ["Operator-run platform — not as censorship-resistant as Bisq", "Mobile means you trust your phone OS — use a privacy-respecting handset"] },
+  { name: "HodlHodl", category: "p2p", os: "Web", pitch: "Non-custodial P2P marketplace using on-chain multisig escrow. Years of operation, broad payment-method support.",
+    strengths: ["Multisig escrow — funds locked in 2-of-3 between buyer, seller, HodlHodl arbiter", "Lots of payment methods including cash-by-mail", "Long operating history"],
+    watchOuts:  ["Web-only — Tor recommended", "Arbiter participates in escrow; choose counterparties with established reputation"] },
+  { name: "AgoraDesk", category: "p2p", os: "Web", pitch: "Peer-to-peer marketplace evolved from LocalBitcoins-style trading. Supports cash-in-person and many fiat methods.",
+    strengths: ["Cash-in-person and cash-by-mail support is rare and valuable", "No mandatory KYC for most trades"],
+    watchOuts:  ["Operator-run — you trust AgoraDesk's arbitration", "Cash-in-person trades carry physical-safety considerations; meet in public"] },
+
+  // ─ Nodes ──────────────────────────────────────────
+  { name: "Umbrel", category: "node", os: "Raspberry Pi · Linux · Umbrel Home (hardware)", pitch: "App-store-style plug-and-play personal server. Bitcoin + Lightning + dozens of self-hostable apps.",
+    strengths: ["One-click app installs — easiest path to your own node", "Includes Bitcoin Core, LND, and Electrs out of the box", "Active community + frequent updates"],
+    watchOuts:  ["Umbrel OS opens an attack surface — keep it on a separate VLAN, don't expose to the internet without Tor", "App-store model means trusting Umbrel's app review for any add-ons you install"] },
+  { name: "Start9", category: "node", os: "StartOS (purpose-built) · Server Hardware", pitch: "Sovereignty-focused Linux distro for self-hosting. Strong privacy and security defaults — Tor by default, no remote telemetry.",
+    strengths: ["Tor everywhere by default — clearnet is opt-in", "Reproducible builds for every service", "Lightning + Bitcoin + Nostr relay + many privacy services in the catalogue"],
+    watchOuts:  ["Pricier hardware than Umbrel's Pi-based starter setups", "More configuration surface — read each service's docs before exposing it"] },
+  { name: "RaspiBlitz", category: "node", os: "Raspberry Pi", pitch: "DIY-style Bitcoin + Lightning node distribution with a focus on transparency and learning.",
+    strengths: ["Fully open source — every layer auditable", "Strong Lightning routing-node feature set", "Active maintainer community"],
+    watchOuts:  ["More hands-on than Umbrel — assumes Linux comfort", "Display + Pi hardware integration can be finicky"] },
+  { name: "MyNode", category: "node", os: "Raspberry Pi · Linux", pitch: "Beginner-friendly Bitcoin / Lightning node with a free community edition and a paid premium tier.",
+    strengths: ["Simple web UI", "Free Community Edition covers the essentials", "Premium adds VPN, BTCPay, and pro support"],
+    watchOuts:  ["Premium model means some features (VPN, BTCPay one-click) require a paid licence", "Community is smaller than Umbrel's"] },
+  { name: "Nodl", category: "node", os: "Nodl hardware appliance", pitch: "Pre-built plug-and-play Bitcoin + Lightning node hardware. Pay once, plug in, done.",
+    strengths: ["Zero-assembly hardware — fastest path from 'no node' to 'have node'", "Tor + clearnet + Electrum + LND all preconfigured"],
+    watchOuts:  ["Hardware vendor — you trust Nodl's firmware build process", "More expensive than DIY Pi setups"] },
+];
+
+/* ─────────────────────────────────────────────
    CASE FILES — notable Bitcoin wallets
 ───────────────────────────────────────────── */
 const CASE_FILES = [
@@ -2478,6 +2579,12 @@ function Landing({ onAnalyze, isMobile, onCases }) {
             onMouseOut={e => e.currentTarget.style.color = T.textMid}>
             How we're paid for
           </button>
+          <a href="/?page=wallets"
+            style={{ fontFamily: T.mono, fontSize: 10, color: T.textMid, textDecoration: "underline dotted", textUnderlineOffset: 3, transition: "color .15s" }}
+            onMouseOver={e => e.currentTarget.style.color = T.btc}
+            onMouseOut={e => e.currentTarget.style.color = T.textMid}>
+            Wallet directory
+          </a>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
           {(FUNDING.lightning || FUNDING.nostr) && (
@@ -2908,6 +3015,173 @@ function NewsletterSignup({ compact = false }) {
         No spam. Unsubscribe link in every issue. We never link your email to a scanned address.
       </div>
     </form>
+  );
+}
+
+/* ─────────────────────────────────────────────
+   WALLET DIRECTORY — standalone curated reviews at /?page=wallets.
+   Reads WALLET_REVIEWS + WALLET_CATEGORIES (defined near top of file).
+   Filterable by category, links out via toolLink() (so affiliate URLs
+   slot in automatically when configured). Pillar 2 of the strategy doc.
+───────────────────────────────────────────── */
+function WalletDirectory({ onBack, isMobile }) {
+  useLang();
+  const [cat, setCat] = useState("all");
+  const [query, setQuery] = useState("");
+  const anyAff = WALLET_REVIEWS.some(w => toolIsAffiliate(w.name));
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return WALLET_REVIEWS.filter(w => {
+      if (cat !== "all" && w.category !== cat) return false;
+      if (!q) return true;
+      return (w.name + " " + w.pitch + " " + (w.os || "")).toLowerCase().includes(q);
+    });
+  }, [cat, query]);
+
+  // Group by category for "All" view to keep visual hierarchy
+  const grouped = useMemo(() => {
+    if (cat !== "all") return [[cat, filtered]];
+    return WALLET_CATEGORIES.map(c => [c.key, filtered.filter(w => w.category === c.key)]).filter(([, list]) => list.length);
+  }, [cat, filtered]);
+
+  useEffect(() => {
+    const prev = document.title;
+    document.title = "Privacy-First Bitcoin Wallet Directory — AnonScore";
+    const desc = document.querySelector('meta[name="description"]');
+    const prevDesc = desc?.getAttribute("content");
+    desc?.setAttribute("content", "Curated, regularly updated directory of the most privacy-respecting Bitcoin & Lightning wallets. Honest watch-outs included; no pay-to-play.");
+    return () => { document.title = prev; if (desc && prevDesc) desc.setAttribute("content", prevDesc); };
+  }, []);
+
+  return (
+    <div role="main" aria-label="Privacy-First Wallet Directory" style={{ minHeight: "100vh", background: T.bg, display: "flex", flexDirection: "column" }}>
+      <h1 className="sr-only">Privacy-First Bitcoin & Lightning Wallet Directory</h1>
+
+      {/* Nav */}
+      <nav style={{ display: "flex", alignItems: "center", gap: 10, padding: isMobile ? "12px 16px" : "14px 32px", borderBottom: `1px solid ${T.border}`, background: T.bg, position: "sticky", top: 0, zIndex: 100 }}>
+        <button onClick={onBack} style={{ background: "transparent", border: `1.5px solid ${T.border}`, borderRadius: 8, padding: "7px 12px", color: T.textMid, fontFamily: T.sans, fontSize: 13, cursor: "pointer", transition: "border .15s" }}
+          onMouseOver={e => e.currentTarget.style.borderColor = T.cyan}
+          onMouseOut={e => e.currentTarget.style.borderColor = T.border}>← Back</button>
+        <div style={{ fontFamily: T.display, fontSize: 15, letterSpacing: 4, fontWeight: 700 }}>ANON<span style={{ color: T.cyan }}>SCORE</span></div>
+        <div style={{ flex: 1 }} />
+        <span style={{ fontFamily: T.mono, fontSize: 9, color: T.btc, background: T.btcLo, border: `1px solid ${T.btcMid}`, borderRadius: 6, padding: "4px 9px", letterSpacing: 1 }}>DIRECTORY</span>
+      </nav>
+
+      <div style={{ flex: 1, maxWidth: 980, margin: "0 auto", width: "100%", padding: isMobile ? "32px 16px" : "48px 32px" }}>
+        {/* Hero */}
+        <div style={{ textAlign: "center", marginBottom: 28 }}>
+          <div style={{ fontFamily: T.mono, fontSize: 10, color: T.btc, letterSpacing: 2.5, marginBottom: 14 }}>CURATED · NO PAY-TO-PLAY</div>
+          <h2 style={{ fontFamily: T.serif, fontSize: isMobile ? 32 : 44, color: T.text, lineHeight: 1.1, fontWeight: 400, marginBottom: 14 }}>
+            The privacy-first<br /><em style={{ color: T.btc }}>Bitcoin wallet directory.</em>
+          </h2>
+          <p style={{ fontSize: isMobile ? 14 : 16, color: T.textMid, lineHeight: 1.7, maxWidth: 580, margin: "0 auto", fontWeight: 300 }}>
+            Every wallet, exchange, and node listed here is one we'd use ourselves. Each entry includes honest watch-outs — what to know before you trust it with your stack.
+          </p>
+        </div>
+
+        {/* Filter bar */}
+        <div style={{ display: "flex", gap: 8, marginBottom: 20, flexWrap: "wrap", alignItems: "center" }}>
+          <button onClick={() => setCat("all")}
+            style={{ padding: "7px 12px", background: cat === "all" ? T.cyan : T.surface, border: `1px solid ${cat === "all" ? T.cyan : T.border}`, color: cat === "all" ? T.bg : T.textMid, borderRadius: 8, fontFamily: T.mono, fontSize: 10, fontWeight: 700, letterSpacing: 0.5, cursor: "pointer", transition: "all .15s" }}>
+            ALL ({WALLET_REVIEWS.length})
+          </button>
+          {WALLET_CATEGORIES.map(c => {
+            const count = WALLET_REVIEWS.filter(w => w.category === c.key).length;
+            const active = cat === c.key;
+            return (
+              <button key={c.key} onClick={() => setCat(c.key)}
+                style={{ padding: "7px 12px", background: active ? T.cyan : T.surface, border: `1px solid ${active ? T.cyan : T.border}`, color: active ? T.bg : T.textMid, borderRadius: 8, fontFamily: T.mono, fontSize: 10, fontWeight: 700, letterSpacing: 0.5, cursor: "pointer", transition: "all .15s" }}>
+                {c.icon} {c.label.toUpperCase()} ({count})
+              </button>
+            );
+          })}
+          <div style={{ flex: 1, minWidth: 180 }}>
+            <label htmlFor="wallet-search" className="sr-only">Search wallets</label>
+            <input id="wallet-search" type="search" value={query} onChange={e => setQuery(e.target.value)} placeholder="Search…"
+              style={{ width: "100%", background: T.surface, border: `1px solid ${T.border}`, borderRadius: 8, padding: "7px 12px", color: T.text, fontFamily: T.mono, fontSize: 11, outline: "none", transition: "border .15s, box-shadow .2s" }}
+              onFocus={e => { e.target.style.borderColor = T.cyan; e.target.style.boxShadow = `0 0 0 3px ${T.cyan}22`; }}
+              onBlur={e => { e.target.style.borderColor = T.border; e.target.style.boxShadow = "0 0 0 0 transparent"; }} />
+          </div>
+        </div>
+
+        {/* Groups */}
+        {grouped.length === 0 ? (
+          <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 12, padding: "40px 20px", textAlign: "center", color: T.textMid, fontSize: 14 }}>
+            No matches for "{query}".
+          </div>
+        ) : grouped.map(([catKey, list]) => {
+          const meta = WALLET_CATEGORIES.find(c => c.key === catKey);
+          return (
+            <section key={catKey} style={{ marginBottom: 36 }}>
+              <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 14, paddingBottom: 8, borderBottom: `1px solid ${T.borderLo}` }}>
+                <span style={{ fontSize: 18 }}>{meta.icon}</span>
+                <h3 style={{ fontFamily: T.serif, fontSize: 22, color: T.text, fontWeight: 400, margin: 0 }}>{meta.label}</h3>
+                <div style={{ fontFamily: T.mono, fontSize: 10, color: T.textDim }}>· {meta.blurb}</div>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(2, 1fr)", gap: 14 }}>
+                {list.map(w => {
+                  const href = toolLink(w.name);
+                  const aff = toolIsAffiliate(w.name);
+                  return (
+                    <article key={w.name} style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 14, padding: "18px 20px", display: "flex", flexDirection: "column", gap: 10 }}>
+                      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+                        <div>
+                          <div style={{ fontFamily: T.serif, fontSize: 19, color: T.text, fontWeight: 400 }}>{w.name}</div>
+                          {w.os && <div style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim, marginTop: 3 }}>{w.os}</div>}
+                        </div>
+                        {aff && <span style={{ fontFamily: T.mono, fontSize: 9, color: T.amber, background: T.amberLo, border: `1px solid ${T.amberMid}`, borderRadius: 6, padding: "3px 8px", letterSpacing: 0.5 }}>AFFILIATE</span>}
+                      </div>
+                      <p style={{ fontSize: 13, color: T.textMid, lineHeight: 1.6, margin: 0 }}>{w.pitch}</p>
+                      <div>
+                        <div style={{ fontFamily: T.mono, fontSize: 9, color: T.green, letterSpacing: 1.5, marginBottom: 4 }}>STRENGTHS</div>
+                        <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: 3 }}>
+                          {w.strengths.map((s, i) => (
+                            <li key={i} style={{ display: "flex", gap: 8, fontSize: 12, color: T.text, lineHeight: 1.55 }}>
+                              <span style={{ color: T.green, flexShrink: 0 }}>✓</span>
+                              <span>{s}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                      <div>
+                        <div style={{ fontFamily: T.mono, fontSize: 9, color: T.amber, letterSpacing: 1.5, marginBottom: 4 }}>WATCH-OUTS</div>
+                        <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: 3 }}>
+                          {w.watchOuts.map((s, i) => (
+                            <li key={i} style={{ display: "flex", gap: 8, fontSize: 12, color: T.textMid, lineHeight: 1.55 }}>
+                              <span style={{ color: T.amber, flexShrink: 0 }}>⚠</span>
+                              <span>{s}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                      {href && (
+                        <div style={{ marginTop: 4 }}>
+                          <a href={href} target="_blank" rel="noopener noreferrer nofollow"
+                            style={{ display: "inline-block", background: "transparent", border: `1.5px solid ${T.cyan}66`, borderRadius: 8, padding: "7px 14px", color: T.cyan, fontFamily: T.mono, fontSize: 11, textDecoration: "none", transition: "all .15s" }}
+                            onMouseOver={e => { e.currentTarget.style.background = T.cyan; e.currentTarget.style.color = T.bg; }}
+                            onMouseOut={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = T.cyan; }}>
+                            Visit {w.name} ↗
+                          </a>
+                        </div>
+                      )}
+                    </article>
+                  );
+                })}
+              </div>
+            </section>
+          );
+        })}
+
+        {/* Disclosure footer */}
+        <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: 12, padding: "16px 20px", fontSize: 12, color: T.textMid, lineHeight: 1.7 }}>
+          <div style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim, letterSpacing: 2, marginBottom: 8 }}>HOW THIS LIST WORKS</div>
+          Every entry was picked because we'd actually use it. Reviews are written by the AnonScore team, not paid for. {anyAff
+            ? <>Entries tagged <span style={{ fontFamily: T.mono, color: T.amber }}>AFFILIATE</span> earn AnonScore a small referral when you sign up — we never tune reviews for tier.</>
+            : <>No entry on this page currently pays us a referral. If that ever changes, it'll be tagged <span style={{ fontFamily: T.mono, color: T.amber }}>AFFILIATE</span> here and listed in full disclosure.</>}
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -4541,7 +4815,9 @@ function App() {
         const found = CASE_FILES.find(c => c.id === caseSlug || c.slug === caseSlug);
         if (found) { setActiveCaseFile(found); setPage("case_detail"); }
       }
-      if (params.get("page") === "coach") setPage("coach");
+      const pageParam = params.get("page");
+      if (pageParam === "coach") setPage("coach");
+      else if (pageParam === "wallets") setPage("wallets");
     } catch {}
   }, []);
   // Bitcoin state
@@ -4729,6 +5005,7 @@ function App() {
       {page === "dashboard"    && <Dashboard address={address} addrInfo={addrInfo} utxos={utxos} txs={txs} isMobile={isMobile} onBack={() => setPage("landing")} onRescan={analyze} toast={toast} autoShare={autoShare} scanAt={scanAt} defaultSimple={defaultSimple} simpleMode={simpleMode} onSimpleModeChange={setSimpleMode} onCoach={() => setPage("coach")} />}
       {page === "ln_dashboard" && <LightningDashboard nodeId={lnNodeId} nodeData={lnNodeData} channels={lnChannels} isMobile={isMobile} onBack={() => setPage("landing")} onRescan={analyze} toast={toast} />}
       {page === "coach"        && <CoachWaitlist onBack={() => setPage("landing")} isMobile={isMobile} />}
+      {page === "wallets"      && <WalletDirectory onBack={() => setPage("landing")} isMobile={isMobile} />}
     </>
   );
 }

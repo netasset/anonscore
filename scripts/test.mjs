@@ -153,6 +153,25 @@ else {
   await page.waitForTimeout(200);
 }
 
+// Wallet directory page: deep-linkable at /?page=wallets, renders ≥10 reviews.
+{
+  const dirPage = await ctx.newPage();
+  try {
+    await dirPage.goto(`http://127.0.0.1:${PORT}/?page=wallets`, { waitUntil: "load" });
+    await dirPage.waitForFunction(() => document.getElementById("root")?.childElementCount > 0, { timeout: 15000 });
+    await dirPage.waitForTimeout(800);
+    const heroOk = await dirPage.getByText(/Bitcoin wallet directory/i).count();
+    const visitLinks = await dirPage.locator('a:has-text("Visit")').count();
+    if (heroOk === 0) fail("wallet directory: hero not rendered");
+    else if (visitLinks < 10) fail(`wallet directory: only ${visitLinks} outbound links (expected ≥10)`);
+    else pass(`wallet directory renders at /?page=wallets (${visitLinks} outbound links)`);
+  } catch (e) {
+    fail("wallet directory: " + e.message.slice(0, 120));
+  } finally {
+    await dirPage.close();
+  }
+}
+
 // Service worker should register and precache the static assets.
 await page.waitForFunction(
   () => navigator.serviceWorker?.controller || navigator.serviceWorker?.ready,
@@ -178,7 +197,13 @@ else pass(`Service worker registered, ${swInfo.entries} entries cached in ${swIn
 
 // Run a demo scan end-to-end
 console.log("[4/5] Demo scan flow");
-const dismiss = page.getByText("Dismiss"); if (await dismiss.count()) await dismiss.click();
+// Re-navigate to landing in case earlier blocks (SW wait, i18n switching, dir page)
+// let enough wall-clock pass for the auto-demo (2.5s) to fire and take us elsewhere.
+// Also set the visited flag pre-load so the banner doesn't pop up mid-test.
+await page.evaluate(() => localStorage.setItem("anonscore_visited", "1"));
+await page.goto(`http://127.0.0.1:${PORT}/`, { waitUntil: "load" });
+await page.waitForFunction(() => document.getElementById("root")?.childElementCount > 0, { timeout: 20000 });
+await page.waitForTimeout(800);
 await page.getByText("Risky wallet").click();
 await page.waitForTimeout(3500);
 const dashText = await page.evaluate(() => document.body.innerText);
