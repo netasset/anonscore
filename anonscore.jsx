@@ -65,6 +65,9 @@ const T = {
   btc:      "#F7931A",
   btcLo:    "#F7931A18",
   btcMid:   "#F7931A40",
+  opn:      "#FF6600",  /* OPNorange family accent — cross-tool/umbrella elements only; ~6:1 on bg, clears WCAG AA */
+  opnLo:    "#FF660018",
+  opnMid:   "#FF660040",
   red:      "#f85149",
   redLo:    "#f8514914",
   green:    "#3fb950",
@@ -175,6 +178,11 @@ const STRINGS = {
     "nav.nocookies": "✓ No cookies",
     "nav.nothingstored": "✓ Nothing stored",
     "nav.tor": "✓ Tor compatible",
+    "nav.opensource": "✓ Open source",
+    "umbrella.label": "TOOLKIT",
+    "umbrella.privacy": "Privacy Audit",
+    "umbrella.dca": "DCA Butler",
+    "umbrella.hub": "Hub",
     "hero.eyebrow": "FREE BITCOIN & LIGHTNING PRIVACY AUDIT",
     "hero.h1.line1": "Is your Bitcoin",
     "hero.h1.line2": "stack leaking?",
@@ -210,6 +218,11 @@ const STRINGS = {
     "nav.nocookies": "✓ Sin cookies",
     "nav.nothingstored": "✓ Nada se guarda",
     "nav.tor": "✓ Compatible con Tor",
+    "nav.opensource": "✓ Código abierto",
+    "umbrella.label": "KIT",
+    "umbrella.privacy": "Auditoría de privacidad",
+    "umbrella.dca": "DCA Butler",
+    "umbrella.hub": "Hub",
     "hero.eyebrow": "AUDITORÍA GRATUITA DE PRIVACIDAD BITCOIN Y LIGHTNING",
     "hero.h1.line1": "¿Tu stack de Bitcoin",
     "hero.h1.line2": "está filtrando datos?",
@@ -2334,6 +2347,32 @@ function Landing({ onAnalyze, isMobile, onCases }) {
 
   return (
     <div role="main" aria-label="AnonScore — Bitcoin & Lightning privacy audit" style={{ minHeight: "100vh", display: "flex", flexDirection: "column", background: T.bg }}>
+      {/* ── OPNORANGE TOOLKIT STRIP (umbrella cross-links — non-sticky, scrolls away above the nav) ── */}
+      <div style={{ background: T.bg, borderBottom: `1px solid ${T.borderLo}`, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: isMobile ? "7px 20px" : "7px 48px" }}>
+        <a href="https://opnorange.com" target="_blank" rel="noopener noreferrer" aria-label="OPNorange — the toolkit hub"
+          style={{ display: "flex", alignItems: "center", gap: 7, textDecoration: "none", flexShrink: 0 }}>
+          <span style={{ width: 7, height: 7, borderRadius: "50%", background: T.opn, boxShadow: `0 0 7px ${T.opn}`, flexShrink: 0 }} />
+          <span style={{ fontFamily: T.mono, fontSize: 10, color: T.textMid, letterSpacing: 1.5, fontWeight: 700 }}>OPN<span style={{ color: T.opn }}>ORANGE</span></span>
+          {!isMobile && <span style={{ fontFamily: T.mono, fontSize: 10, color: T.textDim, letterSpacing: 1.5 }}>· {t("umbrella.label")}</span>}
+        </a>
+        <div style={{ display: "flex", alignItems: "center", gap: 9, flexShrink: 0 }}>
+          {!isMobile && <span style={{ fontFamily: T.mono, fontSize: 10, color: T.opn, fontWeight: 700, letterSpacing: 0.5 }}>{t("umbrella.privacy")}</span>}
+          {!isMobile && <span style={{ color: T.borderLo }}>·</span>}
+          <a href="https://dcabutler.com" target="_blank" rel="noopener noreferrer"
+            style={{ fontFamily: T.mono, fontSize: 10, color: T.textMid, textDecoration: "none", letterSpacing: 0.5, transition: "color .15s" }}
+            onMouseOver={e => e.currentTarget.style.color = T.opn}
+            onMouseOut={e => e.currentTarget.style.color = T.textMid}>
+            {t("umbrella.dca")} ↗
+          </a>
+          <span style={{ color: T.borderLo }}>·</span>
+          <a href="https://opnorange.com" target="_blank" rel="noopener noreferrer"
+            style={{ fontFamily: T.mono, fontSize: 10, color: T.textMid, textDecoration: "none", letterSpacing: 0.5, transition: "color .15s" }}
+            onMouseOver={e => e.currentTarget.style.color = T.opn}
+            onMouseOut={e => e.currentTarget.style.color = T.textMid}>
+            {t("umbrella.hub")} ↗
+          </a>
+        </div>
+      </div>
       {/* Nav */}
       <nav style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: isMobile ? "14px 20px" : "14px 48px", borderBottom: `1px solid ${T.border}`, background: T.bg, position: "sticky", top: 0, zIndex: 100 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -2348,6 +2387,8 @@ function Landing({ onAnalyze, isMobile, onCases }) {
             <span style={{ fontFamily: T.mono, fontSize: 10, color: T.textDim }}>{t("nav.nothingstored")}</span>
             <span style={{ color: T.borderLo }}>·</span>
             <span style={{ fontFamily: T.mono, fontSize: 10, color: T.textDim }}>{t("nav.tor")}</span>
+            <span style={{ color: T.borderLo }}>·</span>
+            <span style={{ fontFamily: T.mono, fontSize: 10, color: T.textDim }}>{t("nav.opensource")}</span>
             <span style={{ color: T.borderLo, margin: "0 4px" }}>|</span>
           </>}
           <a href="https://github.com/netasset/anonscore" target="_blank" rel="noopener noreferrer"
@@ -2641,7 +2682,7 @@ function Landing({ onAnalyze, isMobile, onCases }) {
       {/* ── FINAL CTA ── */}
       <section style={{ padding: isMobile ? "56px 20px" : "72px 48px", position: "relative", overflow: "hidden" }}>
         <div className="dot-grid" style={{ position: "absolute", inset: 0, opacity: .3, pointerEvents: "none" }} />
-        <div style={{ maxWidth: 700, margin: "0 auto", textAlign: "center", position: "relative" }}>
+        <div style={{ maxWidth: 700, margin: "0 auto", textAlign: "center", position: "relative", background: "rgba(19,21,31,0.55)", backdropFilter: "blur(14px)", WebkitBackdropFilter: "blur(14px)", border: `1px solid ${T.cyan}26`, borderRadius: 16, boxShadow: `0 0 40px ${T.cyan}14`, padding: isMobile ? "32px 22px" : "44px 40px" }}>
           <h2 style={{ fontFamily: T.serif, fontSize: isMobile ? 28 : 40, color: T.text, marginBottom: 14, fontWeight: 400 }}>
             {t("finalcta.h2.a")}<br /><em style={{ color: T.cyan }}>{t("finalcta.h2.b")}</em>
           </h2>
@@ -2710,12 +2751,21 @@ function Landing({ onAnalyze, isMobile, onCases }) {
               )}
             </span>
           )}
-          <a href="https://opnorange.com" target="_blank" rel="noopener noreferrer"
-            style={{ fontFamily: T.mono, fontSize: 10, color: T.textDim, textDecoration: "none", transition: "color .15s" }}
-            onMouseOver={e => e.currentTarget.style.color = T.btc}
-            onMouseOut={e => e.currentTarget.style.color = T.textDim}>
-            by OPNorange ↗
-          </a>
+          {/* OPNorange toolkit row — cross-tool nav */}
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+            <span style={{ width: 6, height: 6, borderRadius: "50%", background: T.opn, boxShadow: `0 0 6px ${T.opn}`, flexShrink: 0 }} />
+            <span style={{ fontFamily: T.mono, fontSize: 10, color: T.opn, letterSpacing: 0.5, fontWeight: 700 }}>{t("umbrella.privacy")}</span>
+            <span style={{ color: T.borderLo }}>·</span>
+            <a href="https://dcabutler.com" target="_blank" rel="noopener noreferrer"
+              style={{ fontFamily: T.mono, fontSize: 10, color: T.textDim, textDecoration: "none", transition: "color .15s" }}
+              onMouseOver={e => e.currentTarget.style.color = T.opn}
+              onMouseOut={e => e.currentTarget.style.color = T.textDim}>{t("umbrella.dca")} ↗</a>
+            <span style={{ color: T.borderLo }}>·</span>
+            <a href="https://opnorange.com" target="_blank" rel="noopener noreferrer"
+              style={{ fontFamily: T.mono, fontSize: 10, color: T.textDim, textDecoration: "none", transition: "color .15s" }}
+              onMouseOver={e => e.currentTarget.style.color = T.opn}
+              onMouseOut={e => e.currentTarget.style.color = T.textDim}>{t("umbrella.hub")} ↗</a>
+          </span>
         </div>
       </div>
       {showFunding && <FundingDisclosure onClose={() => setShowFunding(false)} />}

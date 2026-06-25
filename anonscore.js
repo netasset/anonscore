@@ -64,6 +64,9 @@ const T = {
   btc: "#F7931A",
   btcLo: "#F7931A18",
   btcMid: "#F7931A40",
+  opn: "#FF6600",
+  opnLo: "#FF660018",
+  opnMid: "#FF660040",
   red: "#f85149",
   redLo: "#f8514914",
   green: "#3fb950",
@@ -230,6 +233,11 @@ const STRINGS = {
     "nav.nocookies": "✓ No cookies",
     "nav.nothingstored": "✓ Nothing stored",
     "nav.tor": "✓ Tor compatible",
+    "nav.opensource": "✓ Open source",
+    "umbrella.label": "TOOLKIT",
+    "umbrella.privacy": "Privacy Audit",
+    "umbrella.dca": "DCA Butler",
+    "umbrella.hub": "Hub",
     "hero.eyebrow": "FREE BITCOIN & LIGHTNING PRIVACY AUDIT",
     "hero.h1.line1": "Is your Bitcoin",
     "hero.h1.line2": "stack leaking?",
@@ -265,6 +273,11 @@ const STRINGS = {
     "nav.nocookies": "✓ Sin cookies",
     "nav.nothingstored": "✓ Nada se guarda",
     "nav.tor": "✓ Compatible con Tor",
+    "nav.opensource": "✓ Código abierto",
+    "umbrella.label": "KIT",
+    "umbrella.privacy": "Auditoría de privacidad",
+    "umbrella.dca": "DCA Butler",
+    "umbrella.hub": "Hub",
     "hero.eyebrow": "AUDITORÍA GRATUITA DE PRIVACIDAD BITCOIN Y LIGHTNING",
     "hero.h1.line1": "¿Tu stack de Bitcoin",
     "hero.h1.line2": "está filtrando datos?",
@@ -4642,7 +4655,108 @@ function Landing({
       flexDirection: "column",
       background: T.bg
     }
-  }, React.createElement("nav", {
+  }, React.createElement("div", {
+    style: {
+      background: T.bg,
+      borderBottom: `1px solid ${T.borderLo}`,
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: 10,
+      padding: isMobile ? "7px 20px" : "7px 48px"
+    }
+  }, React.createElement("a", {
+    href: "https://opnorange.com",
+    target: "_blank",
+    rel: "noopener noreferrer",
+    "aria-label": "OPNorange \u2014 the toolkit hub",
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: 7,
+      textDecoration: "none",
+      flexShrink: 0
+    }
+  }, React.createElement("span", {
+    style: {
+      width: 7,
+      height: 7,
+      borderRadius: "50%",
+      background: T.opn,
+      boxShadow: `0 0 7px ${T.opn}`,
+      flexShrink: 0
+    }
+  }), React.createElement("span", {
+    style: {
+      fontFamily: T.mono,
+      fontSize: 10,
+      color: T.textMid,
+      letterSpacing: 1.5,
+      fontWeight: 700
+    }
+  }, "OPN", React.createElement("span", {
+    style: {
+      color: T.opn
+    }
+  }, "ORANGE")), !isMobile && React.createElement("span", {
+    style: {
+      fontFamily: T.mono,
+      fontSize: 10,
+      color: T.textDim,
+      letterSpacing: 1.5
+    }
+  }, "\xB7 ", t("umbrella.label"))), React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: 9,
+      flexShrink: 0
+    }
+  }, !isMobile && React.createElement("span", {
+    style: {
+      fontFamily: T.mono,
+      fontSize: 10,
+      color: T.opn,
+      fontWeight: 700,
+      letterSpacing: 0.5
+    }
+  }, t("umbrella.privacy")), !isMobile && React.createElement("span", {
+    style: {
+      color: T.borderLo
+    }
+  }, "\xB7"), React.createElement("a", {
+    href: "https://dcabutler.com",
+    target: "_blank",
+    rel: "noopener noreferrer",
+    style: {
+      fontFamily: T.mono,
+      fontSize: 10,
+      color: T.textMid,
+      textDecoration: "none",
+      letterSpacing: 0.5,
+      transition: "color .15s"
+    },
+    onMouseOver: e => e.currentTarget.style.color = T.opn,
+    onMouseOut: e => e.currentTarget.style.color = T.textMid
+  }, t("umbrella.dca"), " \u2197"), React.createElement("span", {
+    style: {
+      color: T.borderLo
+    }
+  }, "\xB7"), React.createElement("a", {
+    href: "https://opnorange.com",
+    target: "_blank",
+    rel: "noopener noreferrer",
+    style: {
+      fontFamily: T.mono,
+      fontSize: 10,
+      color: T.textMid,
+      textDecoration: "none",
+      letterSpacing: 0.5,
+      transition: "color .15s"
+    },
+    onMouseOver: e => e.currentTarget.style.color = T.opn,
+    onMouseOut: e => e.currentTarget.style.color = T.textMid
+  }, t("umbrella.hub"), " \u2197"))), React.createElement("nav", {
     style: {
       display: "flex",
       alignItems: "center",
@@ -4713,6 +4827,16 @@ function Landing({
       color: T.textDim
     }
   }, t("nav.tor")), React.createElement("span", {
+    style: {
+      color: T.borderLo
+    }
+  }, "\xB7"), React.createElement("span", {
+    style: {
+      fontFamily: T.mono,
+      fontSize: 10,
+      color: T.textDim
+    }
+  }, t("nav.opensource")), React.createElement("span", {
     style: {
       color: T.borderLo,
       margin: "0 4px"
@@ -5609,7 +5733,14 @@ function Landing({
       maxWidth: 700,
       margin: "0 auto",
       textAlign: "center",
-      position: "relative"
+      position: "relative",
+      background: "rgba(19,21,31,0.55)",
+      backdropFilter: "blur(14px)",
+      WebkitBackdropFilter: "blur(14px)",
+      border: `1px solid ${T.cyan}26`,
+      borderRadius: 16,
+      boxShadow: `0 0 40px ${T.cyan}14`,
+      padding: isMobile ? "32px 22px" : "44px 40px"
     }
   }, React.createElement("h2", {
     style: {
@@ -5797,7 +5928,52 @@ function Landing({
       cursor: "pointer",
       letterSpacing: 0.5
     }
-  }, tipCopied === "nostr" ? "Copied!" : "Zap on Nostr")), React.createElement("a", {
+  }, tipCopied === "nostr" ? "Copied!" : "Zap on Nostr")), React.createElement("span", {
+    style: {
+      display: "inline-flex",
+      alignItems: "center",
+      gap: 8,
+      flexWrap: "wrap"
+    }
+  }, React.createElement("span", {
+    style: {
+      width: 6,
+      height: 6,
+      borderRadius: "50%",
+      background: T.opn,
+      boxShadow: `0 0 6px ${T.opn}`,
+      flexShrink: 0
+    }
+  }), React.createElement("span", {
+    style: {
+      fontFamily: T.mono,
+      fontSize: 10,
+      color: T.opn,
+      letterSpacing: 0.5,
+      fontWeight: 700
+    }
+  }, t("umbrella.privacy")), React.createElement("span", {
+    style: {
+      color: T.borderLo
+    }
+  }, "\xB7"), React.createElement("a", {
+    href: "https://dcabutler.com",
+    target: "_blank",
+    rel: "noopener noreferrer",
+    style: {
+      fontFamily: T.mono,
+      fontSize: 10,
+      color: T.textDim,
+      textDecoration: "none",
+      transition: "color .15s"
+    },
+    onMouseOver: e => e.currentTarget.style.color = T.opn,
+    onMouseOut: e => e.currentTarget.style.color = T.textDim
+  }, t("umbrella.dca"), " \u2197"), React.createElement("span", {
+    style: {
+      color: T.borderLo
+    }
+  }, "\xB7"), React.createElement("a", {
     href: "https://opnorange.com",
     target: "_blank",
     rel: "noopener noreferrer",
@@ -5808,9 +5984,9 @@ function Landing({
       textDecoration: "none",
       transition: "color .15s"
     },
-    onMouseOver: e => e.currentTarget.style.color = T.btc,
+    onMouseOver: e => e.currentTarget.style.color = T.opn,
     onMouseOut: e => e.currentTarget.style.color = T.textDim
-  }, "by OPNorange \u2197"))), showFunding && React.createElement(FundingDisclosure, {
+  }, t("umbrella.hub"), " \u2197")))), showFunding && React.createElement(FundingDisclosure, {
     onClose: () => setShowFunding(false)
   }));
 }
