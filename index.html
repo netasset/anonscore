@@ -76,14 +76,8 @@
     <h2 style="font-weight:600">JavaScript required</h2>
     <p>This Bitcoin &amp; Lightning privacy audit runs entirely in your browser and needs JavaScript enabled. No data is ever sent to a server.</p>
   </noscript>
-  <script>
-    // Register the service worker for offline support + instant repeat visits.
-    // Same-origin only; cross-origin API calls are never intercepted.
-    if ("serviceWorker" in navigator) {
-      window.addEventListener("load", () => {
-        navigator.serviceWorker.register("/sw.js").catch(() => {});
-      });
-    }
-  </script>
+  <!-- Service worker registration. External (not inline) so the strict CSP
+       (script-src 'self', no 'unsafe-inline') applies with no exceptions. -->
+  <script defer src="/sw-register.js"></script>
 </body>
 </html>

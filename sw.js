@@ -6,11 +6,12 @@
  * calls (blockstream.info, mempool.space) go straight to the network — the
  * service worker never sees user addresses.
  */
-const CACHE = "anonscore-7d63396e2463";
+const CACHE = "anonscore-b9e63a20f551";
 const PRECACHE = [
   "/",
   "/index.html",
   "/anonscore.js",
+  "/sw-register.js",
   "/manifest.webmanifest",
   "/vendor/react.production.min.js",
   "/vendor/react-dom.production.min.js",
