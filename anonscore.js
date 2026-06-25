@@ -11651,12 +11651,6 @@ function App() {
     window.addEventListener("resize", h);
     return () => window.removeEventListener("resize", h);
   }, []);
-  const [autoDemo, setAutoDemo] = useState(() => {
-    if (typeof window === "undefined") return false;
-    if (localStorage.getItem("anonscore_visited")) return false;
-    if (new URLSearchParams(window.location.search).get("scan")) return false;
-    return true;
-  });
   const analyze = useCallback(async (addr, plain = false, inputType = "btc") => {
     const isLn = inputType === "ln_pubkey" || inputType === "ln_address";
     setScanDataReady(false);
@@ -11778,69 +11772,9 @@ function App() {
       });
     }
   }, [toast]);
-  useEffect(() => {
-    if (!autoDemo) return;
-    const t = setTimeout(() => {
-      localStorage.setItem("anonscore_visited", "1");
-      setAutoDemo(false);
-      analyze("DEMO", true, "btc");
-    }, 2500);
-    return () => clearTimeout(t);
-  }, [autoDemo, analyze]);
-  const dismissAutoDemo = () => {
-    localStorage.setItem("anonscore_visited", "1");
-    setAutoDemo(false);
-  };
   return React.createElement(React.Fragment, null, React.createElement("style", null, CSS), React.createElement(Toast, {
     toasts: toast.toasts
-  }), autoDemo && page === "landing" && React.createElement("div", {
-    role: "status",
-    "aria-label": "Auto-demo notice",
-    style: {
-      position: "fixed",
-      bottom: 24,
-      left: "50%",
-      transform: "translateX(-50%)",
-      zIndex: 800,
-      background: T.card,
-      border: `1px solid ${T.cyan}44`,
-      borderRadius: 14,
-      padding: "14px 22px",
-      display: "flex",
-      alignItems: "center",
-      gap: 14,
-      animation: "fadeUp .4s ease .6s both",
-      boxShadow: `0 8px 32px #00000066, 0 0 0 1px ${T.cyan}22`
-    }
-  }, React.createElement("div", {
-    style: {
-      fontSize: 20
-    }
-  }, "\uD83D\uDD0D"), React.createElement("div", null, React.createElement("div", {
-    style: {
-      fontSize: 13,
-      fontWeight: 600,
-      color: T.text
-    }
-  }, "Watch AnonScore in action"), React.createElement("div", {
-    style: {
-      fontSize: 11,
-      color: T.textMid,
-      marginTop: 2
-    }
-  }, "Auto-launching a demo scan in a moment\u2026")), React.createElement("button", {
-    onClick: dismissAutoDemo,
-    style: {
-      background: "transparent",
-      border: `1px solid ${T.border}`,
-      borderRadius: 8,
-      padding: "6px 12px",
-      color: T.textMid,
-      fontSize: 11,
-      cursor: "pointer",
-      whiteSpace: "nowrap"
-    }
-  }, "Dismiss")), pendingScan && page === "landing" && React.createElement("div", {
+  }), pendingScan && page === "landing" && React.createElement("div", {
     style: {
       position: "fixed",
       inset: 0,
