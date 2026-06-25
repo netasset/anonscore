@@ -70,7 +70,9 @@ sync with `anonscore.jsx`. Run the full suite with `npm test` (build invariants
 - `?lang=es` — Spanish. i18n via the `STRINGS` map + `t()`; English is the
   default and the fallback, so partial locales degrade gracefully.
 
-## Strategy
+## Note — this repo is public (MIT)
 
-Product strategy, monetization, locked/open decisions, and the operator setup
-checklist live in **`ROADMAP.md`**. Read it before product/monetization work.
+Keep business/monetization strategy, revenue figures, growth tactics, persona
+targeting, and operator-private notes **out of version control here** — they
+belong in a private location the operator maintains. Engineering docs (this
+file, `README.md`) are fine to be public.
