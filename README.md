@@ -103,7 +103,7 @@ Recommended provider order: **Buttondown** (privacy-first, $9/mo, RSS for paid t
 
 ### 4. AI Assistant (already configured)
 
-The AI worker URL (`anonscore-ai.netassetpremium.workers.dev`) is wired in. The 5-message daily cap is enforced server-side. To upgrade to a paid Coach tier later, see the strategy doc.
+The AI worker URL (`anonscore-ai.netassetpremium.workers.dev`) is wired in. The 5-message daily cap is enforced server-side. A paid Coach tier can be layered on top later.
 
 ### 5. Languages (i18n)
 
@@ -119,7 +119,7 @@ const STRINGS = {
 };
 ```
 
-Spanish currently covers the landing + scanning surfaces. The dashboard/case-files still fall back to English. **Before promoting a locale, get a native-speaker pass** — for a security tool, a mistranslated privacy instruction can mislead someone in a high-stakes situation. The strategy doc earmarks this for grant funding (HRF/Open Sats).
+Spanish currently covers the landing + scanning surfaces. The dashboard/case-files still fall back to English. **Before promoting a locale, get a native-speaker pass** — for a security tool, a mistranslated privacy instruction can mislead someone in a high-stakes situation. A full translation pass is a natural fit for privacy-grant funding (e.g. HRF, Open Sats).
 
 ---
 
@@ -139,7 +139,7 @@ Two paths:
 
 **Bug or small fix**: open a PR against `main`. CI runs the 23-check test suite automatically; it will reject regressions in performance, accessibility, third-party requests, or feature flow.
 
-**Larger change**: open an issue first to discuss. The repo guide (`CLAUDE.md`) and the in-flight strategy doc explain where the project is heading.
+**Larger change**: open an issue first to discuss. The repo guide (`CLAUDE.md`) covers the architecture, build pipeline, and conventions.
 
 ---
 
