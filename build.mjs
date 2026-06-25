@@ -34,6 +34,7 @@ const indexHtml = readFileSync(join(root, "index.html"), "utf8");
 const precacheBytes = [
   compiled,
   indexHtml,
+  readFileSync(join(root, "sw-register.js")),
   readFileSync(join(root, "manifest.webmanifest")),
   readFileSync(join(root, "vendor/react.production.min.js")),
   readFileSync(join(root, "vendor/react-dom.production.min.js")),

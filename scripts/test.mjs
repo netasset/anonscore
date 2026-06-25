@@ -49,6 +49,17 @@ for (const required of ["vendor/react", "vendor/react-dom", "anonscore.js"]) {
 }
 if (failures.length === 0) pass("index.html references only self-hosted assets");
 
+// CSP is `script-src 'self'` with no 'unsafe-inline' — so index.html must not
+// carry any executable inline <script>. (A JSON-LD data block is not executed
+// and is exempt.) An inline script would be silently blocked in production.
+const inlineScripts = [...html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)]
+  .filter(([, attrs, body]) =>
+    !/\bsrc=/i.test(attrs) &&                       // external scripts are fine
+    !/type=["']application\/ld\+json["']/i.test(attrs) && // JSON-LD data, not executed
+    body.trim().length > 0);                        // has actual inline JS
+if (inlineScripts.length) fail(`index.html has ${inlineScripts.length} executable inline <script> block(s) — blocked by CSP script-src 'self'`);
+else pass("index.html has no executable inline scripts (CSP script-src 'self' compliant)");
+
 for (const f of ["vendor/react.production.min.js", "vendor/react-dom.production.min.js",
                  "vendor/confetti.browser.min.js", "vendor/dom-to-image-more.min.js",
                  "vendor/fonts/fonts.css", "sw.js"]) {
