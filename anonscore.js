@@ -937,7 +937,8 @@ function runEngine(utxos = [], txs = [], txCount = 0) {
       status,
       detail,
       plain,
-      sev: sev || "medium"
+      sev: sev || "medium",
+      pts: pts || 0
     });
     score += pts;
   };
@@ -1621,7 +1622,8 @@ function runLightningEngine(node = {}, channels = []) {
       name,
       status,
       detail,
-      sev: sev || "medium"
+      sev: sev || "medium",
+      pts: pts || 0
     });
     score += pts;
   };
@@ -5741,6 +5743,169 @@ function Sparkline({
     }
   }, trend > 0 ? `↑ +${trend}` : trend < 0 ? `↓ ${trend}` : "↔"));
 }
+function ScoreBreakdown({
+  checks,
+  score,
+  isMobile,
+  simpleMode
+}) {
+  const movers = checks.filter(c => typeof c.pts === "number" && c.pts !== 0).sort((a, b) => a.pts - b.pts);
+  const penalties = movers.filter(c => c.pts < 0);
+  const bonuses = movers.filter(c => c.pts > 0);
+  const lost = penalties.reduce((a, c) => a + c.pts, 0);
+  const gained = bonuses.reduce((a, c) => a + c.pts, 0);
+  const raw = 100 + lost + gained;
+  const col = scoreColor(score);
+  const nameFor = c => {
+    const s = SIMPLE.checks[c.key];
+    return simpleMode && s ? s.name : c.name;
+  };
+  const Row = ({
+    label,
+    value,
+    color,
+    faded
+  }) => React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: 12,
+      padding: "7px 0",
+      borderTop: `1px solid ${T.borderLo}`
+    }
+  }, React.createElement("span", {
+    style: {
+      fontSize: 13,
+      color: faded ? T.textDim : T.text,
+      lineHeight: 1.4
+    }
+  }, label), React.createElement("span", {
+    style: {
+      fontFamily: T.mono,
+      fontSize: 13,
+      fontWeight: 700,
+      color,
+      flexShrink: 0
+    }
+  }, value));
+  return React.createElement("div", {
+    style: {
+      background: T.card,
+      border: `1px solid ${T.border}`,
+      borderRadius: 16,
+      padding: isMobile ? 18 : 22,
+      marginBottom: 12
+    }
+  }, React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "baseline",
+      justifyContent: "space-between",
+      marginBottom: 12,
+      flexWrap: "wrap",
+      gap: 6
+    }
+  }, React.createElement("div", {
+    style: {
+      fontFamily: T.mono,
+      fontSize: 9,
+      color: T.textDim,
+      letterSpacing: 2
+    }
+  }, "HOW YOUR SCORE WAS CALCULATED"), React.createElement("div", {
+    style: {
+      fontFamily: T.mono,
+      fontSize: 10,
+      color: T.textDim
+    }
+  }, "every wallet starts at ", React.createElement("span", {
+    style: {
+      color: T.green
+    }
+  }, "100"))), React.createElement("div", {
+    style: {
+      display: "grid",
+      gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr",
+      gap: isMobile ? 4 : 24
+    }
+  }, React.createElement("div", null, React.createElement("div", {
+    style: {
+      fontFamily: T.mono,
+      fontSize: 9,
+      color: T.red,
+      letterSpacing: 1.5,
+      marginBottom: 2
+    }
+  }, "POINTS LOST", penalties.length ? ` (${lost})` : ""), penalties.length === 0 ? React.createElement("div", {
+    style: {
+      fontSize: 12,
+      color: T.textMid,
+      padding: "8px 0"
+    }
+  }, "Nothing \u2014 clean across every penalised check. \uD83C\uDF89") : penalties.map(c => React.createElement(Row, {
+    key: c.key,
+    label: nameFor(c),
+    value: c.pts,
+    color: T.red
+  }))), React.createElement("div", null, React.createElement("div", {
+    style: {
+      fontFamily: T.mono,
+      fontSize: 9,
+      color: T.green,
+      letterSpacing: 1.5,
+      marginBottom: 2
+    }
+  }, "POINTS EARNED", bonuses.length ? ` (+${gained})` : ""), bonuses.length === 0 ? React.createElement("div", {
+    style: {
+      fontSize: 12,
+      color: T.textMid,
+      padding: "8px 0"
+    }
+  }, "No bonuses yet \u2014 CoinJoin usage earns points back.") : bonuses.map(c => React.createElement(Row, {
+    key: c.key,
+    label: nameFor(c),
+    value: `+${c.pts}`,
+    color: T.green
+  })))), React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: 12,
+      marginTop: 14,
+      paddingTop: 12,
+      borderTop: `2px solid ${T.border}`
+    }
+  }, React.createElement("span", {
+    style: {
+      fontFamily: T.serif,
+      fontSize: 16,
+      color: T.text
+    }
+  }, "Your score"), React.createElement("span", {
+    style: {
+      fontFamily: T.serif,
+      fontSize: 28,
+      color: col,
+      lineHeight: 1
+    }
+  }, score, React.createElement("span", {
+    style: {
+      fontFamily: T.mono,
+      fontSize: 12,
+      color: T.textDim
+    }
+  }, "/100"))), React.createElement("div", {
+    style: {
+      fontFamily: T.mono,
+      fontSize: 10,
+      color: T.textDim,
+      marginTop: 8,
+      lineHeight: 1.5
+    }
+  }, "100 ", lost ? React.createElement(React.Fragment, null, "\u2212 ", Math.abs(lost), " lost ") : "", gained ? React.createElement(React.Fragment, null, "+ ", gained, " earned ") : "", "= ", raw, raw !== score ? ` → ${score} (${raw < 0 ? "floored at 0" : "capped at 100"})` : "", ". Each penalty is recoverable \u2014 see the Fix It tab."));
+}
 function RadarChart({
   checks,
   size = 220
@@ -8036,7 +8201,7 @@ function Dashboard({
   }, "\u2190 Try a different address"));
   const handleRescan = () => onRescan(address);
   const exportReport = () => {
-    const lines = ["ANONSCORE — PRIVACY REPORT", "===========================", `Address:    ${address}`, `Score:      ${score}/100 (Grade ${grade})`, `Risk:       ${riskLabel}`, `Scanned:    ${scanAt ? new Date(scanAt).toUTCString() : "—"}`, `UTXOs:      ${utxos.length}  |  Transactions: ${txCount}`, "", "CHECKS", "------", ...checks.map(c => `[${c.status === "pass" ? "PASS" : c.status === "warn" ? "WARN" : "FAIL"}] ${c.name}: ${c.plain}`), "", "RECOMMENDATIONS", "---------------", ...recommendations.map((r, i) => `${i + 1}. ${r.action} (+${r.impact}pts, ${r.effort})\n   ${r.plain}\n   Options: ${(r.tools || [{
+    const lines = ["ANONSCORE — PRIVACY REPORT", "===========================", `Address:    ${address}`, `Score:      ${score}/100 (Grade ${grade})`, `Risk:       ${riskLabel}`, `Scanned:    ${scanAt ? new Date(scanAt).toUTCString() : "—"}`, `UTXOs:      ${utxos.length}  |  Transactions: ${txCount}`, "", "SCORE BREAKDOWN (every wallet starts at 100)", "--------------------------------------------", ...checks.filter(c => c.pts).sort((a, b) => a.pts - b.pts).map(c => `  ${c.pts > 0 ? "+" + c.pts : c.pts}\t${c.name}`), `  = ${score}/100`, "", "CHECKS", "------", ...checks.map(c => `[${c.status === "pass" ? "PASS" : c.status === "warn" ? "WARN" : "FAIL"}] ${c.name}: ${c.plain}`), "", "RECOMMENDATIONS", "---------------", ...recommendations.map((r, i) => `${i + 1}. ${r.action} (+${r.impact}pts, ${r.effort})\n   ${r.plain}\n   Options: ${(r.tools || [{
       name: r.tool
     }]).map(t => t.name).join(", ")}`), "", "Generated by AnonScore — anonscore.com — open source, no data stored"];
     const a = document.createElement("a");
@@ -8901,7 +9066,12 @@ function Dashboard({
       fontSize: 14,
       cursor: "pointer"
     }
-  }, "Share Grade ", grade, " \u2192"))), tab === "Overview" && React.createElement("div", {
+  }, "Share Grade ", grade, " \u2192"))), tab === "Overview" && React.createElement(React.Fragment, null, React.createElement(ScoreBreakdown, {
+    checks: checks,
+    score: score,
+    isMobile: isMobile,
+    simpleMode: simpleMode
+  }), React.createElement("div", {
     style: {
       display: "grid",
       gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr",
@@ -8963,11 +9133,27 @@ function Dashboard({
         marginTop: 3,
         lineHeight: 1.55
       }
-    }, displayPlain)), React.createElement(Tag, {
+    }, displayPlain)), React.createElement("div", {
+      style: {
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "flex-end",
+        gap: 4,
+        flexShrink: 0
+      }
+    }, React.createElement(Tag, {
       label: c.status === "pass" ? "Pass" : c.status === "warn" ? "Warn" : "Fail",
       color: c.status === "pass" ? T.green : c.status === "warn" ? T.btc : T.red,
       size: 9
-    }));
+    }), typeof c.pts === "number" && c.pts !== 0 && React.createElement("span", {
+      title: "Effect on your score",
+      style: {
+        fontFamily: T.mono,
+        fontSize: 10,
+        fontWeight: 700,
+        color: c.pts > 0 ? T.green : T.red
+      }
+    }, c.pts > 0 ? `+${c.pts}` : c.pts)));
   })), React.createElement("div", {
     style: {
       display: "flex",
@@ -9111,7 +9297,7 @@ function Dashboard({
   }, "Share my score \u2192")), checks.length >= 3 && React.createElement(RadarChart, {
     checks: checks,
     size: isMobile ? 200 : 220
-  }))), tab === "UTXOs" && React.createElement("div", {
+  })))), tab === "UTXOs" && React.createElement("div", {
     style: {
       display: "flex",
       flexDirection: "column",

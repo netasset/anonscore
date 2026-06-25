@@ -745,7 +745,7 @@ function runEngine(utxos = [], txs = [], txCount = 0) {
   let score = 100;
   const checks = [];
   const add = (key, name, status, detail, plain, sev, pts) => {
-    checks.push({ key, name, status, detail, plain, sev: sev || "medium" });
+    checks.push({ key, name, status, detail, plain, sev: sev || "medium", pts: pts || 0 });
     score += pts;
   };
 
@@ -1037,7 +1037,7 @@ function runLightningEngine(node = {}, channels = []) {
   let score = 100;
   const checks = [];
   const add = (key, name, status, detail, sev, pts) => {
-    checks.push({ key, name, status, detail, sev: sev || "medium" });
+    checks.push({ key, name, status, detail, sev: sev || "medium", pts: pts || 0 });
     score += pts;
   };
 
@@ -2789,6 +2789,69 @@ function Sparkline({ history, width = 80, height = 28 }) {
 }
 
 /* ─────────────────────────────────────────────
+   SCORE BREAKDOWN — "show your work": how the score moved from 100.
+   Answers the #1 question about any score ("why is it that number?").
+   Renders a waterfall: start at 100, each penalty/bonus, end at the
+   final score. Reads check.pts (now persisted by the engines).
+───────────────────────────────────────────── */
+function ScoreBreakdown({ checks, score, isMobile, simpleMode }) {
+  // Only checks that actually moved the score, worst first.
+  const movers = checks.filter(c => typeof c.pts === "number" && c.pts !== 0)
+    .sort((a, b) => a.pts - b.pts);
+  const penalties = movers.filter(c => c.pts < 0);
+  const bonuses = movers.filter(c => c.pts > 0);
+  const lost = penalties.reduce((a, c) => a + c.pts, 0);   // negative
+  const gained = bonuses.reduce((a, c) => a + c.pts, 0);   // positive
+  const raw = 100 + lost + gained;                         // pre-clamp arithmetic
+  const col = scoreColor(score);
+  const nameFor = (c) => { const s = SIMPLE.checks[c.key]; return simpleMode && s ? s.name : c.name; };
+
+  const Row = ({ label, value, color, faded }) => (
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: "7px 0", borderTop: `1px solid ${T.borderLo}` }}>
+      <span style={{ fontSize: 13, color: faded ? T.textDim : T.text, lineHeight: 1.4 }}>{label}</span>
+      <span style={{ fontFamily: T.mono, fontSize: 13, fontWeight: 700, color, flexShrink: 0 }}>{value}</span>
+    </div>
+  );
+
+  return (
+    <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 16, padding: isMobile ? 18 : 22, marginBottom: 12 }}>
+      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 12, flexWrap: "wrap", gap: 6 }}>
+        <div style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim, letterSpacing: 2 }}>HOW YOUR SCORE WAS CALCULATED</div>
+        <div style={{ fontFamily: T.mono, fontSize: 10, color: T.textDim }}>
+          every wallet starts at <span style={{ color: T.green }}>100</span>
+        </div>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: isMobile ? 4 : 24 }}>
+        {/* Penalties column */}
+        <div>
+          <div style={{ fontFamily: T.mono, fontSize: 9, color: T.red, letterSpacing: 1.5, marginBottom: 2 }}>POINTS LOST{penalties.length ? ` (${lost})` : ""}</div>
+          {penalties.length === 0
+            ? <div style={{ fontSize: 12, color: T.textMid, padding: "8px 0" }}>Nothing — clean across every penalised check. 🎉</div>
+            : penalties.map(c => <Row key={c.key} label={nameFor(c)} value={c.pts} color={T.red} />)}
+        </div>
+        {/* Bonuses column */}
+        <div>
+          <div style={{ fontFamily: T.mono, fontSize: 9, color: T.green, letterSpacing: 1.5, marginBottom: 2 }}>POINTS EARNED{bonuses.length ? ` (+${gained})` : ""}</div>
+          {bonuses.length === 0
+            ? <div style={{ fontSize: 12, color: T.textMid, padding: "8px 0" }}>No bonuses yet — CoinJoin usage earns points back.</div>
+            : bonuses.map(c => <Row key={c.key} label={nameFor(c)} value={`+${c.pts}`} color={T.green} />)}
+        </div>
+      </div>
+
+      {/* Total */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginTop: 14, paddingTop: 12, borderTop: `2px solid ${T.border}` }}>
+        <span style={{ fontFamily: T.serif, fontSize: 16, color: T.text }}>Your score</span>
+        <span style={{ fontFamily: T.serif, fontSize: 28, color: col, lineHeight: 1 }}>{score}<span style={{ fontFamily: T.mono, fontSize: 12, color: T.textDim }}>/100</span></span>
+      </div>
+      <div style={{ fontFamily: T.mono, fontSize: 10, color: T.textDim, marginTop: 8, lineHeight: 1.5 }}>
+        100 {lost ? <>− {Math.abs(lost)} lost </> : ""}{gained ? <>+ {gained} earned </> : ""}= {raw}{raw !== score ? ` → ${score} (${raw < 0 ? "floored at 0" : "capped at 100"})` : ""}. Each penalty is recoverable — see the Fix It tab.
+      </div>
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────────
    RADAR CHART — 10-axis privacy heuristic visualization
 ───────────────────────────────────────────── */
 function RadarChart({ checks, size = 220 }) {
@@ -3823,6 +3886,11 @@ function Dashboard({ address, addrInfo, utxos, txs, isMobile, onBack, onRescan, 
       `Scanned:    ${scanAt ? new Date(scanAt).toUTCString() : "—"}`,
       `UTXOs:      ${utxos.length}  |  Transactions: ${txCount}`,
       "",
+      "SCORE BREAKDOWN (every wallet starts at 100)",
+      "--------------------------------------------",
+      ...checks.filter(c => c.pts).sort((a, b) => a.pts - b.pts).map(c => `  ${c.pts > 0 ? "+" + c.pts : c.pts}\t${c.name}`),
+      `  = ${score}/100`,
+      "",
       "CHECKS",
       "------",
       ...checks.map(c => `[${c.status === "pass" ? "PASS" : c.status === "warn" ? "WARN" : "FAIL"}] ${c.name}: ${c.plain}`),
@@ -4067,6 +4135,8 @@ function Dashboard({ address, addrInfo, utxos, txs, isMobile, onBack, onRescan, 
 
         {/* ── OVERVIEW ── */}
         {tab === "Overview" && (
+          <>
+          <ScoreBreakdown checks={checks} score={score} isMobile={isMobile} simpleMode={simpleMode} />
           <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 12 }}>
             {/* Checks list */}
             <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 16, padding: 22 }}>
@@ -4084,7 +4154,14 @@ function Dashboard({ address, addrInfo, utxos, txs, isMobile, onBack, onRescan, 
                     <div style={{ fontSize: 13, fontWeight: 600, color: T.text }}>{displayName}</div>
                     <div style={{ fontSize: 12, color: T.textMid, marginTop: 3, lineHeight: 1.55 }}>{displayPlain}</div>
                   </div>
-                  <Tag label={c.status === "pass" ? "Pass" : c.status === "warn" ? "Warn" : "Fail"} color={c.status === "pass" ? T.green : c.status === "warn" ? T.btc : T.red} size={9} />
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4, flexShrink: 0 }}>
+                    <Tag label={c.status === "pass" ? "Pass" : c.status === "warn" ? "Warn" : "Fail"} color={c.status === "pass" ? T.green : c.status === "warn" ? T.btc : T.red} size={9} />
+                    {typeof c.pts === "number" && c.pts !== 0 && (
+                      <span title="Effect on your score" style={{ fontFamily: T.mono, fontSize: 10, fontWeight: 700, color: c.pts > 0 ? T.green : T.red }}>
+                        {c.pts > 0 ? `+${c.pts}` : c.pts}
+                      </span>
+                    )}
+                  </div>
                 </div>
                 );
               })}
@@ -4131,6 +4208,7 @@ function Dashboard({ address, addrInfo, utxos, txs, isMobile, onBack, onRescan, 
               {checks.length >= 3 && <RadarChart checks={checks} size={isMobile ? 200 : 220} />}
             </div>
           </div>
+          </>
         )}
 
         {/* ── UTXOs ── */}
