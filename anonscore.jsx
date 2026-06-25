@@ -117,11 +117,11 @@ const LANDING_FACTS = [
 ];
 
 /* ─────────────────────────────────────────────
-   FUNDING — how AnonScore is sustained.
-   Mission: free for everyone, never tracks users, never sells data.
-   This config is the *only* place to wire monetization in.
-   See /how-we-get-paid (FundingDisclosure component) for the public-facing
-   transparency page.
+   FUNDING — how AnonScore keeps the lights on, in the open.
+   The tool is free for everyone, never tracks users, never sells data.
+   Funding is voluntary tips + transparent affiliate links, and it's all
+   disclosed to users on the "How we're paid for" page (FundingDisclosure
+   component). This object is where those funding hooks are configured.
 ───────────────────────────────────────────── */
 
 // Lightning + Nostr tip jar. Set these to real values when ready.
@@ -141,11 +141,10 @@ const NEWSLETTER = {
   pitch: "Weekly deep-dives on notable wallets, privacy heuristics, and seizure stories.",
 };
 
-// Privacy Coach — Pillar 1 paid product (per strategy doc). The waitlist
-// landing page validates demand BEFORE we build the full Coach product.
-// Reachable at /?page=coach and linked from the AI assistant card.
-// Per strategy gate: ship the waitlist first; build the real Coach only
-// after we see >= 5% homepage→waitlist conversion.
+// Privacy Coach — an optional paid tier of the AI assistant (unlimited
+// messages + memory across scans). This is just the waitlist landing page
+// (reachable at /?page=coach, linked from the AI assistant card); the Coach
+// product itself isn't built yet — we're gauging interest first.
 const COACH = {
   price:        "$10",
   unit:         "/mo",
@@ -167,8 +166,8 @@ const COACH = {
    in English). Locale is chosen by, in order: ?lang= param → saved
    preference → browser language → "en". Adding a locale = add its key
    map below; adding a string = add an "en" entry and reference it via t().
-   Spanish first: largest non-English Bitcoin-adoption population
-   (Argentina, Venezuela, El Salvador) — the capital-controls persona.
+   Spanish first: large, active Spanish-speaking Bitcoin communities
+   (Argentina, Venezuela, El Salvador, Spain, and beyond).
 ───────────────────────────────────────────── */
 const STRINGS = {
   en: {
@@ -332,10 +331,10 @@ const toolIsAffiliate = (name) => !!TOOL_AFFILIATE_URL[name];
 
 /* ─────────────────────────────────────────────
    WALLET DIRECTORY — curated reviews of every tool the audit recommends.
-   Standalone SEO destination at /?page=wallets (Pillar 2 of the strategy
-   doc). Each entry: factual pitch + the privacy STRENGTHS the tool actually
-   delivers, plus honest WATCH-OUTS so visitors trust the list isn't
-   pay-to-play. Categories let the page double as comparison material.
+   Standalone page at /?page=wallets. Each entry: factual pitch + the
+   privacy STRENGTHS the tool actually delivers, plus honest WATCH-OUTS so
+   visitors trust the list isn't pay-to-play. Categories let the page
+   double as comparison material.
    When TOOL_AFFILIATE_URL adds an entry, that tool's "Visit" link
    auto-becomes affiliate + the page surfaces the disclosure.
 ───────────────────────────────────────────── */
@@ -3191,7 +3190,7 @@ function NewsletterSignup({ compact = false }) {
    WALLET DIRECTORY — standalone curated reviews at /?page=wallets.
    Reads WALLET_REVIEWS + WALLET_CATEGORIES (defined near top of file).
    Filterable by category, links out via toolLink() (so affiliate URLs
-   slot in automatically when configured). Pillar 2 of the strategy doc.
+   slot in automatically when configured).
 ───────────────────────────────────────────── */
 function WalletDirectory({ onBack, isMobile }) {
   useLang();
@@ -3355,11 +3354,10 @@ function WalletDirectory({ onBack, isMobile }) {
 }
 
 /* ─────────────────────────────────────────────
-   COACH WAITLIST — paid AI tier (Pillar 1, validation gate).
-   Reachable at /?page=coach. Linked from the AI assistant card.
-   No payment yet — just collects waitlist intent to validate demand
-   before we build the full Coach product. Strategy gate: ≥5%
-   homepage→waitlist conversion before committing to build.
+   COACH WAITLIST — landing page for the optional paid AI tier.
+   Reachable at /?page=coach, linked from the AI assistant card. Collects
+   no payment — just an email from folks who want it, so we know whether
+   it's worth building before we build it.
 ───────────────────────────────────────────── */
 function CoachWaitlist({ onBack, isMobile }) {
   const [email, setEmail] = useState("");

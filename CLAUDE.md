@@ -70,9 +70,17 @@ sync with `anonscore.jsx`. Run the full suite with `npm test` (build invariants
 - `?lang=es` — Spanish. i18n via the `STRINGS` map + `t()`; English is the
   default and the fallback, so partial locales degrade gracefully.
 
-## Note — this repo is public (MIT)
+## This repo is public — and that's the point
 
-Keep business/monetization strategy, revenue figures, growth tactics, persona
-targeting, and operator-private notes **out of version control here** — they
-belong in a private location the operator maintains. Engineering docs (this
-file, `README.md`) are fine to be public.
+AnonScore is open and meant to be fully trusted: open source, no tracking, and
+its funding model is disclosed to users right on the site ("How we're paid for").
+There are no secrets here.
+
+So this isn't about hiding anything — it's about keeping the repo *useful*. What
+belongs here: the code, and engineering docs that help someone run or contribute
+to it (this file, `README.md`). What doesn't: the operator's day-to-day planning
+scratch — rough roadmaps, revenue projections, growth to-dos. Not because it's
+secret, but because it goes stale fast, isn't useful to contributors, and reads
+like internal notes rather than a shipped product. The operator keeps that in
+their own working space; ask them for it if a task needs it. Write everything
+here plainly, the way you'd say it to a user's face.
