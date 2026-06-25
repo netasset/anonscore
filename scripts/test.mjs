@@ -112,7 +112,7 @@ page.on("request", (r) => requests.push({ url: r.url(), type: r.resourceType() }
 
 await page.goto(`http://127.0.0.1:${PORT}/`, { waitUntil: "load" });
 await page.waitForFunction(() => document.getElementById("root")?.childElementCount > 0, { timeout: 20000 });
-await page.waitForTimeout(1500); // let fonts/auto-demo settle
+await page.waitForTimeout(1500); // let fonts settle
 
 const root = await page.evaluate(() => document.getElementById("root")?.childElementCount || 0);
 if (root === 0) fail("React did not mount");
@@ -197,10 +197,8 @@ else pass(`Service worker registered, ${swInfo.entries} entries cached in ${swIn
 
 // Run a demo scan end-to-end
 console.log("[4/5] Demo scan flow");
-// Re-navigate to landing in case earlier blocks (SW wait, i18n switching, dir page)
-// let enough wall-clock pass for the auto-demo (2.5s) to fire and take us elsewhere.
-// Also set the visited flag pre-load so the banner doesn't pop up mid-test.
-await page.evaluate(() => localStorage.setItem("anonscore_visited", "1"));
+// Re-navigate to a clean landing (earlier blocks switched language / visited
+// the directory page), then trigger the demo from the sample chip.
 await page.goto(`http://127.0.0.1:${PORT}/`, { waitUntil: "load" });
 await page.waitForFunction(() => document.getElementById("root")?.childElementCount > 0, { timeout: 20000 });
 await page.waitForTimeout(800);
