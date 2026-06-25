@@ -97,16 +97,16 @@ const scoreGrade = s => s >= 90 ? "A" : s >= 75 ? "B" : s >= 60 ? "C" : s >= 45 
    HOISTED CONSTANTS
 ───────────────────────────────────────────── */
 const LANDING_CHECKS = [
-  { n:"01", icon:"↩", label:"Address Reuse",       desc:"Every time you reuse an address, you create a permanent public link between all your transactions." },
-  { n:"02", icon:"⚠", label:"Dust Attacks",        desc:"Tiny amounts sent to your wallet by trackers. Spending them reveals your wallet cluster to analysts." },
-  { n:"03", icon:"◯", label:"Round Amounts",        desc:"Withdrawing 0.1 BTC instead of 0.10743 BTC is a primary signal that funds came from a KYC exchange." },
-  { n:"04", icon:"⊕", label:"CoinJoin Usage",       desc:"Whether your transaction history includes any mixing events that break the chain of custody." },
-  { n:"05", icon:"⊞", label:"Unsafe Consolidation", desc:"Merging UTXOs from different sources permanently links those coin histories on-chain." },
-  { n:"06", icon:"≣", label:"UTXO Count",           desc:"Too many UTXOs tempt consolidation. Too few exposes your full balance in every transaction." },
-  { n:"07", icon:"₿", label:"Fee Fingerprinting",   desc:"Using the same sat/vbyte rate every time identifies your wallet software to blockchain analysts." },
-  { n:"08", icon:"↔", label:"Change Address Reuse", desc:"Sending change back to an input address reveals your full balance to the transaction recipient." },
-  { n:"09", icon:"◐", label:"Balance Concentration", desc:"Holding 90%+ in a single UTXO exposes nearly your full holdings in any transaction." },
-  { n:"10", icon:"T", label:"Script Type Mix",       desc:"Mixing legacy and SegWit addresses creates analyst-exploitable patterns across your UTXO set." },
+  { n:"01", k:"reuse",  icon:"↩", label:"Address Reuse",       desc:"Every time you reuse an address, you create a permanent public link between all your transactions." },
+  { n:"02", k:"dust",   icon:"⚠", label:"Dust Attacks",        desc:"Tiny amounts sent to your wallet by trackers. Spending them reveals your wallet cluster to analysts." },
+  { n:"03", k:"round",  icon:"◯", label:"Round Amounts",        desc:"Withdrawing 0.1 BTC instead of 0.10743 BTC is a primary signal that funds came from a KYC exchange." },
+  { n:"04", k:"coinjoin", icon:"⊕", label:"CoinJoin Usage",     desc:"Whether your transaction history includes any mixing events that break the chain of custody." },
+  { n:"05", k:"consolidation", icon:"⊞", label:"Unsafe Consolidation", desc:"Merging UTXOs from different sources permanently links those coin histories on-chain." },
+  { n:"06", k:"utxo",   icon:"≣", label:"UTXO Count",           desc:"Too many UTXOs tempt consolidation. Too few exposes your full balance in every transaction." },
+  { n:"07", k:"fee",    icon:"₿", label:"Fee Fingerprinting",   desc:"Using the same sat/vbyte rate every time identifies your wallet software to blockchain analysts." },
+  { n:"08", k:"change", icon:"↔", label:"Change Address Reuse", desc:"Sending change back to an input address reveals your full balance to the transaction recipient." },
+  { n:"09", k:"concentration", icon:"◐", label:"Balance Concentration", desc:"Holding 90%+ in a single UTXO exposes nearly your full holdings in any transaction." },
+  { n:"10", k:"script", icon:"T", label:"Script Type Mix",       desc:"Mixing legacy and SegWit addresses creates analyst-exploitable patterns across your UTXO set." },
 ];
 
 const LANDING_FACTS = [
@@ -659,15 +659,103 @@ const DEMO_EXAMPLES = [
 ];
 
 const LANDING_CHECKS_LN = [
-  { n:"01", label:"Public Node Announcement",    desc:"Whether your node is gossiped publicly. Public nodes expose IP or Tor address to every peer on the network." },
-  { n:"02", label:"KYC Exchange Peers",          desc:"Channels open to Bitfinex, Kraken, Binance or similar. These log routing metadata and can correlate payment flows." },
-  { n:"03", label:"Tor / Clearnet Exposure",     desc:"Clearnet-only nodes leak your physical location and ISP. Tor-only operation prevents this entirely." },
-  { n:"04", label:"Channel Diversity",           desc:"Fewer channels mean predictable routing paths and limited payment anonymity. More peers = harder to surveil." },
-  { n:"05", label:"Capacity Concentration",      desc:"If 80%+ of capacity sits in one channel, your routing patterns become trivially predictable to any observer." },
-  { n:"06", label:"Node Alias Privacy",          desc:"Your alias is broadcast to the entire gossip network. A real name or handle links your identity to every channel." },
-  { n:"07", label:"Node Age",                    desc:"New nodes have thin routing history, making their activity easier to attribute. Older nodes blend into the network." },
-  { n:"08", label:"On-Chain Channel Footprint",  desc:"Every channel open/close is an on-chain transaction. Funding from KYC UTXOs permanently links your two identities." },
+  { n:"01", k:"node",    label:"Public Node Announcement",    desc:"Whether your node is gossiped publicly. Public nodes expose IP or Tor address to every peer on the network." },
+  { n:"02", k:"kyc",     label:"KYC Exchange Peers",          desc:"Channels open to Bitfinex, Kraken, Binance or similar. These log routing metadata and can correlate payment flows." },
+  { n:"03", k:"tor",     label:"Tor / Clearnet Exposure",     desc:"Clearnet-only nodes leak your physical location and ISP. Tor-only operation prevents this entirely." },
+  { n:"04", k:"diversity", label:"Channel Diversity",         desc:"Fewer channels mean predictable routing paths and limited payment anonymity. More peers = harder to surveil." },
+  { n:"05", k:"capacity", label:"Capacity Concentration",     desc:"If 80%+ of capacity sits in one channel, your routing patterns become trivially predictable to any observer." },
+  { n:"06", k:"alias",   label:"Node Alias Privacy",          desc:"Your alias is broadcast to the entire gossip network. A real name or handle links your identity to every channel." },
+  { n:"07", k:"age",     label:"Node Age",                    desc:"New nodes have thin routing history, making their activity easier to attribute. Older nodes blend into the network." },
+  { n:"08", k:"footprint", label:"On-Chain Channel Footprint", desc:"Every channel open/close is an on-chain transaction. Funding from KYC UTXOs permanently links your two identities." },
 ];
+
+/* ─────────────────────────────────────────────
+   HEURISTIC ICONS — inline, themeable line icons (24×24, stroke-based)
+   for the privacy checks. Zero requests, crisp at any DPI, colourable
+   with the T tokens. Keyed to LANDING_CHECKS[].k / LANDING_CHECKS_LN[].k.
+───────────────────────────────────────────── */
+function HeuristicIcon({ k, size = 22, color = "currentColor" }) {
+  const shapes = {
+    // ── Bitcoin ──
+    reuse:        <><circle cx="8" cy="12" r="4" /><circle cx="16" cy="12" r="4" /></>,
+    dust:         <><circle cx="6" cy="7" r="1" /><circle cx="11" cy="5" r="1" /><circle cx="17" cy="8" r="1" /><circle cx="8" cy="13" r="1" /><circle cx="15" cy="15" r="1" /><circle cx="19" cy="13" r="1" /><circle cx="5" cy="18" r="1" /><circle cx="12" cy="19" r="1" /></>,
+    round:        <><circle cx="12" cy="12" r="8" /><path d="M9.5 12a2.5 3 0 1 0 5 0a2.5 3 0 1 0 -5 0" /></>,
+    coinjoin:     <><path d="M4 6 L12 12 L4 18" /><path d="M20 6 L12 12 L20 18" /><circle cx="12" cy="12" r="1.4" /></>,
+    consolidation:<><path d="M4 5 L13 12 M4 12 L13 12 M4 19 L13 12" /><path d="M13 12 L20 12" /><circle cx="20" cy="12" r="1.4" /></>,
+    utxo:         <><rect x="4" y="6" width="16" height="3" rx="1.5" /><rect x="4" y="11" width="11" height="3" rx="1.5" /><rect x="4" y="16" width="14" height="3" rx="1.5" /></>,
+    fee:          <><path d="M13 4 L20 11 a1.5 1.5 0 0 1 0 2 L13 20 a1.5 1.5 0 0 1 -2 0 L4 13 L4 6 a2 2 0 0 1 2 -2 Z" /><circle cx="8" cy="8" r="1.1" /></>,
+    change:       <><path d="M16 7 L8 7 a4 4 0 0 0 0 8 L17 15" /><path d="M14 12 L17 15 L14 18" /></>,
+    concentration:<><circle cx="10" cy="12" r="6" /><circle cx="19" cy="6" r="1.6" /><circle cx="19" cy="18" r="1.6" /></>,
+    script:       <><rect x="4" y="5" width="8" height="8" rx="1" /><circle cx="16" cy="15" r="4" /></>,
+    // ── Lightning ──
+    node:         <><circle cx="12" cy="12" r="2" /><path d="M6 12a6 6 0 0 1 12 0" opacity=".85" /><path d="M3.5 12a8.5 8.5 0 0 1 17 0" opacity=".5" /></>,
+    kyc:          <><path d="M4 9 L12 4 L20 9" /><path d="M5 9 L5 18 M19 9 L19 18 M9 9 L9 18 M15 9 L15 18" /><path d="M4 19 L20 19" /></>,
+    tor:          <><circle cx="12" cy="12" r="8" /><circle cx="12" cy="12" r="5" opacity=".7" /><circle cx="12" cy="12" r="2" opacity=".5" /></>,
+    diversity:    <><circle cx="12" cy="12" r="2" /><path d="M12 10 L12 4 M12 14 L12 20 M10 12 L4 12 M14 12 L20 12 M10.5 10.5 L6 6 M13.5 13.5 L18 18" /><circle cx="12" cy="4" r="1.3" /><circle cx="12" cy="20" r="1.3" /><circle cx="4" cy="12" r="1.3" /><circle cx="20" cy="12" r="1.3" /></>,
+    capacity:     <><rect x="4" y="5" width="16" height="5" rx="2" /><rect x="4" y="13" width="6" height="3" rx="1.5" opacity=".55" /><rect x="4" y="18" width="4" height="2.5" rx="1.2" opacity=".4" /></>,
+    alias:        <><path d="M4 7 a2 2 0 0 1 2 -2 L13 5 L20 12 L13 19 L6 19 a2 2 0 0 1 -2 -2 Z" /><circle cx="8.5" cy="9.5" r="1.3" /></>,
+    age:          <><circle cx="12" cy="12" r="8" /><path d="M12 7.5 L12 12 L15.5 14" /></>,
+    footprint:    <><ellipse cx="9" cy="12" rx="4" ry="3" transform="rotate(-30 9 12)" /><ellipse cx="15" cy="12" rx="4" ry="3" transform="rotate(-30 15 12)" /></>,
+  };
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
+      stroke={color} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      {shapes[k] || <circle cx="12" cy="12" r="7" />}
+    </svg>
+  );
+}
+
+/* ─────────────────────────────────────────────
+   CASE HERO — decorative "on-chain fingerprint" band shown atop each
+   case file. An abstract transaction-flow: inputs (left) funnel through
+   a central cluster to outputs (right), tinted to the case category.
+   Deterministic per case id, so each looks distinct. Breaks up the
+   long narrative with a thematically-apt visual ("what an analyst sees").
+───────────────────────────────────────────── */
+function CaseHero({ seed = "0", color = "#22D3EE", height = 120 }) {
+  const W = 800, H = height;
+  // Deterministic pseudo-random from the seed string.
+  let s = 0; for (let i = 0; i < seed.length; i++) s = (s * 31 + seed.charCodeAt(i)) >>> 0;
+  const rnd = () => { s = (s * 1103515245 + 12345) & 0x7fffffff; return s / 0x7fffffff; };
+  const inputs  = 4 + Math.floor(rnd() * 4);   // 4–7 inputs
+  const outputs = 3 + Math.floor(rnd() * 4);   // 3–6 outputs
+  const cx = W * 0.5, cy = H / 2;
+  const yIn  = n => (H * (n + 1)) / (inputs + 1);
+  const yOut = n => (H * (n + 1)) / (outputs + 1);
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} preserveAspectRatio="none" aria-hidden="true" style={{ display: "block" }}>
+      <defs>
+        <radialGradient id={`ch-glow-${s}`} cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stopColor={color} stopOpacity="0.35" />
+          <stop offset="100%" stopColor={color} stopOpacity="0" />
+        </radialGradient>
+      </defs>
+      <rect x={cx - 120} y={cy - 60} width="240" height="120" fill={`url(#ch-glow-${s})`} />
+      {/* input → cluster */}
+      {Array.from({ length: inputs }).map((_, i) => (
+        <path key={"i" + i} d={`M40 ${yIn(i).toFixed(1)} C ${W*0.3} ${yIn(i).toFixed(1)}, ${cx-60} ${cy}, ${cx} ${cy}`}
+          fill="none" stroke={color} strokeWidth="1" strokeOpacity="0.28" />
+      ))}
+      {/* cluster → outputs */}
+      {Array.from({ length: outputs }).map((_, i) => (
+        <path key={"o" + i} d={`M${cx} ${cy} C ${cx+60} ${cy}, ${W*0.7} ${yOut(i).toFixed(1)}, ${W-40} ${yOut(i).toFixed(1)}`}
+          fill="none" stroke={color} strokeWidth="1" strokeOpacity="0.28" />
+      ))}
+      {/* input nodes */}
+      {Array.from({ length: inputs }).map((_, i) => (
+        <circle key={"ni" + i} cx="40" cy={yIn(i).toFixed(1)} r="3" fill={color} fillOpacity="0.55" />
+      ))}
+      {/* output nodes */}
+      {Array.from({ length: outputs }).map((_, i) => (
+        <circle key={"no" + i} cx={W - 40} cy={yOut(i).toFixed(1)} r="3" fill={color} fillOpacity="0.55" />
+      ))}
+      {/* central cluster — the wallet */}
+      <circle cx={cx} cy={cy} r="11" fill="none" stroke={color} strokeWidth="1.5" strokeOpacity="0.5"
+        style={{ animation: "scanRing 2.4s ease-out infinite", transformOrigin: `${cx}px ${cy}px` }} />
+      <circle cx={cx} cy={cy} r="6" fill={color} fillOpacity="0.9" style={{ filter: `drop-shadow(0 0 6px ${color})` }} />
+    </svg>
+  );
+}
 
 function ChecksSection({ isMobile }) {
   const [mode, setMode] = useState("btc");
@@ -688,10 +776,17 @@ function ChecksSection({ isMobile }) {
       </div>
       <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(2, 1fr)", gap: 10 }}>
         {checks.map((c) => (
-          <div key={c.n} style={{ display: "flex", gap: 14, alignItems: "flex-start", background: T.card, border: `1px solid ${T.border}`, borderRadius: 12, padding: "16px 18px" }}>
-            <div style={{ fontFamily: T.mono, fontSize: 11, color: accent, minWidth: 24, paddingTop: 1 }}>{c.n}</div>
-            <div>
-              <div style={{ fontSize: 14, fontWeight: 600, color: T.text, marginBottom: 4 }}>{c.label}</div>
+          <div key={c.n} style={{ display: "flex", gap: 14, alignItems: "flex-start", background: T.card, border: `1px solid ${T.border}`, borderRadius: 12, padding: "16px 18px", transition: "border-color .15s" }}
+            onMouseOver={e => e.currentTarget.style.borderColor = accentMid}
+            onMouseOut={e => e.currentTarget.style.borderColor = T.border}>
+            <div style={{ flexShrink: 0, width: 42, height: 42, borderRadius: 11, background: accentLo, border: `1px solid ${accentMid}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <HeuristicIcon k={c.k} size={22} color={accent} />
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ display: "flex", alignItems: "baseline", gap: 7, marginBottom: 4 }}>
+                <span style={{ fontFamily: T.mono, fontSize: 10, color: accent }}>{c.n}</span>
+                <span style={{ fontSize: 14, fontWeight: 600, color: T.text }}>{c.label}</span>
+              </div>
               <div style={{ fontSize: 13, color: T.textMid, lineHeight: 1.6 }}>{c.desc}</div>
             </div>
           </div>
@@ -2045,6 +2140,17 @@ function CaseDetail({ caseFile, onBack, onAnalyze, isMobile }) {
           </div>
           <h1 style={{ fontFamily: T.serif, fontSize: isMobile ? 28 : 42, color: T.text, fontWeight: 400, marginBottom: 16, lineHeight: 1.2 }}>{caseFile.title}</h1>
           <p style={{ fontSize: 16, color: T.textMid, lineHeight: 1.7, fontWeight: 300 }}>{caseFile.hook}</p>
+        </div>
+
+        {/* On-chain fingerprint hero — breaks up the narrative, sets the tone */}
+        <div style={{ position: "relative", background: T.card, border: `1px solid ${T.border}`, borderRadius: 16, overflow: "hidden", marginBottom: 28, animation: "fadeUp .4s ease .06s both" }}>
+          <CaseHero seed={caseFile.id} color={cat.color} height={isMobile ? 96 : 132} />
+          <div style={{ position: "absolute", bottom: 10, left: 16, fontFamily: T.mono, fontSize: 8, color: T.textDim, letterSpacing: 1.5, pointerEvents: "none" }}>
+            ON-CHAIN FLOW · {caseFile.btc} BTC
+          </div>
+          <div style={{ position: "absolute", top: 10, right: 16, fontFamily: T.mono, fontSize: 8, color: cat.color, letterSpacing: 1.5, pointerEvents: "none" }}>
+            FINGERPRINT
+          </div>
         </div>
 
         {/* Scan CTA — prominent */}
