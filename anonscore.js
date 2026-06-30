@@ -5300,7 +5300,12 @@ function Landing({
       gap: 10,
       maxWidth: 480,
       margin: "0 auto",
-      animation: "fadeUp .5s ease .22s both"
+      animation: "fadeUp .5s ease .22s both",
+      background: T.card,
+      border: `1px solid ${T.cyan}33`,
+      borderRadius: 16,
+      padding: isMobile ? "16px" : "20px 22px",
+      boxShadow: `0 0 50px -14px ${T.cyan}40`
     }
   }, React.createElement("div", null, inputType && React.createElement("div", {
     style: {
@@ -5359,8 +5364,8 @@ function Landing({
     placeholder: isLn ? "03abc… (66-char node pubkey)" : "bc1q… or 1… or 3…  ·  or Lightning 03…",
     style: {
       flex: 1,
-      background: T.surface,
-      border: `1.5px solid ${error ? T.red : inputType ? isLn ? T.ln : T.btc : T.border}`,
+      background: T.bg,
+      border: `1.5px solid ${error ? T.red : inputType ? isLn ? T.ln : T.btc : T.cyan + "55"}`,
       borderRadius: 10,
       padding: "13px 16px",
       color: T.text,
@@ -5377,7 +5382,7 @@ function Landing({
       e.target.style.boxShadow = `0 0 0 4px ${c}22, 0 0 18px ${c}55`;
     },
     onBlur: e => {
-      e.target.style.borderColor = error ? T.red : inputType ? isLn ? T.ln : T.btc : T.border;
+      e.target.style.borderColor = error ? T.red : inputType ? isLn ? T.ln : T.btc : T.cyan + "55";
       e.target.style.boxShadow = "0 0 0 0 transparent";
     }
   }), React.createElement("button", {

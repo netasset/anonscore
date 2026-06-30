@@ -2555,8 +2555,8 @@ function Landing({ onAnalyze, isMobile, onCases }) {
             </div>
           )}
 
-          {/* CTAs */}
-          <div style={{ display: "flex", flexDirection: "column", gap: 10, maxWidth: 480, margin: "0 auto", animation: "fadeUp .5s ease .22s both" }}>
+          {/* CTAs — wrapped in a glowing "scan console" panel so the tool stands out from the dark page */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 10, maxWidth: 480, margin: "0 auto", animation: "fadeUp .5s ease .22s both", background: T.card, border: `1px solid ${T.cyan}33`, borderRadius: 16, padding: isMobile ? "16px" : "20px 22px", boxShadow: `0 0 50px -14px ${T.cyan}40` }}>
             <div>
               {/* Type detection pill — appears when input is recognised */}
               {inputType && (
@@ -2580,8 +2580,8 @@ function Landing({ onAnalyze, isMobile, onCases }) {
                 <input ref={inputRef} value={input} onChange={e => { setInput(e.target.value); setError(""); }}
                   onKeyDown={e => e.key === "Enter" && submit(null, true)}
                   placeholder={isLn ? "03abc… (66-char node pubkey)" : "bc1q… or 1… or 3…  ·  or Lightning 03…"}
-                  style={{ flex: 1, background: T.surface,
-                    border: `1.5px solid ${error ? T.red : inputType ? (isLn ? T.ln : T.btc) : T.border}`,
+                  style={{ flex: 1, background: T.bg,
+                    border: `1.5px solid ${error ? T.red : inputType ? (isLn ? T.ln : T.btc) : T.cyan + "55"}`,
                     borderRadius: 10, padding: "13px 16px", color: T.text, fontFamily: T.mono, fontSize: 13, outline: "none", transition: "border .18s, box-shadow .25s", boxShadow: "0 0 0 0 transparent", minWidth: 0 }}
                   onFocus={e => {
                     const c = isLn ? T.ln : T.cyan;
@@ -2589,7 +2589,7 @@ function Landing({ onAnalyze, isMobile, onCases }) {
                     e.target.style.boxShadow = `0 0 0 4px ${c}22, 0 0 18px ${c}55`;
                   }}
                   onBlur={e => {
-                    e.target.style.borderColor = error ? T.red : inputType ? (isLn ? T.ln : T.btc) : T.border;
+                    e.target.style.borderColor = error ? T.red : inputType ? (isLn ? T.ln : T.btc) : T.cyan + "55";
                     e.target.style.boxShadow = "0 0 0 0 transparent";
                   }} />
                 <button onClick={() => submit(null, !isLn)} className="sheen"
