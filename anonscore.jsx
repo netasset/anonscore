@@ -38,8 +38,30 @@ input,button,select,textarea{font-family:'Outfit',sans-serif;-webkit-tap-highlig
 .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 :focus-visible{outline:2px solid #22D3EE;outline-offset:2px;border-radius:4px}
 input:focus-visible,button:focus-visible{outline-offset:2px}
+/* ── Motion & interaction layer (cyberpunk depth) ── */
+@keyframes auroraDrift{0%{transform:translate3d(-3%,-2%,0) scale(1)}50%{transform:translate3d(4%,3%,0) scale(1.14)}100%{transform:translate3d(-3%,-2%,0) scale(1)}}
+@keyframes sheenSweep{0%{transform:translateX(-150%) skewX(-18deg)}55%,100%{transform:translateX(260%) skewX(-18deg)}}
+@keyframes scanSweep{0%{transform:translateY(-130%)}100%{transform:translateY(130%)}}
+@keyframes accentGlow{0%,100%{text-shadow:0 0 18px #22D3EE3a}50%{text-shadow:0 0 34px #22D3EE99}}
+.reveal{opacity:0;transform:translateY(26px);transition:opacity .7s cubic-bezier(.16,.84,.44,1),transform .7s cubic-bezier(.16,.84,.44,1);will-change:opacity,transform}
+.reveal.in{opacity:1;transform:none}
+.lift{transition:transform .28s cubic-bezier(.16,.84,.44,1),box-shadow .28s,border-color .28s}
+.lift:hover{transform:translateY(-4px)}
+.glow-c{transition:box-shadow .25s,border-color .25s,transform .25s}
+.glow-c:hover{box-shadow:0 0 26px -8px #22D3EE99;border-color:#22D3EE77}
+.glow-o{transition:box-shadow .25s,border-color .25s,transform .25s}
+.glow-o:hover{box-shadow:0 0 26px -8px #F7931A99;border-color:#F7931A77}
+.sheen{position:relative;overflow:hidden;isolation:isolate}
+.sheen::after{content:"";position:absolute;top:0;left:0;width:55%;height:100%;background:linear-gradient(100deg,transparent,#ffffff5a,transparent);transform:translateX(-150%) skewX(-18deg);pointer-events:none;z-index:1}
+.sheen:hover::after{animation:sheenSweep .85s cubic-bezier(.16,.84,.44,1)}
+.aurora{position:absolute;border-radius:50%;filter:blur(64px);pointer-events:none;will-change:transform;animation:auroraDrift 22s ease-in-out infinite}
+.accent-glow{animation:accentGlow 4.5s ease-in-out infinite}
+.scan-ov{position:absolute;inset:0;pointer-events:none;overflow:hidden;z-index:0}
+.scan-ov::before{content:"";position:absolute;left:0;right:0;height:38%;background:linear-gradient(180deg,transparent,#22D3EE10 55%,transparent);animation:scanSweep 8s linear infinite}
 @media (prefers-reduced-motion: reduce){
   *,*::before,*::after{animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important}
+  .reveal{opacity:1!important;transform:none!important}
+  .aurora,.accent-glow,.scan-ov::before{animation:none!important}
 }
 `;
 
@@ -790,9 +812,9 @@ function ChecksSection({ isMobile }) {
       </div>
       <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(2, 1fr)", gap: 10 }}>
         {checks.map((c) => (
-          <div key={c.n} style={{ display: "flex", gap: 14, alignItems: "flex-start", background: T.card, border: `1px solid ${T.border}`, borderRadius: 12, padding: "16px 18px", transition: "border-color .15s" }}
-            onMouseOver={e => e.currentTarget.style.borderColor = accentMid}
-            onMouseOut={e => e.currentTarget.style.borderColor = T.border}>
+          <div key={c.n} className="lift" style={{ display: "flex", gap: 14, alignItems: "flex-start", background: T.card, border: `1px solid ${T.border}`, borderRadius: 12, padding: "16px 18px", transition: "transform .28s cubic-bezier(.16,.84,.44,1), border-color .15s, box-shadow .28s" }}
+            onMouseOver={e => { e.currentTarget.style.borderColor = accentMid; e.currentTarget.style.boxShadow = `0 0 24px -10px ${accent}`; }}
+            onMouseOut={e => { e.currentTarget.style.borderColor = T.border; e.currentTarget.style.boxShadow = "none"; }}>
             <div style={{ flexShrink: 0, width: 42, height: 42, borderRadius: 11, background: accentLo, border: `1px solid ${accentMid}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
               <HeuristicIcon k={c.k} size={22} color={accent} />
             </div>
@@ -2332,6 +2354,21 @@ function Landing({ onAnalyze, isMobile, onCases }) {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
+  // Scroll-reveal: a single observer fades+lifts each `.reveal` section into view.
+  // Degrades safely — no IntersectionObserver (or reduced-motion via CSS) → shown immediately.
+  useEffect(() => {
+    const els = document.querySelectorAll(".reveal:not(.in)");
+    if (typeof IntersectionObserver === "undefined") {
+      els.forEach((el) => el.classList.add("in"));
+      return;
+    }
+    const io = new IntersectionObserver((entries) => {
+      entries.forEach((e) => { if (e.isIntersecting) { e.target.classList.add("in"); io.unobserve(e.target); } });
+    }, { threshold: 0.1, rootMargin: "0px 0px -7% 0px" });
+    els.forEach((el) => io.observe(el));
+    return () => io.disconnect();
+  }, []);
+
   const inputType = detectInputType(input);
   const isLn = inputType === "ln_pubkey" || inputType === "ln_address";
 
@@ -2444,6 +2481,9 @@ function Landing({ onAnalyze, isMobile, onCases }) {
       <div style={{ position: "relative", overflow: "hidden" }}>
         <ParticleCanvas color={T.cyan} />
         <div style={{ position: "absolute", top: "10%", left: "-10%", width: 520, height: 520, borderRadius: "50%", background: "radial-gradient(circle,#22D3EE18 0%,transparent 70%)", animation: "orb 8s ease-in-out infinite", pointerEvents: "none", filter: "blur(2px)" }} />
+        <div className="aurora" style={{ top: "-10%", right: "-12%", width: 460, height: 460, background: "radial-gradient(circle,#F7931A16 0%,transparent 70%)", animationDelay: "-8s" }} />
+        <div className="aurora" style={{ bottom: "-24%", left: "32%", width: 400, height: 400, background: "radial-gradient(circle,#22D3EE12 0%,transparent 70%)", animationDelay: "-15s" }} />
+        <div className="scan-ov" />
 
         <section style={{ position: "relative", padding: isMobile ? "56px 20px 48px" : "80px 48px 64px", maxWidth: 860, margin: "0 auto", width: "100%", textAlign: "center" }}>
           {/* Eyebrow */}
@@ -2454,7 +2494,7 @@ function Landing({ onAnalyze, isMobile, onCases }) {
 
           {/* Headline */}
           <h1 style={{ fontFamily: T.serif, fontSize: isMobile ? 38 : 56, lineHeight: 1.06, color: T.text, marginBottom: 20, animation: "fadeUp .5s ease .08s both", fontWeight: 400 }}>
-            {t("hero.h1.line1")}<br />{t("hero.h1.line2")}<br /><em style={{ color: T.cyan }}>{t("hero.h1.em")}</em>
+            {t("hero.h1.line1")}<br />{t("hero.h1.line2")}<br /><em className="accent-glow" style={{ color: T.cyan, fontStyle: "italic" }}>{t("hero.h1.em")}</em>
           </h1>
 
           <p style={{ fontSize: isMobile ? 15 : 18, color: T.textMid, lineHeight: 1.7, marginBottom: 32, fontWeight: 300, animation: "fadeUp .5s ease .14s both", maxWidth: 560, margin: "0 auto 32px" }}>
@@ -2552,7 +2592,7 @@ function Landing({ onAnalyze, isMobile, onCases }) {
                     e.target.style.borderColor = error ? T.red : inputType ? (isLn ? T.ln : T.btc) : T.border;
                     e.target.style.boxShadow = "0 0 0 0 transparent";
                   }} />
-                <button onClick={() => submit(null, !isLn)}
+                <button onClick={() => submit(null, !isLn)} className="sheen"
                   style={{ background: isLn ? T.ln : T.btc, border: "none", borderRadius: 10, padding: "13px 20px",
                     color: T.bg, fontFamily: T.sans, fontWeight: 700, fontSize: 14, cursor: "pointer", whiteSpace: "nowrap", transition: "all .15s" }}
                   onMouseOver={e => e.currentTarget.style.opacity = ".88"}
@@ -2595,7 +2635,7 @@ function Landing({ onAnalyze, isMobile, onCases }) {
       </div>{/* end hero wrapper */}
 
       {/* ── HOW IT WORKS — compact strip ── */}
-      <div style={{ borderTop: `1px solid ${T.border}`, borderBottom: `1px solid ${T.border}`, background: T.surface, padding: isMobile ? "28px 20px" : "32px 48px" }}>
+      <div className="reveal" style={{ borderTop: `1px solid ${T.border}`, borderBottom: `1px solid ${T.border}`, background: T.surface, padding: isMobile ? "28px 20px" : "32px 48px" }}>
         <div style={{ maxWidth: 860, margin: "0 auto" }}>
           <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(3, 1fr)", gap: isMobile ? 20 : 0 }}>
             {[
@@ -2646,7 +2686,7 @@ function Landing({ onAnalyze, isMobile, onCases }) {
       <Divider />
 
       {/* ── CITED STATS ── */}
-      <section style={{ background: T.surface, padding: isMobile ? "48px 20px" : "64px 48px", position: "relative", overflow: "hidden" }}>
+      <section className="reveal" style={{ background: T.surface, padding: isMobile ? "48px 20px" : "64px 48px", position: "relative", overflow: "hidden" }}>
         <div className="dot-grid" style={{ position: "absolute", inset: 0, opacity: .4, pointerEvents: "none" }} />
         <div style={{ maxWidth: 900, margin: "0 auto", position: "relative" }}>
           <div style={{ fontFamily: T.mono, fontSize: 10, color: T.textDim, letterSpacing: 2.5, textAlign: "center", marginBottom: 36 }}>BY THE NUMBERS</div>
@@ -2679,7 +2719,7 @@ function Landing({ onAnalyze, isMobile, onCases }) {
       <Divider />
 
       {/* ── CHECKS ── */}
-      <section style={{ background: T.surface, padding: isMobile ? "56px 20px" : "72px 48px" }}>
+      <section className="reveal" style={{ background: T.surface, padding: isMobile ? "56px 20px" : "72px 48px" }}>
         <div style={{ maxWidth: 1000, margin: "0 auto" }}>
           <ChecksSection isMobile={isMobile} />
         </div>
@@ -2688,7 +2728,7 @@ function Landing({ onAnalyze, isMobile, onCases }) {
       <Divider />
 
       {/* ── FINAL CTA ── */}
-      <section style={{ padding: isMobile ? "56px 20px" : "72px 48px", position: "relative", overflow: "hidden" }}>
+      <section className="reveal" style={{ padding: isMobile ? "56px 20px" : "72px 48px", position: "relative", overflow: "hidden" }}>
         <div className="dot-grid" style={{ position: "absolute", inset: 0, opacity: .3, pointerEvents: "none" }} />
         <div style={{ maxWidth: 700, margin: "0 auto", textAlign: "center", position: "relative", background: "rgba(19,21,31,0.55)", backdropFilter: "blur(14px)", WebkitBackdropFilter: "blur(14px)", border: `1px solid ${T.cyan}26`, borderRadius: 16, boxShadow: `0 0 40px ${T.cyan}14`, padding: isMobile ? "32px 22px" : "44px 40px" }}>
           <h2 style={{ fontFamily: T.serif, fontSize: isMobile ? 28 : 40, color: T.text, marginBottom: 14, fontWeight: 400 }}>
@@ -2698,7 +2738,7 @@ function Landing({ onAnalyze, isMobile, onCases }) {
             {t("finalcta.sub")}
           </p>
           <div style={{ display: "flex", flexDirection: isMobile ? "column" : "row", gap: 10, justifyContent: "center" }}>
-            <button onClick={() => { inputRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }); setTimeout(() => inputRef.current?.focus(), 300); }}
+            <button onClick={() => { inputRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }); setTimeout(() => inputRef.current?.focus(), 300); }} className="sheen"
               style={{ background: T.cyan, border: "none", borderRadius: 12, padding: "15px 28px", color: T.bg, fontFamily: T.sans, fontSize: 15, fontWeight: 700, cursor: "pointer", transition: "all .18s", boxShadow: `0 4px 24px ${T.cyanMid}` }}
               onMouseOver={e => e.currentTarget.style.opacity = ".88"}
               onMouseOut={e => e.currentTarget.style.opacity = "1"}>
@@ -2715,7 +2755,7 @@ function Landing({ onAnalyze, isMobile, onCases }) {
       </section>
 
       {/* Newsletter — captures audience for the case files / forensics content */}
-      <div style={{ borderTop: `1px solid ${T.border}`, background: T.surface, padding: isMobile ? "32px 20px" : "44px 48px" }}>
+      <div className="reveal" style={{ borderTop: `1px solid ${T.border}`, background: T.surface, padding: isMobile ? "32px 20px" : "44px 48px" }}>
         <div style={{ maxWidth: 520, margin: "0 auto" }}>
           <NewsletterSignup />
         </div>
