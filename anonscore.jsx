@@ -65,6 +65,9 @@ const T = {
   btc:      "#F7931A",
   btcLo:    "#F7931A18",
   btcMid:   "#F7931A40",
+  opn:      "#FF6600",  /* OPNorange family accent — cross-tool/umbrella elements only; ~6:1 on bg, clears WCAG AA */
+  opnLo:    "#FF660018",
+  opnMid:   "#FF660040",
   red:      "#f85149",
   redLo:    "#f8514914",
   green:    "#3fb950",
@@ -175,6 +178,11 @@ const STRINGS = {
     "nav.nocookies": "✓ No cookies",
     "nav.nothingstored": "✓ Nothing stored",
     "nav.tor": "✓ Tor compatible",
+    "nav.opensource": "✓ Open source",
+    "umbrella.label": "TOOLKIT",
+    "umbrella.privacy": "Privacy Audit",
+    "umbrella.dca": "DCA Butler",
+    "umbrella.hub": "Hub",
     "hero.eyebrow": "FREE BITCOIN & LIGHTNING PRIVACY AUDIT",
     "hero.h1.line1": "Is your Bitcoin",
     "hero.h1.line2": "stack leaking?",
@@ -194,6 +202,7 @@ const STRINGS = {
     "recent.title": "RECENT SCANS",
     "err.empty": "Please enter a Bitcoin address or Lightning node pubkey.",
     "err.invalid": "Paste a Bitcoin address (bc1…, 1…, 3…) or a Lightning node pubkey (66-char hex).",
+    "err.lnaddress": "Lightning addresses can't be audited yet — paste your node's 66-character pubkey instead.",
     "finalcta.h2.a": "Most wallets score 38/100.",
     "finalcta.h2.b": "Where does yours land?",
     "finalcta.sub": "Free, open source, nothing stored. Takes 60 seconds.",
@@ -210,6 +219,11 @@ const STRINGS = {
     "nav.nocookies": "✓ Sin cookies",
     "nav.nothingstored": "✓ Nada se guarda",
     "nav.tor": "✓ Compatible con Tor",
+    "nav.opensource": "✓ Código abierto",
+    "umbrella.label": "KIT",
+    "umbrella.privacy": "Auditoría de privacidad",
+    "umbrella.dca": "DCA Butler",
+    "umbrella.hub": "Hub",
     "hero.eyebrow": "AUDITORÍA GRATUITA DE PRIVACIDAD BITCOIN Y LIGHTNING",
     "hero.h1.line1": "¿Tu stack de Bitcoin",
     "hero.h1.line2": "está filtrando datos?",
@@ -229,6 +243,7 @@ const STRINGS = {
     "recent.title": "ESCANEOS RECIENTES",
     "err.empty": "Ingresa una dirección de Bitcoin o la clave pública de un nodo Lightning.",
     "err.invalid": "Pega una dirección de Bitcoin (bc1…, 1…, 3…) o una clave pública de nodo Lightning (66 caracteres hex).",
+    "err.lnaddress": "Las direcciones Lightning aún no se pueden auditar — pega la clave pública (66 caracteres hex) de tu nodo.",
     "finalcta.h2.a": "La mayoría de billeteras puntúa 38/100.",
     "finalcta.h2.b": "¿Dónde queda la tuya?",
     "finalcta.sub": "Gratis, código abierto, nada se guarda. Toma 60 segundos.",
@@ -2328,19 +2343,51 @@ function Landing({ onAnalyze, isMobile, onCases }) {
       setError(t("err.invalid"));
       return;
     }
+    if (detected === "ln_address") {
+      // Lightning addresses (user@domain) can't be resolved to a node — don't pretend to scan one.
+      setError(t("err.lnaddress"));
+      return;
+    }
     setError("");
     onAnalyze(v, plain, detected);
   };
 
   return (
-    <div role="main" aria-label="AnonScore — Bitcoin & Lightning privacy audit" style={{ minHeight: "100vh", display: "flex", flexDirection: "column", background: T.bg }}>
+    <>
+      {/* ── OPNORANGE TOOLKIT STRIP (umbrella cross-links — its own nav landmark, rendered before <main> so cross-site nav isn't nested in main content) ── */}
+      <nav aria-label="OPNorange toolkit" style={{ background: T.bg, borderBottom: `1px solid ${T.borderLo}`, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: isMobile ? "7px 20px" : "7px 48px" }}>
+        <a href="https://opnorange.com" target="_blank" rel="noopener noreferrer" aria-label="OPNorange — the toolkit hub"
+          style={{ display: "flex", alignItems: "center", gap: 7, textDecoration: "none", flexShrink: 0 }}>
+          <span style={{ width: 7, height: 7, borderRadius: "50%", background: T.opn, boxShadow: `0 0 7px ${T.opn}`, flexShrink: 0 }} />
+          <span style={{ fontFamily: T.mono, fontSize: 10, color: T.textMid, letterSpacing: 1.5, fontWeight: 700 }}>OPN<span style={{ color: T.opn }}>ORANGE</span></span>
+          {!isMobile && <span style={{ fontFamily: T.mono, fontSize: 10, color: T.textDim, letterSpacing: 1.5 }}>· {t("umbrella.label")}</span>}
+        </a>
+        <div style={{ display: "flex", alignItems: "center", gap: 9, flexShrink: 0 }}>
+          {!isMobile && <span style={{ fontFamily: T.mono, fontSize: 10, color: T.opn, fontWeight: 700, letterSpacing: 0.5 }}>{t("umbrella.privacy")}</span>}
+          {!isMobile && <span style={{ color: T.borderLo }}>·</span>}
+          <a href="https://dcabutler.com" target="_blank" rel="noopener noreferrer"
+            style={{ fontFamily: T.mono, fontSize: 10, color: T.textMid, textDecoration: "none", letterSpacing: 0.5, transition: "color .15s" }}
+            onMouseOver={e => e.currentTarget.style.color = T.opn}
+            onMouseOut={e => e.currentTarget.style.color = T.textMid}>
+            {t("umbrella.dca")} ↗
+          </a>
+          <span style={{ color: T.borderLo }}>·</span>
+          <a href="https://opnorange.com" target="_blank" rel="noopener noreferrer"
+            style={{ fontFamily: T.mono, fontSize: 10, color: T.textMid, textDecoration: "none", letterSpacing: 0.5, transition: "color .15s" }}
+            onMouseOver={e => e.currentTarget.style.color = T.opn}
+            onMouseOut={e => e.currentTarget.style.color = T.textMid}>
+            {t("umbrella.hub")} ↗
+          </a>
+        </div>
+      </nav>
+      <div role="main" aria-label="AnonScore — Bitcoin & Lightning privacy audit" style={{ minHeight: "100vh", display: "flex", flexDirection: "column", background: T.bg }}>
       {/* Nav */}
       <nav style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: isMobile ? "14px 20px" : "14px 48px", borderBottom: `1px solid ${T.border}`, background: T.bg, position: "sticky", top: 0, zIndex: 100 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <span style={{ color: T.btc, fontFamily: T.mono, fontSize: 14, lineHeight: 1 }}>₿</span>
           <span style={{ fontFamily: T.display, fontWeight: 700, fontSize: 15, letterSpacing: 4, color: T.text, textTransform: "uppercase" }}>ANON<span style={{ color: T.cyan }}>SCORE</span></span>
         </div>
-        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
           {/* Trust signals in nav — seen by everyone, no scroll required */}
           {!isMobile && <>
             <span style={{ fontFamily: T.mono, fontSize: 10, color: T.textDim }}>{t("nav.nocookies")}</span>
@@ -2348,6 +2395,8 @@ function Landing({ onAnalyze, isMobile, onCases }) {
             <span style={{ fontFamily: T.mono, fontSize: 10, color: T.textDim }}>{t("nav.nothingstored")}</span>
             <span style={{ color: T.borderLo }}>·</span>
             <span style={{ fontFamily: T.mono, fontSize: 10, color: T.textDim }}>{t("nav.tor")}</span>
+            <span style={{ color: T.borderLo }}>·</span>
+            <span style={{ fontFamily: T.mono, fontSize: 10, color: T.textDim }}>{t("nav.opensource")}</span>
             <span style={{ color: T.borderLo, margin: "0 4px" }}>|</span>
           </>}
           <a href="https://github.com/netasset/anonscore" target="_blank" rel="noopener noreferrer"
@@ -2475,7 +2524,7 @@ function Landing({ onAnalyze, isMobile, onCases }) {
                   <div style={{ width: 6, height: 6, borderRadius: "50%", background: isLn ? T.ln : T.btc, boxShadow: `0 0 6px ${isLn ? T.ln : T.btc}` }} />
                   <span style={{ fontFamily: T.mono, fontSize: 10, color: isLn ? T.ln : T.btc }}>
                     {inputType === "ln_pubkey" ? "⚡ Lightning node pubkey detected" :
-                     inputType === "ln_address" ? "⚡ Lightning address detected" :
+                     inputType === "ln_address" ? "⚡ Lightning address — paste your node's pubkey instead" :
                      "₿ Bitcoin address detected"}
                   </span>
                 </div>
@@ -2641,7 +2690,7 @@ function Landing({ onAnalyze, isMobile, onCases }) {
       {/* ── FINAL CTA ── */}
       <section style={{ padding: isMobile ? "56px 20px" : "72px 48px", position: "relative", overflow: "hidden" }}>
         <div className="dot-grid" style={{ position: "absolute", inset: 0, opacity: .3, pointerEvents: "none" }} />
-        <div style={{ maxWidth: 700, margin: "0 auto", textAlign: "center", position: "relative" }}>
+        <div style={{ maxWidth: 700, margin: "0 auto", textAlign: "center", position: "relative", background: "rgba(19,21,31,0.55)", backdropFilter: "blur(14px)", WebkitBackdropFilter: "blur(14px)", border: `1px solid ${T.cyan}26`, borderRadius: 16, boxShadow: `0 0 40px ${T.cyan}14`, padding: isMobile ? "32px 22px" : "44px 40px" }}>
           <h2 style={{ fontFamily: T.serif, fontSize: isMobile ? 28 : 40, color: T.text, marginBottom: 14, fontWeight: 400 }}>
             {t("finalcta.h2.a")}<br /><em style={{ color: T.cyan }}>{t("finalcta.h2.b")}</em>
           </h2>
@@ -2710,16 +2759,26 @@ function Landing({ onAnalyze, isMobile, onCases }) {
               )}
             </span>
           )}
-          <a href="https://opnorange.com" target="_blank" rel="noopener noreferrer"
-            style={{ fontFamily: T.mono, fontSize: 10, color: T.textDim, textDecoration: "none", transition: "color .15s" }}
-            onMouseOver={e => e.currentTarget.style.color = T.btc}
-            onMouseOut={e => e.currentTarget.style.color = T.textDim}>
-            by OPNorange ↗
-          </a>
+          {/* OPNorange toolkit row — cross-tool nav */}
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+            <span style={{ width: 6, height: 6, borderRadius: "50%", background: T.opn, boxShadow: `0 0 6px ${T.opn}`, flexShrink: 0 }} />
+            <span style={{ fontFamily: T.mono, fontSize: 10, color: T.opn, letterSpacing: 0.5, fontWeight: 700 }}>{t("umbrella.privacy")}</span>
+            <span style={{ color: T.borderLo }}>·</span>
+            <a href="https://dcabutler.com" target="_blank" rel="noopener noreferrer"
+              style={{ fontFamily: T.mono, fontSize: 10, color: T.textDim, textDecoration: "none", transition: "color .15s" }}
+              onMouseOver={e => e.currentTarget.style.color = T.opn}
+              onMouseOut={e => e.currentTarget.style.color = T.textDim}>{t("umbrella.dca")} ↗</a>
+            <span style={{ color: T.borderLo }}>·</span>
+            <a href="https://opnorange.com" target="_blank" rel="noopener noreferrer"
+              style={{ fontFamily: T.mono, fontSize: 10, color: T.textDim, textDecoration: "none", transition: "color .15s" }}
+              onMouseOver={e => e.currentTarget.style.color = T.opn}
+              onMouseOut={e => e.currentTarget.style.color = T.textDim}>{t("umbrella.hub")} ↗</a>
+          </span>
         </div>
       </div>
       {showFunding && <FundingDisclosure onClose={() => setShowFunding(false)} />}
-    </div>
+      </div>
+    </>
   );
 }
 
@@ -5028,7 +5087,13 @@ function App() {
   }, []);
 
   const analyze = useCallback(async (addr, plain = false, inputType = "btc") => {
-    const isLn = inputType === "ln_pubkey" || inputType === "ln_address";
+    // Guard: a Lightning address (user@domain) has no node-lookup path, so a "scan" would
+    // 404 and silently fall back to DEMO data shown as a real result. Refuse it honestly.
+    if (inputType === "ln_address") {
+      toast.show("Can't audit a Lightning address", { icon: "⚡", color: T.amber, msg: "Enter your node's 66-character pubkey instead" });
+      return;
+    }
+    const isLn = inputType === "ln_pubkey";
     setScanDataReady(false);
 
     if (isLn) {
@@ -5125,10 +5190,10 @@ function App() {
           <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 18, padding: 28, width: "min(400px,94vw)", animation: "fadeUp .25s ease" }}>
             <div style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim, letterSpacing: 2, marginBottom: 14 }}>SHARED SCAN LINK</div>
             <div style={{ fontFamily: T.serif, fontSize: 20, color: T.text, marginBottom: 10, fontWeight: 400 }}>
-              You were linked to scan this {pendingScan.inputType === "btc" ? "Bitcoin address" : "Lightning node"}
+              You were linked to scan this {pendingScan.inputType === "btc" ? "Bitcoin address" : pendingScan.inputType === "ln_address" ? "Lightning address" : "Lightning node"}
             </div>
             <div style={{ fontFamily: T.mono, fontSize: 11, color: T.textDim, background: T.surface, border: `1px solid ${T.border}`, borderRadius: 8, padding: "10px 14px", marginBottom: 16, wordBreak: "break-all" }}>
-              {pendingScan.addr.slice(0, 20)}…{pendingScan.addr.slice(-8)}
+              {pendingScan.addr.length > 30 ? `${pendingScan.addr.slice(0, 20)}…${pendingScan.addr.slice(-8)}` : pendingScan.addr}
             </div>
             <div style={{ fontSize: 13, color: T.textMid, lineHeight: 1.65, marginBottom: 20 }}>
               This will query the public blockchain API for this address. The address itself is public data — nothing private leaves your browser.
