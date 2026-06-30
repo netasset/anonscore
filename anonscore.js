@@ -257,6 +257,7 @@ const STRINGS = {
     "recent.title": "RECENT SCANS",
     "err.empty": "Please enter a Bitcoin address or Lightning node pubkey.",
     "err.invalid": "Paste a Bitcoin address (bc1…, 1…, 3…) or a Lightning node pubkey (66-char hex).",
+    "err.lnaddress": "Lightning addresses can't be audited yet — paste your node's 66-character pubkey instead.",
     "finalcta.h2.a": "Most wallets score 38/100.",
     "finalcta.h2.b": "Where does yours land?",
     "finalcta.sub": "Free, open source, nothing stored. Takes 60 seconds.",
@@ -297,6 +298,7 @@ const STRINGS = {
     "recent.title": "ESCANEOS RECIENTES",
     "err.empty": "Ingresa una dirección de Bitcoin o la clave pública de un nodo Lightning.",
     "err.invalid": "Pega una dirección de Bitcoin (bc1…, 1…, 3…) o una clave pública de nodo Lightning (66 caracteres hex).",
+    "err.lnaddress": "Las direcciones Lightning aún no se pueden auditar — pega la clave pública (66 caracteres hex) de tu nodo.",
     "finalcta.h2.a": "La mayoría de billeteras puntúa 38/100.",
     "finalcta.h2.b": "¿Dónde queda la tuya?",
     "finalcta.sub": "Gratis, código abierto, nada se guarda. Toma 60 segundos.",
@@ -4643,19 +4645,15 @@ function Landing({
       setError(t("err.invalid"));
       return;
     }
+    if (detected === "ln_address") {
+      setError(t("err.lnaddress"));
+      return;
+    }
     setError("");
     onAnalyze(v, plain, detected);
   };
-  return React.createElement("div", {
-    role: "main",
-    "aria-label": "AnonScore \u2014 Bitcoin & Lightning privacy audit",
-    style: {
-      minHeight: "100vh",
-      display: "flex",
-      flexDirection: "column",
-      background: T.bg
-    }
-  }, React.createElement("div", {
+  return React.createElement(React.Fragment, null, React.createElement("nav", {
+    "aria-label": "OPNorange toolkit",
     style: {
       background: T.bg,
       borderBottom: `1px solid ${T.borderLo}`,
@@ -4756,7 +4754,16 @@ function Landing({
     },
     onMouseOver: e => e.currentTarget.style.color = T.opn,
     onMouseOut: e => e.currentTarget.style.color = T.textMid
-  }, t("umbrella.hub"), " \u2197"))), React.createElement("nav", {
+  }, t("umbrella.hub"), " \u2197"))), React.createElement("div", {
+    role: "main",
+    "aria-label": "AnonScore \u2014 Bitcoin & Lightning privacy audit",
+    style: {
+      minHeight: "100vh",
+      display: "flex",
+      flexDirection: "column",
+      background: T.bg
+    }
+  }, React.createElement("nav", {
     style: {
       display: "flex",
       alignItems: "center",
@@ -4798,7 +4805,9 @@ function Landing({
     style: {
       display: "flex",
       gap: 8,
-      alignItems: "center"
+      alignItems: "center",
+      flexWrap: "wrap",
+      justifyContent: "flex-end"
     }
   }, !isMobile && React.createElement(React.Fragment, null, React.createElement("span", {
     style: {
@@ -5242,7 +5251,7 @@ function Landing({
       fontSize: 10,
       color: isLn ? T.ln : T.btc
     }
-  }, inputType === "ln_pubkey" ? "⚡ Lightning node pubkey detected" : inputType === "ln_address" ? "⚡ Lightning address detected" : "₿ Bitcoin address detected")), React.createElement("div", {
+  }, inputType === "ln_pubkey" ? "⚡ Lightning node pubkey detected" : inputType === "ln_address" ? "⚡ Lightning address — paste your node's pubkey instead" : "₿ Bitcoin address detected")), React.createElement("div", {
     style: {
       display: "flex",
       gap: 8
@@ -5988,7 +5997,7 @@ function Landing({
     onMouseOut: e => e.currentTarget.style.color = T.textDim
   }, t("umbrella.hub"), " \u2197")))), showFunding && React.createElement(FundingDisclosure, {
     onClose: () => setShowFunding(false)
-  }));
+  })));
 }
 function Scanning({
   address,
@@ -11828,7 +11837,15 @@ function App() {
     return () => window.removeEventListener("resize", h);
   }, []);
   const analyze = useCallback(async (addr, plain = false, inputType = "btc") => {
-    const isLn = inputType === "ln_pubkey" || inputType === "ln_address";
+    if (inputType === "ln_address") {
+      toast.show("Can't audit a Lightning address", {
+        icon: "⚡",
+        color: T.amber,
+        msg: "Enter your node's 66-character pubkey instead"
+      });
+      return;
+    }
+    const isLn = inputType === "ln_pubkey";
     setScanDataReady(false);
     if (isLn) {
       setLnNodeId(addr);
@@ -11986,7 +12003,7 @@ function App() {
       marginBottom: 10,
       fontWeight: 400
     }
-  }, "You were linked to scan this ", pendingScan.inputType === "btc" ? "Bitcoin address" : "Lightning node"), React.createElement("div", {
+  }, "You were linked to scan this ", pendingScan.inputType === "btc" ? "Bitcoin address" : pendingScan.inputType === "ln_address" ? "Lightning address" : "Lightning node"), React.createElement("div", {
     style: {
       fontFamily: T.mono,
       fontSize: 11,
@@ -11998,7 +12015,7 @@ function App() {
       marginBottom: 16,
       wordBreak: "break-all"
     }
-  }, pendingScan.addr.slice(0, 20), "\u2026", pendingScan.addr.slice(-8)), React.createElement("div", {
+  }, pendingScan.addr.length > 30 ? `${pendingScan.addr.slice(0, 20)}…${pendingScan.addr.slice(-8)}` : pendingScan.addr), React.createElement("div", {
     style: {
       fontSize: 13,
       color: T.textMid,
