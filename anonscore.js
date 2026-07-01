@@ -46,6 +46,8 @@ input:focus-visible,button:focus-visible{outline-offset:2px}
 @keyframes sheenSweep{0%{transform:translateX(-150%) skewX(-18deg)}55%,100%{transform:translateX(260%) skewX(-18deg)}}
 @keyframes scanSweep{0%{transform:translateY(-130%)}100%{transform:translateY(130%)}}
 @keyframes accentGlow{0%,100%{text-shadow:0 0 18px #22D3EE3a}50%{text-shadow:0 0 34px #22D3EE99}}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
+.blink{animation:blink 1s step-end infinite}
 .reveal{opacity:0;transform:translateY(26px);transition:opacity .7s cubic-bezier(.16,.84,.44,1),transform .7s cubic-bezier(.16,.84,.44,1);will-change:opacity,transform}
 .reveal.in{opacity:1;transform:none}
 .lift{transition:transform .28s cubic-bezier(.16,.84,.44,1),box-shadow .28s,border-color .28s}
@@ -6252,9 +6254,14 @@ function Scanning({
       alignItems: "center",
       justifyContent: "center",
       padding: 32,
-      gap: 24
+      gap: 24,
+      position: "relative",
+      overflow: "hidden"
     }
-  }, React.createElement("h1", {
+  }, React.createElement("div", {
+    className: "scan-ov",
+    "aria-hidden": "true"
+  }), React.createElement("h1", {
     className: "sr-only"
   }, isLightning ? "Auditing Lightning node" : "Analyzing Bitcoin wallet"), React.createElement("div", {
     style: {
@@ -6306,7 +6313,37 @@ function Scanning({
     style: {
       overflow: "visible"
     }
-  }, meshNodes.pts.map((p, i) => React.createElement("line", {
+  }, React.createElement("defs", null, React.createElement("linearGradient", {
+    id: "radarSweep",
+    x1: "0",
+    y1: "0",
+    x2: "1",
+    y2: "0"
+  }, React.createElement("stop", {
+    offset: "0",
+    stopColor: accentColor,
+    stopOpacity: "0.32"
+  }), React.createElement("stop", {
+    offset: "1",
+    stopColor: accentColor,
+    stopOpacity: "0"
+  }))), React.createElement("g", {
+    style: {
+      animation: "spin 2.6s linear infinite",
+      transformOrigin: "90px 60px"
+    }
+  }, React.createElement("polygon", {
+    points: "90,60 134,60 126,34",
+    fill: "url(#radarSweep)"
+  }), React.createElement("line", {
+    x1: "90",
+    y1: "60",
+    x2: "134",
+    y2: "60",
+    stroke: accentColor,
+    strokeWidth: "1.5",
+    strokeOpacity: "0.75"
+  })), meshNodes.pts.map((p, i) => React.createElement("line", {
     key: `l${i}`,
     x1: meshNodes.cx,
     y1: meshNodes.cy,
@@ -6440,7 +6477,15 @@ function Scanning({
       fontSize: 13,
       color: i < step ? T.textDim : T.text
     }
-  }, s.label)))), React.createElement("div", {
+  }, s.label, i === step && React.createElement("span", {
+    className: "blink",
+    "aria-hidden": "true",
+    style: {
+      color: accentColor,
+      marginLeft: 3,
+      fontFamily: T.mono
+    }
+  }, "\u258D"))))), React.createElement("div", {
     key: step,
     style: {
       width: "min(480px,90vw)",

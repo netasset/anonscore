@@ -43,6 +43,8 @@ input:focus-visible,button:focus-visible{outline-offset:2px}
 @keyframes sheenSweep{0%{transform:translateX(-150%) skewX(-18deg)}55%,100%{transform:translateX(260%) skewX(-18deg)}}
 @keyframes scanSweep{0%{transform:translateY(-130%)}100%{transform:translateY(130%)}}
 @keyframes accentGlow{0%,100%{text-shadow:0 0 18px #22D3EE3a}50%{text-shadow:0 0 34px #22D3EE99}}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
+.blink{animation:blink 1s step-end infinite}
 .reveal{opacity:0;transform:translateY(26px);transition:opacity .7s cubic-bezier(.16,.84,.44,1),transform .7s cubic-bezier(.16,.84,.44,1);will-change:opacity,transform}
 .reveal.in{opacity:1;transform:none}
 .lift{transition:transform .28s cubic-bezier(.16,.84,.44,1),box-shadow .28s,border-color .28s}
@@ -2931,7 +2933,8 @@ function Scanning({ address, isLightning, dataReady }) {
   }, []);
 
   return (
-    <div role="main" aria-live="polite" aria-label={isLightning ? "Auditing Lightning node" : "Analyzing wallet"} style={{ minHeight: "100vh", background: T.bg, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 32, gap: 24 }}>
+    <div role="main" aria-live="polite" aria-label={isLightning ? "Auditing Lightning node" : "Analyzing wallet"} style={{ minHeight: "100vh", background: T.bg, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 32, gap: 24, position: "relative", overflow: "hidden" }}>
+      <div className="scan-ov" aria-hidden="true" />
       <h1 className="sr-only">{isLightning ? "Auditing Lightning node" : "Analyzing Bitcoin wallet"}</h1>
       {/* Decorative animated visual — bolt for Lightning, mesh for Bitcoin */}
       <div style={{ width: 180, height: 120, position: "relative" }} aria-hidden="true">
@@ -2949,6 +2952,17 @@ function Scanning({ address, isLightning, dataReady }) {
           </svg>
         ) : (
           <svg width="180" height="120" viewBox="0 0 180 120" style={{ overflow: "visible" }}>
+            {/* rotating radar sweep */}
+            <defs>
+              <linearGradient id="radarSweep" x1="0" y1="0" x2="1" y2="0">
+                <stop offset="0" stopColor={accentColor} stopOpacity="0.32" />
+                <stop offset="1" stopColor={accentColor} stopOpacity="0" />
+              </linearGradient>
+            </defs>
+            <g style={{ animation: "spin 2.6s linear infinite", transformOrigin: "90px 60px" }}>
+              <polygon points="90,60 134,60 126,34" fill="url(#radarSweep)" />
+              <line x1="90" y1="60" x2="134" y2="60" stroke={accentColor} strokeWidth="1.5" strokeOpacity="0.75" />
+            </g>
             {meshNodes.pts.map((p, i) => (
               <line key={`l${i}`} x1={meshNodes.cx} y1={meshNodes.cy} x2={p.x} y2={p.y}
                 stroke={accentColor} strokeWidth="1"
@@ -2998,7 +3012,7 @@ function Scanning({ address, isLightning, dataReady }) {
         {steps.slice(0, step + 1).map((s, i) => (
           <div key={i} style={{ display: "flex", gap: 10, alignItems: "center", animation: "fadeIn .25s ease" }}>
             <span style={{ color: i < step ? T.green : accentColor, fontFamily: T.mono, fontSize: 11 }}>{i < step ? "✓" : "›"}</span>
-            <span style={{ fontSize: 13, color: i < step ? T.textDim : T.text }}>{s.label}</span>
+            <span style={{ fontSize: 13, color: i < step ? T.textDim : T.text }}>{s.label}{i === step && <span className="blink" aria-hidden="true" style={{ color: accentColor, marginLeft: 3, fontFamily: T.mono }}>▍</span>}</span>
           </div>
         ))}
       </div>
