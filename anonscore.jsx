@@ -46,6 +46,7 @@ input:focus-visible,button:focus-visible{outline-offset:2px}
 @keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
 .blink{animation:blink 1s step-end infinite}
 @keyframes breathe{0%,100%{box-shadow:0 0 50px -14px #22D3EE40}50%{box-shadow:0 0 66px -8px #22D3EE73}}
+@keyframes dotPulse{0%,100%{box-shadow:0 0 8px #F7931A,0 0 0 0 #F7931A66}70%{box-shadow:0 0 8px #F7931A,0 0 0 9px #F7931A00}}
 .reveal{opacity:0;transform:translateY(26px);transition:opacity .7s cubic-bezier(.16,.84,.44,1),transform .7s cubic-bezier(.16,.84,.44,1);will-change:opacity,transform}
 .reveal.in{opacity:1;transform:none}
 .lift{transition:transform .28s cubic-bezier(.16,.84,.44,1),box-shadow .28s,border-color .28s}
@@ -2580,7 +2581,7 @@ function Landing({ onAnalyze, isMobile, onCases }) {
           {!isLn && (
             <div style={{ maxWidth: 480, margin: "0 auto 28px", animation: "fadeUp .5s ease .16s both" }}>
               <div style={{ position: "relative", height: 6, borderRadius: 6, background: `linear-gradient(90deg, ${T.red} 0%, ${T.btc} 40%, ${T.amber} 60%, ${T.green} 100%)`, marginBottom: 6 }}>
-                <div style={{ position: "absolute", top: "50%", left: "38%", transform: "translate(-50%,-50%)", width: 12, height: 12, borderRadius: "50%", background: T.bg, border: `2px solid ${T.btc}`, boxShadow: `0 0 8px ${T.btc}` }} />
+                <div style={{ position: "absolute", top: "50%", left: "38%", transform: "translate(-50%,-50%)", width: 12, height: 12, borderRadius: "50%", background: T.bg, border: `2px solid ${T.btc}`, boxShadow: `0 0 8px ${T.btc}`, animation: "dotPulse 2.4s ease-out infinite" }} />
               </div>
               <div style={{ display: "flex", justifyContent: "space-between" }}>
                 <span style={{ fontFamily: T.mono, fontSize: 9, color: T.red }}>{t("spectrum.low")}</span>
@@ -3072,7 +3073,7 @@ function Sparkline({ history, width = 80, height = 28 }) {
           </linearGradient>
         </defs>
         <path d={`${d} L${xs[xs.length-1].toFixed(1)},${height} L0,${height} Z`} fill="url(#spkFill)" />
-        <path d={d} fill="none" stroke={lastColor} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+        <path d={d} fill="none" stroke={lastColor} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ strokeDasharray: 220, animation: "lineIn 1.1s ease .2s both" }} />
         <circle cx={xs[xs.length-1]} cy={ys[ys.length-1]} r="2.5" fill={lastColor} />
       </svg>
       <span style={{ fontFamily: T.mono, fontSize: 8, color: trend > 0 ? T.green : trend < 0 ? T.red : T.textDim }}>

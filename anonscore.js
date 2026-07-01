@@ -49,6 +49,7 @@ input:focus-visible,button:focus-visible{outline-offset:2px}
 @keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
 .blink{animation:blink 1s step-end infinite}
 @keyframes breathe{0%,100%{box-shadow:0 0 50px -14px #22D3EE40}50%{box-shadow:0 0 66px -8px #22D3EE73}}
+@keyframes dotPulse{0%,100%{box-shadow:0 0 8px #F7931A,0 0 0 0 #F7931A66}70%{box-shadow:0 0 8px #F7931A,0 0 0 9px #F7931A00}}
 .reveal{opacity:0;transform:translateY(26px);transition:opacity .7s cubic-bezier(.16,.84,.44,1),transform .7s cubic-bezier(.16,.84,.44,1);will-change:opacity,transform}
 .reveal.in{opacity:1;transform:none}
 .lift{transition:transform .28s cubic-bezier(.16,.84,.44,1),box-shadow .28s,border-color .28s}
@@ -5235,7 +5236,8 @@ function Landing({
       borderRadius: "50%",
       background: T.bg,
       border: `2px solid ${T.btc}`,
-      boxShadow: `0 0 8px ${T.btc}`
+      boxShadow: `0 0 8px ${T.btc}`,
+      animation: "dotPulse 2.4s ease-out infinite"
     }
   })), React.createElement("div", {
     style: {
@@ -6596,7 +6598,11 @@ function Sparkline({
     stroke: lastColor,
     strokeWidth: "1.5",
     strokeLinecap: "round",
-    strokeLinejoin: "round"
+    strokeLinejoin: "round",
+    style: {
+      strokeDasharray: 220,
+      animation: "lineIn 1.1s ease .2s both"
+    }
   }), React.createElement("circle", {
     cx: xs[xs.length - 1],
     cy: ys[ys.length - 1],
