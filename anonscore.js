@@ -9669,6 +9669,7 @@ function Dashboard({
     const displayPlain = simpleMode && simple ? simple.plain : r.plain;
     return React.createElement("div", {
       key: r.key || i,
+      className: done ? "" : "lift",
       style: {
         background: done ? T.greenLo : T.card,
         border: `1px solid ${done ? T.green + "44" : T.border}`,
@@ -9679,11 +9680,21 @@ function Dashboard({
         gap: isMobile ? 12 : 20,
         animation: `fadeUp .35s ease ${i * .06}s both`,
         flexDirection: isMobile ? "column" : "row",
-        transition: "border-color .2s, background-color .2s, filter .2s",
+        transition: "border-color .2s, background-color .2s, filter .2s, transform .28s cubic-bezier(.16,.84,.44,1), box-shadow .28s",
         filter: done ? "opacity(0.65)" : "none"
       },
-      onMouseEnter: e => !done && (e.currentTarget.style.borderColor = T.cyan + "55"),
-      onMouseLeave: e => !done && (e.currentTarget.style.borderColor = T.border)
+      onMouseEnter: e => {
+        if (!done) {
+          e.currentTarget.style.borderColor = T.cyan + "55";
+          e.currentTarget.style.boxShadow = `0 10px 34px -14px ${T.cyan}77`;
+        }
+      },
+      onMouseLeave: e => {
+        if (!done) {
+          e.currentTarget.style.borderColor = T.border;
+          e.currentTarget.style.boxShadow = "none";
+        }
+      }
     }, React.createElement("div", {
       style: {
         fontFamily: T.mono,
@@ -9936,11 +9947,16 @@ function Dashboard({
         display: "flex",
         alignItems: "flex-start",
         gap: 10,
-        padding: "10px 0",
+        padding: "10px 12px",
+        margin: "0 -12px",
+        borderRadius: 8,
         borderBottom: i < checks.length - 1 ? `1px solid ${T.borderLo}` : undefined,
         animation: `fadeUp .3s ease ${i * .04}s both`,
-        opacity: 0
-      }
+        opacity: 0,
+        transition: "background-color .15s"
+      },
+      onMouseEnter: e => e.currentTarget.style.background = T.surface,
+      onMouseLeave: e => e.currentTarget.style.background = "transparent"
     }, React.createElement("div", {
       style: {
         width: 7,
