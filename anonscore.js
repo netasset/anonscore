@@ -3931,16 +3931,18 @@ function CaseFiles({
         borderRadius: 16,
         padding: "22px 24px",
         cursor: "pointer",
-        transition: "all .2s",
+        transition: "transform .13s ease-out, border-color .2s, box-shadow .25s",
         animation: `fadeUp .35s ease ${i * .06}s both`
       },
+      onMouseMove: tiltMove,
       onMouseEnter: e => {
         e.currentTarget.style.borderColor = cat.color + "66";
-        e.currentTarget.style.transform = "translateY(-2px)";
+        e.currentTarget.style.boxShadow = `0 16px 40px -18px ${cat.color}`;
       },
       onMouseLeave: e => {
+        tiltReset(e);
         e.currentTarget.style.borderColor = T.border;
-        e.currentTarget.style.transform = "none";
+        e.currentTarget.style.boxShadow = "none";
       }
     }, React.createElement("div", {
       style: {
@@ -7531,7 +7533,18 @@ function WalletDirectory({
           padding: "18px 20px",
           display: "flex",
           flexDirection: "column",
-          gap: 10
+          gap: 10,
+          transition: "border-color .2s, box-shadow .25s, transform .25s cubic-bezier(.16,.84,.44,1)"
+        },
+        onMouseEnter: e => {
+          e.currentTarget.style.borderColor = T.cyan + "44";
+          e.currentTarget.style.boxShadow = `0 12px 32px -18px ${T.cyan}77`;
+          e.currentTarget.style.transform = "translateY(-3px)";
+        },
+        onMouseLeave: e => {
+          e.currentTarget.style.borderColor = T.border;
+          e.currentTarget.style.boxShadow = "none";
+          e.currentTarget.style.transform = "none";
         }
       }, React.createElement("div", {
         style: {
