@@ -5152,6 +5152,32 @@ function LightningDashboard({ nodeId, nodeData, channels, isMobile, onBack, onRe
 /* ─────────────────────────────────────────────
    ROOT APP
 ───────────────────────────────────────────── */
+// Thin scroll-progress bar pinned to the top of the viewport; width tracks page scroll.
+function ScrollProgress() {
+  const ref = useRef(null);
+  useEffect(() => {
+    let raf = 0;
+    const update = () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        const el = ref.current; if (!el) return;
+        const h = document.documentElement;
+        const max = h.scrollHeight - h.clientHeight;
+        el.style.width = (max > 0 ? (h.scrollTop / max) * 100 : 0) + "%";
+      });
+    };
+    window.addEventListener("scroll", update, { passive: true });
+    window.addEventListener("resize", update, { passive: true });
+    update();
+    return () => { window.removeEventListener("scroll", update); window.removeEventListener("resize", update); cancelAnimationFrame(raf); };
+  }, []);
+  return (
+    <div aria-hidden="true" style={{ position: "fixed", top: 0, left: 0, right: 0, height: 2, zIndex: 300, pointerEvents: "none" }}>
+      <div ref={ref} style={{ height: "100%", width: "0%", background: `linear-gradient(90deg, ${T.btc}, ${T.cyan})`, boxShadow: `0 0 8px ${T.cyan}`, transition: "width .1s linear" }} />
+    </div>
+  );
+}
+
 function App() {
   const [page, setPage] = useState("landing");
   const [activeCaseFile, setActiveCaseFile] = useState(null);
@@ -5316,6 +5342,7 @@ function App() {
   return (
     <>
       <style>{CSS}</style>
+      <ScrollProgress />
       <Toast toasts={toast.toasts} />
 
       {/* ?scan= confirmation — shown over landing, never auto-fires */}
