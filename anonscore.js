@@ -48,6 +48,7 @@ input:focus-visible,button:focus-visible{outline-offset:2px}
 @keyframes accentGlow{0%,100%{text-shadow:0 0 18px #22D3EE3a}50%{text-shadow:0 0 34px #22D3EE99}}
 @keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
 .blink{animation:blink 1s step-end infinite}
+@keyframes breathe{0%,100%{box-shadow:0 0 50px -14px #22D3EE40}50%{box-shadow:0 0 66px -8px #22D3EE73}}
 .reveal{opacity:0;transform:translateY(26px);transition:opacity .7s cubic-bezier(.16,.84,.44,1),transform .7s cubic-bezier(.16,.84,.44,1);will-change:opacity,transform}
 .reveal.in{opacity:1;transform:none}
 .lift{transition:transform .28s cubic-bezier(.16,.84,.44,1),box-shadow .28s,border-color .28s}
@@ -4919,7 +4920,8 @@ function Landing({
       color: T.btc,
       fontFamily: T.mono,
       fontSize: 14,
-      lineHeight: 1
+      lineHeight: 1,
+      textShadow: `0 0 14px ${T.btc}77`
     }
   }, "\u20BF"), React.createElement("span", {
     style: {
@@ -4932,7 +4934,8 @@ function Landing({
     }
   }, "ANON", React.createElement("span", {
     style: {
-      color: T.cyan
+      color: T.cyan,
+      textShadow: `0 0 14px ${T.cyan}55`
     }
   }, "SCORE"))), React.createElement("div", {
     style: {
@@ -5393,7 +5396,7 @@ function Landing({
       gap: 10,
       maxWidth: 480,
       margin: "0 auto",
-      animation: "fadeUp .5s ease .22s both",
+      animation: "fadeUp .5s ease .22s both, breathe 5s ease-in-out 1.2s infinite",
       background: T.card,
       border: `1px solid ${T.cyan}33`,
       borderRadius: 16,

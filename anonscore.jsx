@@ -45,6 +45,7 @@ input:focus-visible,button:focus-visible{outline-offset:2px}
 @keyframes accentGlow{0%,100%{text-shadow:0 0 18px #22D3EE3a}50%{text-shadow:0 0 34px #22D3EE99}}
 @keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
 .blink{animation:blink 1s step-end infinite}
+@keyframes breathe{0%,100%{box-shadow:0 0 50px -14px #22D3EE40}50%{box-shadow:0 0 66px -8px #22D3EE73}}
 .reveal{opacity:0;transform:translateY(26px);transition:opacity .7s cubic-bezier(.16,.84,.44,1),transform .7s cubic-bezier(.16,.84,.44,1);will-change:opacity,transform}
 .reveal.in{opacity:1;transform:none}
 .lift{transition:transform .28s cubic-bezier(.16,.84,.44,1),box-shadow .28s,border-color .28s}
@@ -2494,8 +2495,8 @@ function Landing({ onAnalyze, isMobile, onCases }) {
       {/* Nav */}
       <nav style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: isMobile ? "14px 20px" : "14px 48px", borderBottom: `1px solid ${T.border}`, background: T.bg, position: "sticky", top: 0, zIndex: 100 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <span style={{ color: T.btc, fontFamily: T.mono, fontSize: 14, lineHeight: 1 }}>₿</span>
-          <span style={{ fontFamily: T.display, fontWeight: 700, fontSize: 15, letterSpacing: 4, color: T.text, textTransform: "uppercase" }}>ANON<span style={{ color: T.cyan }}>SCORE</span></span>
+          <span style={{ color: T.btc, fontFamily: T.mono, fontSize: 14, lineHeight: 1, textShadow: `0 0 14px ${T.btc}77` }}>₿</span>
+          <span style={{ fontFamily: T.display, fontWeight: 700, fontSize: 15, letterSpacing: 4, color: T.text, textTransform: "uppercase" }}>ANON<span style={{ color: T.cyan, textShadow: `0 0 14px ${T.cyan}55` }}>SCORE</span></span>
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
           {/* Trust signals in nav — seen by everyone, no scroll required */}
@@ -2630,7 +2631,7 @@ function Landing({ onAnalyze, isMobile, onCases }) {
           )}
 
           {/* CTAs — wrapped in a glowing "scan console" panel so the tool stands out from the dark page */}
-          <div style={{ display: "flex", flexDirection: "column", gap: 10, maxWidth: 480, margin: "0 auto", animation: "fadeUp .5s ease .22s both", background: T.card, border: `1px solid ${T.cyan}33`, borderRadius: 16, padding: isMobile ? "16px" : "20px 22px", boxShadow: `0 0 50px -14px ${T.cyan}40` }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10, maxWidth: 480, margin: "0 auto", animation: "fadeUp .5s ease .22s both, breathe 5s ease-in-out 1.2s infinite", background: T.card, border: `1px solid ${T.cyan}33`, borderRadius: 16, padding: isMobile ? "16px" : "20px 22px", boxShadow: `0 0 50px -14px ${T.cyan}40` }}>
             <div>
               {/* Type detection pill — appears when input is recognised */}
               {inputType && (
