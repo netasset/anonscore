@@ -4628,6 +4628,47 @@ function LangSwitcher({
     }
   }, LANG_LABEL[l])));
 }
+function CountUp({
+  value
+}) {
+  const ref = useRef(null);
+  const m = String(value).match(/^(\D*)([\d.,]+)(.*)$/);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || !m) return;
+    const target = parseFloat(m[2].replace(/,/g, ""));
+    const decimals = (m[2].split(".")[1] || "").length;
+    const settle = () => {
+      el.textContent = value;
+    };
+    if (typeof IntersectionObserver === "undefined" || window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) {
+      settle();
+      return;
+    }
+    const io = new IntersectionObserver(entries => {
+      entries.forEach(e => {
+        if (!e.isIntersecting) return;
+        io.unobserve(el);
+        const dur = 1150,
+          start = performance.now();
+        const step = now => {
+          const p = Math.min(1, (now - start) / dur);
+          const eased = 1 - Math.pow(1 - p, 3);
+          el.textContent = m[1] + (target * eased).toFixed(decimals) + m[3];
+          if (p < 1) requestAnimationFrame(step);else settle();
+        };
+        requestAnimationFrame(step);
+      });
+    }, {
+      threshold: 0.5
+    });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [value]);
+  return React.createElement("span", {
+    ref: ref
+  }, value);
+}
 function Landing({
   onAnalyze,
   isMobile,
@@ -4650,6 +4691,7 @@ function Landing({
     setTimeout(() => setTipCopied(""), 1800);
   };
   const inputRef = useRef();
+  const heroRef = useRef(null);
   useEffect(() => {
     const onKey = e => {
       if (e.key !== "/" || e.metaKey || e.ctrlKey || e.altKey) return;
@@ -4681,6 +4723,27 @@ function Landing({
     els.forEach(el => io.observe(el));
     return () => io.disconnect();
   }, []);
+  useEffect(() => {
+    const el = heroRef.current;
+    if (!el || isMobile) return;
+    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
+    let raf = 0;
+    const onMove = e => {
+      const r = el.getBoundingClientRect();
+      const x = (e.clientX - r.left) / r.width * 100;
+      const y = (e.clientY - r.top) / r.height * 100;
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        el.style.setProperty("--mx", x + "%");
+        el.style.setProperty("--my", y + "%");
+      });
+    };
+    el.addEventListener("mousemove", onMove);
+    return () => {
+      el.removeEventListener("mousemove", onMove);
+      cancelAnimationFrame(raf);
+    };
+  }, [isMobile]);
   const inputType = detectInputType(input);
   const isLn = inputType === "ln_pubkey" || inputType === "ln_address";
   const submit = (val, plain = false) => {
@@ -5017,12 +5080,21 @@ function Landing({
     onMouseEnter: e => e.currentTarget.style.color = T.text,
     onMouseLeave: e => e.currentTarget.style.color = T.btc
   }, "VIEW ALL \u2192"))), React.createElement("div", {
+    ref: heroRef,
     style: {
       position: "relative",
       overflow: "hidden"
     }
   }, React.createElement(ParticleCanvas, {
     color: T.cyan
+  }), React.createElement("div", {
+    style: {
+      position: "absolute",
+      inset: 0,
+      pointerEvents: "none",
+      zIndex: 0,
+      background: "radial-gradient(360px circle at var(--mx,50%) var(--my,26%), #22D3EE14, transparent 60%)"
+    }
   }), React.createElement("div", {
     style: {
       position: "absolute",
@@ -5751,7 +5823,9 @@ function Landing({
         lineHeight: 1,
         marginBottom: 10
       }
-    }, f.stat), React.createElement("div", {
+    }, React.createElement(CountUp, {
+      value: f.stat
+    })), React.createElement("div", {
       style: {
         fontSize: 13,
         color: T.textMid,
@@ -5884,8 +5958,17 @@ function Landing({
       transition: "all .18s",
       boxShadow: `0 4px 24px ${T.cyanMid}`
     },
-    onMouseOver: e => e.currentTarget.style.opacity = ".88",
-    onMouseOut: e => e.currentTarget.style.opacity = "1"
+    onMouseMove: e => {
+      const r = e.currentTarget.getBoundingClientRect();
+      const dx = (e.clientX - (r.left + r.width / 2)) / r.width;
+      const dy = (e.clientY - (r.top + r.height / 2)) / r.height;
+      e.currentTarget.style.transform = `translate(${dx * 9}px, ${dy * 9}px)`;
+      e.currentTarget.style.opacity = ".92";
+    },
+    onMouseLeave: e => {
+      e.currentTarget.style.transform = "translate(0,0)";
+      e.currentTarget.style.opacity = "1";
+    }
   }, t("finalcta.scan")), React.createElement("button", {
     onClick: () => onAnalyze("DEMO", false, "btc"),
     style: {

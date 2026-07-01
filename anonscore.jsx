@@ -2325,6 +2325,38 @@ function LangSwitcher({ compact = false }) {
   );
 }
 
+// Animated count-up: eases a number from 0 to its target the first time it scrolls into view.
+// Handles formatted values like "$1.1B", "91%", "546 sat" — preserves prefix/suffix.
+function CountUp({ value }) {
+  const ref = useRef(null);
+  const m = String(value).match(/^(\D*)([\d.,]+)(.*)$/);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || !m) return;
+    const target = parseFloat(m[2].replace(/,/g, ""));
+    const decimals = (m[2].split(".")[1] || "").length;
+    const settle = () => { el.textContent = value; };
+    if (typeof IntersectionObserver === "undefined" || window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) { settle(); return; }
+    const io = new IntersectionObserver((entries) => {
+      entries.forEach((e) => {
+        if (!e.isIntersecting) return;
+        io.unobserve(el);
+        const dur = 1150, start = performance.now();
+        const step = (now) => {
+          const p = Math.min(1, (now - start) / dur);
+          const eased = 1 - Math.pow(1 - p, 3);
+          el.textContent = m[1] + (target * eased).toFixed(decimals) + m[3];
+          if (p < 1) requestAnimationFrame(step); else settle();
+        };
+        requestAnimationFrame(step);
+      });
+    }, { threshold: 0.5 });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [value]);
+  return <span ref={ref}>{value}</span>;
+}
+
 function Landing({ onAnalyze, isMobile, onCases }) {
   useLang(); // re-render this subtree when language changes
   const [input, setInput] = useState("");
@@ -2340,6 +2372,7 @@ function Landing({ onAnalyze, isMobile, onCases }) {
     setTimeout(() => setTipCopied(""), 1800);
   };
   const inputRef = useRef();
+  const heroRef = useRef(null);
 
   // Keyboard shortcut: "/" focuses the address input (unless the user is already typing somewhere).
   useEffect(() => {
@@ -2368,6 +2401,26 @@ function Landing({ onAnalyze, isMobile, onCases }) {
     els.forEach((el) => io.observe(el));
     return () => io.disconnect();
   }, []);
+
+  // Cursor-reactive hero: a soft cyan spotlight follows the pointer (desktop only, reduced-motion off).
+  useEffect(() => {
+    const el = heroRef.current;
+    if (!el || isMobile) return;
+    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
+    let raf = 0;
+    const onMove = (e) => {
+      const r = el.getBoundingClientRect();
+      const x = ((e.clientX - r.left) / r.width) * 100;
+      const y = ((e.clientY - r.top) / r.height) * 100;
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        el.style.setProperty("--mx", x + "%");
+        el.style.setProperty("--my", y + "%");
+      });
+    };
+    el.addEventListener("mousemove", onMove);
+    return () => { el.removeEventListener("mousemove", onMove); cancelAnimationFrame(raf); };
+  }, [isMobile]);
 
   const inputType = detectInputType(input);
   const isLn = inputType === "ln_pubkey" || inputType === "ln_address";
@@ -2478,8 +2531,9 @@ function Landing({ onAnalyze, isMobile, onCases }) {
       </div>
 
       {/* ── HERO ── */}
-      <div style={{ position: "relative", overflow: "hidden" }}>
+      <div ref={heroRef} style={{ position: "relative", overflow: "hidden" }}>
         <ParticleCanvas color={T.cyan} />
+        <div style={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: 0, background: "radial-gradient(360px circle at var(--mx,50%) var(--my,26%), #22D3EE14, transparent 60%)" }} />
         <div style={{ position: "absolute", top: "10%", left: "-10%", width: 520, height: 520, borderRadius: "50%", background: "radial-gradient(circle,#22D3EE18 0%,transparent 70%)", animation: "orb 8s ease-in-out infinite", pointerEvents: "none", filter: "blur(2px)" }} />
         <div className="aurora" style={{ top: "-10%", right: "-12%", width: 460, height: 460, background: "radial-gradient(circle,#F7931A16 0%,transparent 70%)", animationDelay: "-8s" }} />
         <div className="aurora" style={{ bottom: "-24%", left: "32%", width: 400, height: 400, background: "radial-gradient(circle,#22D3EE12 0%,transparent 70%)", animationDelay: "-15s" }} />
@@ -2698,7 +2752,7 @@ function Landing({ onAnalyze, isMobile, onCases }) {
               return (
                 <div key={i} style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 14, padding: "22px 18px", animation: `fadeUp .4s ease ${i * .07}s both`, position: "relative", overflow: "hidden" }}>
                   <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 2, background: col, opacity: .7 }} />
-                  <div style={{ fontFamily: T.serif, fontSize: isMobile ? 30 : 36, color: col, lineHeight: 1, marginBottom: 10 }}>{f.stat}</div>
+                  <div style={{ fontFamily: T.serif, fontSize: isMobile ? 30 : 36, color: col, lineHeight: 1, marginBottom: 10 }}><CountUp value={f.stat} /></div>
                   <div style={{ fontSize: 13, color: T.textMid, lineHeight: 1.55, marginBottom: 12 }}>{f.desc}</div>
                   <div style={{ height: 3, background: T.surface, borderRadius: 4, marginBottom: 8, overflow: "hidden" }}>
                     <div style={{ height: "100%", width: `${barWidths[i]}%`, background: col, borderRadius: 4, opacity: .6 }} />
@@ -2740,8 +2794,8 @@ function Landing({ onAnalyze, isMobile, onCases }) {
           <div style={{ display: "flex", flexDirection: isMobile ? "column" : "row", gap: 10, justifyContent: "center" }}>
             <button onClick={() => { inputRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }); setTimeout(() => inputRef.current?.focus(), 300); }} className="sheen"
               style={{ background: T.cyan, border: "none", borderRadius: 12, padding: "15px 28px", color: T.bg, fontFamily: T.sans, fontSize: 15, fontWeight: 700, cursor: "pointer", transition: "all .18s", boxShadow: `0 4px 24px ${T.cyanMid}` }}
-              onMouseOver={e => e.currentTarget.style.opacity = ".88"}
-              onMouseOut={e => e.currentTarget.style.opacity = "1"}>
+              onMouseMove={e => { const r = e.currentTarget.getBoundingClientRect(); const dx = (e.clientX - (r.left + r.width / 2)) / r.width; const dy = (e.clientY - (r.top + r.height / 2)) / r.height; e.currentTarget.style.transform = `translate(${dx * 9}px, ${dy * 9}px)`; e.currentTarget.style.opacity = ".92"; }}
+              onMouseLeave={e => { e.currentTarget.style.transform = "translate(0,0)"; e.currentTarget.style.opacity = "1"; }}>
               {t("finalcta.scan")}
             </button>
             <button onClick={() => onAnalyze("DEMO", false, "btc")}
