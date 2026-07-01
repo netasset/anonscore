@@ -12038,6 +12038,55 @@ function LightningDashboard({
     }, t.toUpperCase()));
   })));
 }
+function ScrollProgress() {
+  const ref = useRef(null);
+  useEffect(() => {
+    let raf = 0;
+    const update = () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        const el = ref.current;
+        if (!el) return;
+        const h = document.documentElement;
+        const max = h.scrollHeight - h.clientHeight;
+        el.style.width = (max > 0 ? h.scrollTop / max * 100 : 0) + "%";
+      });
+    };
+    window.addEventListener("scroll", update, {
+      passive: true
+    });
+    window.addEventListener("resize", update, {
+      passive: true
+    });
+    update();
+    return () => {
+      window.removeEventListener("scroll", update);
+      window.removeEventListener("resize", update);
+      cancelAnimationFrame(raf);
+    };
+  }, []);
+  return React.createElement("div", {
+    "aria-hidden": "true",
+    style: {
+      position: "fixed",
+      top: 0,
+      left: 0,
+      right: 0,
+      height: 2,
+      zIndex: 300,
+      pointerEvents: "none"
+    }
+  }, React.createElement("div", {
+    ref: ref,
+    style: {
+      height: "100%",
+      width: "0%",
+      background: `linear-gradient(90deg, ${T.btc}, ${T.cyan})`,
+      boxShadow: `0 0 8px ${T.cyan}`,
+      transition: "width .1s linear"
+    }
+  }));
+}
 function App() {
   const [page, setPage] = useState("landing");
   const [activeCaseFile, setActiveCaseFile] = useState(null);
@@ -12238,7 +12287,7 @@ function App() {
       });
     }
   }, [toast]);
-  return React.createElement(React.Fragment, null, React.createElement("style", null, CSS), React.createElement(Toast, {
+  return React.createElement(React.Fragment, null, React.createElement("style", null, CSS), React.createElement(ScrollProgress, null), React.createElement(Toast, {
     toasts: toast.toasts
   }), pendingScan && page === "landing" && React.createElement("div", {
     style: {
