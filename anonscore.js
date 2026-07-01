@@ -1256,7 +1256,6 @@ function ChecksSection({
     }
   }, checks.map(c => React.createElement("div", {
     key: c.n,
-    className: "lift",
     style: {
       display: "flex",
       gap: 14,
@@ -1265,13 +1264,15 @@ function ChecksSection({
       border: `1px solid ${T.border}`,
       borderRadius: 12,
       padding: "16px 18px",
-      transition: "transform .28s cubic-bezier(.16,.84,.44,1), border-color .15s, box-shadow .28s"
+      transition: "transform .13s ease-out, border-color .15s, box-shadow .28s"
     },
+    onMouseMove: tiltMove,
     onMouseOver: e => {
       e.currentTarget.style.borderColor = accentMid;
-      e.currentTarget.style.boxShadow = `0 0 24px -10px ${accent}`;
+      e.currentTarget.style.boxShadow = `0 12px 30px -14px ${accent}`;
     },
     onMouseOut: e => {
+      tiltReset(e);
       e.currentTarget.style.borderColor = T.border;
       e.currentTarget.style.boxShadow = "none";
     }
@@ -4630,6 +4631,22 @@ function LangSwitcher({
     }
   }, LANG_LABEL[l])));
 }
+let _reducedMotion = null;
+function prefersReducedMotion() {
+  if (_reducedMotion === null) _reducedMotion = !!(typeof window !== "undefined" && window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+  return _reducedMotion;
+}
+function tiltMove(e) {
+  if (prefersReducedMotion()) return;
+  const el = e.currentTarget,
+    r = el.getBoundingClientRect();
+  const px = (e.clientX - r.left) / r.width - 0.5;
+  const py = (e.clientY - r.top) / r.height - 0.5;
+  el.style.transform = `perspective(760px) rotateX(${(-py * 6.5).toFixed(2)}deg) rotateY(${(px * 6.5).toFixed(2)}deg) translateY(-4px)`;
+}
+function tiltReset(e) {
+  e.currentTarget.style.transform = "";
+}
 function CountUp({
   value
 }) {
@@ -5805,7 +5822,18 @@ function Landing({
         padding: "22px 18px",
         animation: `fadeUp .4s ease ${i * .07}s both`,
         position: "relative",
-        overflow: "hidden"
+        overflow: "hidden",
+        transition: "transform .13s ease-out, border-color .2s, box-shadow .25s"
+      },
+      onMouseMove: tiltMove,
+      onMouseEnter: e => {
+        e.currentTarget.style.borderColor = col + "66";
+        e.currentTarget.style.boxShadow = `0 14px 36px -16px ${col}`;
+      },
+      onMouseLeave: e => {
+        tiltReset(e);
+        e.currentTarget.style.borderColor = T.border;
+        e.currentTarget.style.boxShadow = "none";
       }
     }, React.createElement("div", {
       style: {

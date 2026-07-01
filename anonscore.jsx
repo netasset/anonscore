@@ -814,9 +814,10 @@ function ChecksSection({ isMobile }) {
       </div>
       <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(2, 1fr)", gap: 10 }}>
         {checks.map((c) => (
-          <div key={c.n} className="lift" style={{ display: "flex", gap: 14, alignItems: "flex-start", background: T.card, border: `1px solid ${T.border}`, borderRadius: 12, padding: "16px 18px", transition: "transform .28s cubic-bezier(.16,.84,.44,1), border-color .15s, box-shadow .28s" }}
-            onMouseOver={e => { e.currentTarget.style.borderColor = accentMid; e.currentTarget.style.boxShadow = `0 0 24px -10px ${accent}`; }}
-            onMouseOut={e => { e.currentTarget.style.borderColor = T.border; e.currentTarget.style.boxShadow = "none"; }}>
+          <div key={c.n} style={{ display: "flex", gap: 14, alignItems: "flex-start", background: T.card, border: `1px solid ${T.border}`, borderRadius: 12, padding: "16px 18px", transition: "transform .13s ease-out, border-color .15s, box-shadow .28s" }}
+            onMouseMove={tiltMove}
+            onMouseOver={e => { e.currentTarget.style.borderColor = accentMid; e.currentTarget.style.boxShadow = `0 12px 30px -14px ${accent}`; }}
+            onMouseOut={e => { tiltReset(e); e.currentTarget.style.borderColor = T.border; e.currentTarget.style.boxShadow = "none"; }}>
             <div style={{ flexShrink: 0, width: 42, height: 42, borderRadius: 11, background: accentLo, border: `1px solid ${accentMid}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
               <HeuristicIcon k={c.k} size={22} color={accent} />
             </div>
@@ -2327,6 +2328,22 @@ function LangSwitcher({ compact = false }) {
   );
 }
 
+// Cursor-driven 3D tilt for cards. Reduced-motion aware (cached). Pair onMouseMove={tiltMove}
+// with onMouseLeave/onMouseOut={tiltReset}. The reset transition lives on the element's style.
+let _reducedMotion = null;
+function prefersReducedMotion() {
+  if (_reducedMotion === null) _reducedMotion = !!(typeof window !== "undefined" && window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+  return _reducedMotion;
+}
+function tiltMove(e) {
+  if (prefersReducedMotion()) return;
+  const el = e.currentTarget, r = el.getBoundingClientRect();
+  const px = (e.clientX - r.left) / r.width - 0.5;
+  const py = (e.clientY - r.top) / r.height - 0.5;
+  el.style.transform = `perspective(760px) rotateX(${(-py * 6.5).toFixed(2)}deg) rotateY(${(px * 6.5).toFixed(2)}deg) translateY(-4px)`;
+}
+function tiltReset(e) { e.currentTarget.style.transform = ""; }
+
 // Animated count-up: eases a number from 0 to its target the first time it scrolls into view.
 // Handles formatted values like "$1.1B", "91%", "546 sat" — preserves prefix/suffix.
 function CountUp({ value }) {
@@ -2752,7 +2769,10 @@ function Landing({ onAnalyze, isMobile, onCases }) {
               const barWidths = [88, 91, 33, 38];
               const col = barColors[i];
               return (
-                <div key={i} style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 14, padding: "22px 18px", animation: `fadeUp .4s ease ${i * .07}s both`, position: "relative", overflow: "hidden" }}>
+                <div key={i} style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 14, padding: "22px 18px", animation: `fadeUp .4s ease ${i * .07}s both`, position: "relative", overflow: "hidden", transition: "transform .13s ease-out, border-color .2s, box-shadow .25s" }}
+                  onMouseMove={tiltMove}
+                  onMouseEnter={e => { e.currentTarget.style.borderColor = col + "66"; e.currentTarget.style.boxShadow = `0 14px 36px -16px ${col}`; }}
+                  onMouseLeave={e => { tiltReset(e); e.currentTarget.style.borderColor = T.border; e.currentTarget.style.boxShadow = "none"; }}>
                   <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 2, background: col, opacity: .7 }} />
                   <div style={{ fontFamily: T.serif, fontSize: isMobile ? 30 : 36, color: col, lineHeight: 1, marginBottom: 10 }}><CountUp value={f.stat} /></div>
                   <div style={{ fontSize: 13, color: T.textMid, lineHeight: 1.55, marginBottom: 12 }}>{f.desc}</div>
