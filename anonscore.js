@@ -12313,7 +12313,12 @@ function App() {
       fontWeight: 700,
       cursor: "pointer"
     }
-  }, "Scan it \u2192")))), page === "landing" && React.createElement(Landing, {
+  }, "Scan it \u2192")))), React.createElement("div", {
+    key: page,
+    style: {
+      animation: "fadeIn .35s ease both"
+    }
+  }, page === "landing" && React.createElement(Landing, {
     onAnalyze: analyze,
     isMobile: isMobile,
     onCases: c => {
@@ -12369,6 +12374,6 @@ function App() {
   }), page === "wallets" && React.createElement(WalletDirectory, {
     onBack: () => setPage("landing"),
     isMobile: isMobile
-  }));
+  })));
 }
 ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(App));
