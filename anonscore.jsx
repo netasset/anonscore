@@ -4345,9 +4345,9 @@ function Dashboard({ address, addrInfo, utxos, txs, isMobile, onBack, onRescan, 
               const displayAction = simpleMode && simple ? simple.action : r.action;
               const displayPlain  = simpleMode && simple ? simple.plain  : r.plain;
               return (
-              <div key={r.key || i} style={{ background: done ? T.greenLo : T.card, border: `1px solid ${done ? T.green + "44" : T.border}`, borderLeft: done ? undefined : `3px solid ${r.status === "fail" ? T.red : r.status === "warn" ? T.amber : T.green}`, borderRadius: 16, padding: isMobile ? "18px 16px" : "20px 24px", display: "flex", gap: isMobile ? 12 : 20, animation: `fadeUp .35s ease ${i * .06}s both`, flexDirection: isMobile ? "column" : "row", transition: "border-color .2s, background-color .2s, filter .2s", filter: done ? "opacity(0.65)" : "none" }}
-                onMouseEnter={e => !done && (e.currentTarget.style.borderColor = T.cyan + "55")}
-                onMouseLeave={e => !done && (e.currentTarget.style.borderColor = T.border)}>
+              <div key={r.key || i} className={done ? "" : "lift"} style={{ background: done ? T.greenLo : T.card, border: `1px solid ${done ? T.green + "44" : T.border}`, borderLeft: done ? undefined : `3px solid ${r.status === "fail" ? T.red : r.status === "warn" ? T.amber : T.green}`, borderRadius: 16, padding: isMobile ? "18px 16px" : "20px 24px", display: "flex", gap: isMobile ? 12 : 20, animation: `fadeUp .35s ease ${i * .06}s both`, flexDirection: isMobile ? "column" : "row", transition: "border-color .2s, background-color .2s, filter .2s, transform .28s cubic-bezier(.16,.84,.44,1), box-shadow .28s", filter: done ? "opacity(0.65)" : "none" }}
+                onMouseEnter={e => { if (!done) { e.currentTarget.style.borderColor = T.cyan + "55"; e.currentTarget.style.boxShadow = `0 10px 34px -14px ${T.cyan}77`; } }}
+                onMouseLeave={e => { if (!done) { e.currentTarget.style.borderColor = T.border; e.currentTarget.style.boxShadow = "none"; } }}>
                 <div style={{ fontFamily: T.mono, fontSize: 11, color: T.textDim, flexShrink: 0, paddingTop: 2, minWidth: 28 }}>0{i + 1}</div>
                 <div style={{ flex: 1 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
@@ -4419,7 +4419,9 @@ function Dashboard({ address, addrInfo, utxos, txs, isMobile, onBack, onRescan, 
                   ? (c.status === "fail" ? s.fail_detail : c.status === "warn" ? s.warn_detail : s.pass_detail) || c.plain
                   : c.plain;
                 return (
-                <div key={c.key} style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "10px 0", borderBottom: i < checks.length - 1 ? `1px solid ${T.borderLo}` : undefined, animation: `fadeUp .3s ease ${i * .04}s both`, opacity: 0 }}>
+                <div key={c.key} style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "10px 12px", margin: "0 -12px", borderRadius: 8, borderBottom: i < checks.length - 1 ? `1px solid ${T.borderLo}` : undefined, animation: `fadeUp .3s ease ${i * .04}s both`, opacity: 0, transition: "background-color .15s" }}
+                  onMouseEnter={e => e.currentTarget.style.background = T.surface}
+                  onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
                   <div style={{ width: 7, height: 7, borderRadius: "50%", background: c.status === "pass" ? T.green : c.status === "warn" ? T.btc : T.red, flexShrink: 0, marginTop: 5 }} />
                   <div style={{ flex: 1 }}>
                     <div style={{ fontSize: 13, fontWeight: 600, color: T.text }}>{displayName}</div>
