@@ -381,7 +381,7 @@ function useLang() {
   }, []);
   return _lang;
 }
-const RELAY_URL = "";
+const RELAY_URL = "https://anonscore-relay.netassetpremium.workers.dev";
 let _relay = (() => {
   try {
     return localStorage.getItem("anonscore_relay") === "1";

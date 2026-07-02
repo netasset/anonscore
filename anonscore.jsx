@@ -333,7 +333,7 @@ function useLang() {
    changes). After deploying workers/relay/, set this to the Worker's URL —
    e.g. "https://anonscore-relay.netassetpremium.workers.dev" — and rebuild;
    the toggle then appears. The relay origin is already allowed in _headers. */
-const RELAY_URL = "";
+const RELAY_URL = "https://anonscore-relay.netassetpremium.workers.dev";
 let _relay = (() => { try { return localStorage.getItem("anonscore_relay") === "1"; } catch { return false; } })();
 const _relayListeners = new Set();
 function setRelay(on) {
