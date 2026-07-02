@@ -5,7 +5,7 @@ Deployed on Cloudflare Pages (static hosting; see `_headers`).
 
 ## Architecture
 
-- **`anonscore.jsx`** — the source of truth. The entire app (~4,100 lines, React,
+- **`anonscore.jsx`** — the source of truth. The entire app (~5,500 lines, React,
   inline-styled). Edit this.
 - **`anonscore.js`** — AUTO-GENERATED from `anonscore.jsx`. Do not edit by hand.
   This is what the browser actually loads. Plain JS (classic React runtime), so
