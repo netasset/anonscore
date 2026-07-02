@@ -321,6 +321,37 @@ function useLang() {
   return _lang;
 }
 
+/* Privacy relay (opt-in) ─────────────────────────────────────────────
+   By default the browser queries the block explorer directly, so the explorer
+   sees the visitor's IP next to the address. When this is ON *and* RELAY_URL is
+   configured, lookups route through the AnonScore relay (a stateless, no-log
+   Cloudflare Worker — source in workers/relay/) so the explorer sees the relay's
+   IP instead. Off by default: a direct query keeps the address off our
+   infrastructure entirely, which is the lower-trust-surface choice — the relay
+   trades that for hiding the IP. Mirrors the language hook above.
+   Dormant until configured: leave "" and the toggle stays hidden (nothing
+   changes). After deploying workers/relay/, set this to the Worker's URL —
+   e.g. "https://anonscore-relay.netassetpremium.workers.dev" — and rebuild;
+   the toggle then appears. The relay origin is already allowed in _headers. */
+const RELAY_URL = "";
+let _relay = (() => { try { return localStorage.getItem("anonscore_relay") === "1"; } catch { return false; } })();
+const _relayListeners = new Set();
+function setRelay(on) {
+  _relay = !!on;
+  try { localStorage.setItem("anonscore_relay", _relay ? "1" : "0"); } catch {}
+  _relayListeners.forEach(fn => fn());
+}
+function relayOn() { return !!RELAY_URL && _relay; }
+function useRelay() {
+  const [, force] = useState(0);
+  useEffect(() => {
+    const fn = () => force(x => x + 1);
+    _relayListeners.add(fn);
+    return () => { _relayListeners.delete(fn); };
+  }, []);
+  return _relay;
+}
+
 // Canonical homepage for each tool we recommend. Source of truth for outbound
 // links — the recommendation text in `recs[].tools[].name` looks up here at
 // render time. Adding a new tool name without a URL is fine; it just renders
@@ -1084,11 +1115,16 @@ function runEngine(utxos = [], txs = [], txCount = 0) {
 ───────────────────────────────────────────── */
 const API = "https://blockstream.info/api";
 async function fetchAddress(addr) {
+  // Relay path is /btc/address/…; direct path is blockstream's /address/….
+  // If the relay is on but unreachable, the fetch below rejects and analyze()
+  // fails honestly — we never silently fall back to a direct query, which would
+  // leak the very IP the user turned the relay on to hide.
+  const base = relayOn() ? `${RELAY_URL}/btc` : API;
   const safe = encodeURIComponent(addr);
   const [info, utxos, txs] = await Promise.all([
-    fetch(`${API}/address/${safe}`).then(r => { if (!r.ok) throw new Error("Not found"); return r.json(); }),
-    fetch(`${API}/address/${safe}/utxo`).then(r => r.json()),
-    fetch(`${API}/address/${safe}/txs`).then(r => r.json()),
+    fetch(`${base}/address/${safe}`).then(r => { if (!r.ok) throw new Error("Not found"); return r.json(); }),
+    fetch(`${base}/address/${safe}/utxo`).then(r => r.json()),
+    fetch(`${base}/address/${safe}/txs`).then(r => r.json()),
   ]);
   if (!info || typeof info !== "object") throw new Error("Invalid API response");
   if (!Array.isArray(utxos)) throw new Error("Invalid UTXO response");
@@ -1165,10 +1201,13 @@ const DEMO = {
 const LN_API = "https://mempool.space/api/v1/lightning";
 
 async function fetchLightningNode(pubkey) {
+  // Relay path is /ln/nodes/…; direct is mempool's /nodes/…. Same honest-failure
+  // rule as fetchAddress: no silent direct fallback when the relay is on.
+  const base = relayOn() ? `${RELAY_URL}/ln` : LN_API;
   const safe = encodeURIComponent(pubkey);
   const [node, channels] = await Promise.all([
-    fetch(`${LN_API}/nodes/${safe}`).then(r => { if (!r.ok) throw new Error("Node not found"); return r.json(); }),
-    fetch(`${LN_API}/nodes/${safe}/channels?status=open`).then(r => r.json()).catch(() => ({ channels: [] })),
+    fetch(`${base}/nodes/${safe}`).then(r => { if (!r.ok) throw new Error("Node not found"); return r.json(); }),
+    fetch(`${base}/nodes/${safe}/channels?status=open`).then(r => r.json()).catch(() => ({ channels: [] })),
   ]);
   if (!node || typeof node !== "object") throw new Error("Invalid node response");
   return { node, channels: (Array.isArray(channels.channels) ? channels.channels : []).slice(0, 30) };
@@ -2055,10 +2094,32 @@ function ShareCard({ score, grade, checks, address, isLightning = false, onClose
 }
 
 /* ─────────────────────────────────────────────
+   PRIVACY RELAY TOGGLE — opt-in mitigation for the browser→explorer IP leak
+───────────────────────────────────────────── */
+function RelayToggle() {
+  const on = useRelay();
+  return (
+    <div style={{ maxWidth: 480, margin: "0 auto 12px", animation: "fadeUp .5s ease .22s both", display: "flex", alignItems: "flex-start", gap: 11, background: on ? T.cyanLo : T.surface, border: `1px solid ${on ? T.cyan + "66" : T.border}`, borderRadius: 10, padding: "10px 14px", transition: "all .2s" }}>
+      <button role="switch" aria-checked={on} aria-label="Route lookups through the AnonScore privacy relay to hide your IP from the block explorer"
+        onClick={() => setRelay(!on)}
+        style={{ flexShrink: 0, width: 40, height: 23, borderRadius: 999, border: "none", cursor: "pointer", background: on ? T.cyan : T.border, position: "relative", transition: "background .2s", marginTop: 1 }}>
+        <span style={{ position: "absolute", top: 2.5, left: on ? 19 : 2.5, width: 18, height: 18, borderRadius: "50%", background: on ? T.bg : T.textDim, transition: "left .2s" }} />
+      </button>
+      <div style={{ fontFamily: T.sans, fontSize: 12, color: T.textMid, lineHeight: 1.5, textAlign: "left" }}>
+        <strong style={{ color: on ? T.cyan : T.text }}>{on ? "Privacy relay on" : "Hide my IP from the explorer"}</strong>
+        {on
+          ? " — this lookup routes through AnonScore's open-source, no-log relay, so the explorer sees our server's IP, not yours. It still sees the address itself (that's the tradeoff)."
+          : " — route this lookup through AnonScore's no-log relay so the block explorer can't tie the address to your IP. Open source; the address still reaches the explorer, just not your IP."}
+      </div>
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────────
    TRUST BOX — collapsed by default, expands on click
 ───────────────────────────────────────────── */
 const GUARANTEES = [
-  { icon: "⬡", label: "No server, no backend", desc: "Your address goes directly from your browser to Blockstream's public API. It never touches our infrastructure." },
+  { icon: "⬡", label: "No server, no backend", desc: "By default your address goes directly from your browser to Blockstream's public API — it never touches our infrastructure. (Turn on the optional privacy relay and it routes through our stateless no-log Worker instead, to hide your IP from the explorer.)" },
   { icon: "◌", label: "Nothing stored or logged", desc: "We have no database, no analytics, no session tracking. Close the tab and it's gone." },
   { icon: "◎", label: "Scoring runs in your browser", desc: "All 10 heuristics execute locally. Your score and results are computed on your device and sent nowhere — not even to us. (The address itself does reach Blockstream's public API to fetch the chain data, as noted above.)" },
 ];
@@ -2653,6 +2714,10 @@ function Landing({ onAnalyze, isMobile, onCases }) {
           <div style={{ maxWidth: 480, margin: "0 auto 12px", animation: "fadeUp .5s ease .20s both", background: T.surface, border: `1px solid ${isLn ? T.ln + "44" : T.border}`, borderRadius: 10, padding: "10px 14px", fontFamily: T.sans, fontSize: 12, color: T.textMid, lineHeight: 1.5, textAlign: "left", transition: "border-color .2s" }}>
             {isLn ? t("trust.ln") : t("trust.btc")}
           </div>
+
+          {/* Privacy relay toggle — the mitigation for the IP↔address leak the
+              callout above discloses. Only shown once a relay is configured. */}
+          {RELAY_URL && <RelayToggle />}
 
           {/* Recent scans history — only shown if they have prior scans */}
           {history.length > 0 && (

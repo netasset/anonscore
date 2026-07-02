@@ -1,0 +1,7 @@
+name = "anonscore-relay"
+main = "worker.js"
+compatibility_date = "2026-01-01"
+
+# Stateless by design: no KV, no D1, no R2, no Durable Objects, no bindings.
+# Nothing to store means nothing to log. The relay's whole value is that it
+# holds no data about who looked up what — see worker.js for the full rationale.

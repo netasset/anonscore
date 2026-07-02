@@ -381,6 +381,36 @@ function useLang() {
   }, []);
   return _lang;
 }
+const RELAY_URL = "";
+let _relay = (() => {
+  try {
+    return localStorage.getItem("anonscore_relay") === "1";
+  } catch {
+    return false;
+  }
+})();
+const _relayListeners = new Set();
+function setRelay(on) {
+  _relay = !!on;
+  try {
+    localStorage.setItem("anonscore_relay", _relay ? "1" : "0");
+  } catch {}
+  _relayListeners.forEach(fn => fn());
+}
+function relayOn() {
+  return !!RELAY_URL && _relay;
+}
+function useRelay() {
+  const [, force] = useState(0);
+  useEffect(() => {
+    const fn = () => force(x => x + 1);
+    _relayListeners.add(fn);
+    return () => {
+      _relayListeners.delete(fn);
+    };
+  }, []);
+  return _relay;
+}
 const TOOL_URL = {
   "Wasabi Wallet": "https://wasabiwallet.io",
   "Sparrow Wallet": "https://sparrowwallet.com",
@@ -1742,11 +1772,12 @@ function runEngine(utxos = [], txs = [], txCount = 0) {
 }
 const API = "https://blockstream.info/api";
 async function fetchAddress(addr) {
+  const base = relayOn() ? `${RELAY_URL}/btc` : API;
   const safe = encodeURIComponent(addr);
-  const [info, utxos, txs] = await Promise.all([fetch(`${API}/address/${safe}`).then(r => {
+  const [info, utxos, txs] = await Promise.all([fetch(`${base}/address/${safe}`).then(r => {
     if (!r.ok) throw new Error("Not found");
     return r.json();
-  }), fetch(`${API}/address/${safe}/utxo`).then(r => r.json()), fetch(`${API}/address/${safe}/txs`).then(r => r.json())]);
+  }), fetch(`${base}/address/${safe}/utxo`).then(r => r.json()), fetch(`${base}/address/${safe}/txs`).then(r => r.json())]);
   if (!info || typeof info !== "object") throw new Error("Invalid API response");
   if (!Array.isArray(utxos)) throw new Error("Invalid UTXO response");
   if (!Array.isArray(txs)) throw new Error("Invalid TX response");
@@ -2086,11 +2117,12 @@ const DEMO = {
 };
 const LN_API = "https://mempool.space/api/v1/lightning";
 async function fetchLightningNode(pubkey) {
+  const base = relayOn() ? `${RELAY_URL}/ln` : LN_API;
   const safe = encodeURIComponent(pubkey);
-  const [node, channels] = await Promise.all([fetch(`${LN_API}/nodes/${safe}`).then(r => {
+  const [node, channels] = await Promise.all([fetch(`${base}/nodes/${safe}`).then(r => {
     if (!r.ok) throw new Error("Node not found");
     return r.json();
-  }), fetch(`${LN_API}/nodes/${safe}/channels?status=open`).then(r => r.json()).catch(() => ({
+  }), fetch(`${base}/nodes/${safe}/channels?status=open`).then(r => r.json()).catch(() => ({
     channels: []
   }))]);
   if (!node || typeof node !== "object") throw new Error("Invalid node response");
@@ -3720,10 +3752,68 @@ function ShareCard({
     }
   }, "Save the PNG and drop it into any post. Works on X, Nostr, Telegram."))));
 }
+function RelayToggle() {
+  const on = useRelay();
+  return React.createElement("div", {
+    style: {
+      maxWidth: 480,
+      margin: "0 auto 12px",
+      animation: "fadeUp .5s ease .22s both",
+      display: "flex",
+      alignItems: "flex-start",
+      gap: 11,
+      background: on ? T.cyanLo : T.surface,
+      border: `1px solid ${on ? T.cyan + "66" : T.border}`,
+      borderRadius: 10,
+      padding: "10px 14px",
+      transition: "all .2s"
+    }
+  }, React.createElement("button", {
+    role: "switch",
+    "aria-checked": on,
+    "aria-label": "Route lookups through the AnonScore privacy relay to hide your IP from the block explorer",
+    onClick: () => setRelay(!on),
+    style: {
+      flexShrink: 0,
+      width: 40,
+      height: 23,
+      borderRadius: 999,
+      border: "none",
+      cursor: "pointer",
+      background: on ? T.cyan : T.border,
+      position: "relative",
+      transition: "background .2s",
+      marginTop: 1
+    }
+  }, React.createElement("span", {
+    style: {
+      position: "absolute",
+      top: 2.5,
+      left: on ? 19 : 2.5,
+      width: 18,
+      height: 18,
+      borderRadius: "50%",
+      background: on ? T.bg : T.textDim,
+      transition: "left .2s"
+    }
+  })), React.createElement("div", {
+    style: {
+      fontFamily: T.sans,
+      fontSize: 12,
+      color: T.textMid,
+      lineHeight: 1.5,
+      textAlign: "left"
+    }
+  }, React.createElement("strong", {
+    style: {
+      color: on ? T.cyan : T.text
+    }
+  }, on ? "Privacy relay on" : "Hide my IP from the explorer"), on ? " — this lookup routes through AnonScore's open-source, no-log relay, so the explorer sees our server's IP, not yours. It still sees the address itself (that's the tradeoff)." : " — route this lookup through AnonScore's no-log relay so the block explorer can't tie the address to your IP. Open source; the address still reaches the explorer, just not your IP."));
+}
 const GUARANTEES = [{
   icon: "⬡",
   label: "No server, no backend",
-  desc: "Your address goes directly from your browser to Blockstream's public API. It never touches our infrastructure."
+  desc: "By default your address goes directly from your browser to Blockstream's public API — it never touches our infrastructure. (Turn on the optional privacy relay and it routes through our stateless no-log Worker instead, to hide your IP from the explorer.)"
 }, {
   icon: "◌",
   label: "Nothing stored or logged",
@@ -5371,7 +5461,7 @@ function Landing({
       textAlign: "left",
       transition: "border-color .2s"
     }
-  }, isLn ? t("trust.ln") : t("trust.btc")), history.length > 0 && React.createElement("div", {
+  }, isLn ? t("trust.ln") : t("trust.btc")), RELAY_URL && React.createElement(RelayToggle, null), history.length > 0 && React.createElement("div", {
     style: {
       maxWidth: 480,
       margin: "0 auto 12px",
