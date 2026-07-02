@@ -12638,16 +12638,14 @@ function App() {
           msg: `Lightning privacy score: ${result.score}/100`
         });
       } catch {
-        await new Promise(r => setTimeout(r, 1000));
-        setLnNodeData(DEMO_LN.node);
-        setLnChannels(DEMO_LN.channels);
-        setScanDataReady(true);
-        await new Promise(r => setTimeout(r, 300));
-        setPage("ln_dashboard");
-        toast.show("Showing Lightning demo", {
-          icon: "ℹ️",
-          color: T.blue,
-          msg: "Live node API unavailable — sample shown"
+        await new Promise(r => setTimeout(r, 700));
+        setScanDataReady(false);
+        setIsScanningLightning(false);
+        setPage("landing");
+        toast.show("Node scan couldn't complete", {
+          icon: "⚠️",
+          color: T.red,
+          msg: "Couldn't reach the Lightning API — check your connection and try again."
         });
       }
       return;
@@ -12700,18 +12698,13 @@ function App() {
         msg: `Privacy score: ${analysis.score}/100`
       });
     } catch {
-      await new Promise(r => setTimeout(r, 1000));
-      setAddrInfo(DEMO.addrInfo);
-      setUtxos(DEMO.utxos);
-      setTxs(DEMO.txs);
-      setScanAt(Date.now());
-      setScanDataReady(true);
-      await new Promise(r => setTimeout(r, 300));
-      setPage("dashboard");
-      toast.show("Showing demo data", {
-        icon: "ℹ️",
-        color: T.blue,
-        msg: "Live API unavailable — sample shown"
+      await new Promise(r => setTimeout(r, 700));
+      setScanDataReady(false);
+      setPage("landing");
+      toast.show("Scan couldn't complete", {
+        icon: "⚠️",
+        color: T.red,
+        msg: "Couldn't reach the blockchain API — check your connection and try again."
       });
     }
   }, [toast]);
