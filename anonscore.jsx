@@ -500,7 +500,9 @@ On February 1, 2022, everything moved at once — all the hack proceeds consolid
 
 What makes this address forensically remarkable: the funding pattern is completely unlike normal wallet behaviour. Every input arrived on a single date. The address has never sent anything out. There is zero mixing, zero CoinJoin, zero attempt at obfuscation — the DOJ simply took custody and held.
 
-The privacy score here is interesting not because of what the wallet's owner did wrong, but because of what a government seizure wallet looks like on-chain: extreme balance concentration, no transaction diversity, no privacy measures whatsoever. It scores poorly by every heuristic — not because of bad habits, but because it was never meant to be private.`,
+The privacy score here is interesting not because of what the wallet's owner did wrong, but because of what a government seizure wallet looks like on-chain: extreme balance concentration, no transaction diversity, no privacy measures whatsoever. It scores poorly by every heuristic — not because of bad habits, but because it was never meant to be private.
+
+The case resolved after the seizure: both pleaded guilty to money-laundering conspiracy in August 2023 — Lichtenstein admitting he was the original 2016 hacker. On November 14, 2024 he was sentenced to five years; Heather "Razzlekhan" Morgan followed on November 18 with 18 months. (Lichtenstein was released early in 2026 under the First Step Act.) The forensic point stands: the chain preserved the whole trail for years, and the coins never had to move for the case to close.`,
     thread: [
       "In 2016, hackers stole 119,756 BTC from Bitfinex (~$72M at the time). The funds sat dormant for 6 years. Then in Feb 2022, the DOJ moved it all at once — and arrested a NYC couple the same day. Here's what the on-chain data shows 🧵",
       "All 94,000+ BTC arrived at this address on a single date: February 1, 2022. Every input, same day. That's not how normal wallets work. That's a government seizure — structured, controlled, and permanent.",
@@ -509,7 +511,7 @@ The privacy score here is interesting not because of what the wallet's owner did
       "The lesson isn't about the DOJ's privacy. It's about what 6 years of blockchain forensics looks like. Chainalysis and CipherTrace traced every hop. The hack funds never really moved — they just waited to be claimed. anonscore.com/?scan=bc1qazcm763858nkj2dj986etajv6wquslv8uxwczt",
     ],
     tags: ["#Bitcoin", "#Bitfinex", "#Forensics", "#DOJ"],
-    notable: ["Largest crypto seizure in history", "Funded in a single day — Feb 1 2022", "Connected to 2016 Bitfinex hack", "Ilya Lichtenstein & Heather Morgan case"],
+    notable: ["Largest crypto seizure in history", "Funded in a single day — Feb 1 2022", "Connected to 2016 Bitfinex hack", "Lichtenstein & Morgan sentenced Nov 2024 (5 yrs / 18 mo)"],
     externalUrl: "https://www.justice.gov/opa/pr/two-arrested-alleged-conspiracy-launder-45-billion-stolen-cryptocurrency-hack",
   },
   {
