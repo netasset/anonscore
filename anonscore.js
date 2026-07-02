@@ -50,6 +50,7 @@ input:focus-visible,button:focus-visible{outline-offset:2px}
 .blink{animation:blink 1s step-end infinite}
 @keyframes breathe{0%,100%{box-shadow:0 0 50px -14px #22D3EE40}50%{box-shadow:0 0 66px -8px #22D3EE73}}
 @keyframes dotPulse{0%,100%{box-shadow:0 0 8px #F7931A,0 0 0 0 #F7931A66}70%{box-shadow:0 0 8px #F7931A,0 0 0 9px #F7931A00}}
+@keyframes barGrow{from{width:0}to{width:var(--w,100%)}}
 .reveal{opacity:0;transform:translateY(26px);transition:opacity .7s cubic-bezier(.16,.84,.44,1),transform .7s cubic-bezier(.16,.84,.44,1);will-change:opacity,transform}
 .reveal.in{opacity:1;transform:none}
 .lift{transition:transform .28s cubic-bezier(.16,.84,.44,1),box-shadow .28s,border-color .28s}
@@ -10404,7 +10405,9 @@ function Dashboard({
         height: "100%",
         width: `${pct}%`,
         background: col,
-        borderRadius: 4
+        borderRadius: 4,
+        "--w": `${pct}%`,
+        animation: `barGrow .8s cubic-bezier(.16,.84,.44,1) ${i * .07}s both`
       }
     })), React.createElement("div", {
       style: {
