@@ -443,8 +443,8 @@ const WALLET_REVIEWS = [{
   category: "desktop",
   os: "macOS · Windows · Linux",
   pitch: "The pro's desktop Bitcoin wallet. Best-in-class coin control, UTXO labelling, hardware-wallet support, and Tor / your-own-node connectivity by default.",
-  strengths: ["Per-UTXO freeze, label, and select before every spend", "Connects to your own Electrum server or Bitcoin Core out of the box — no leaking queries", "Strong hardware wallet support (Coldcard, Trezor, Ledger, Foundation, BitBox, Jade)"],
-  watchOuts: ["Desktop only — there is no mobile app", "Whirlpool CoinJoin coordinator (Samourai) was shut down in 2024; CoinJoin features require Whirlpool-compatible alternatives or manual joins"]
+  strengths: ["Per-UTXO freeze, label, and select before every spend", "Connects to your own Electrum server or Bitcoin Core out of the box — no leaking queries", "Silent Payments send + receive (BIP352), plus strong hardware-wallet support (Coldcard, Trezor, Ledger, Foundation, BitBox, Jade)"],
+  watchOuts: ["Desktop only — there is no mobile app", "No built-in CoinJoin since Samourai's Whirlpool was seized in 2024 (Sparrow removed the integration) — use it for coin control + Silent Payments, and mix via a separate tool if needed"]
 }, {
   name: "Wasabi Wallet",
   category: "desktop",
@@ -452,6 +452,13 @@ const WALLET_REVIEWS = [{
   pitch: "Privacy-first desktop Bitcoin wallet with WabiSabi CoinJoin and automatic coin labelling. Beginner-friendlier than Sparrow.",
   strengths: ["WabiSabi CoinJoin runs automatically once you pick a coordinator", "Default labels every coin by source, helping avoid accidental cluster merges", "Built-in Tor"],
   watchOuts: ["Its original coordinator (zkSNACKs) shut down in 2024 — you now select a community-run coordinator via 'Change Coordinator'", "Centralized WabiSabi coordinators carry some deanonymization risk; Joinmarket avoids a coordinator entirely", "Desktop only"]
+}, {
+  name: "Ginger Wallet",
+  category: "desktop",
+  os: "macOS · Windows · Linux",
+  pitch: "An open-source Wasabi fork that runs its own active WabiSabi CoinJoin coordinator — filling the gap left when the original coordinator shut down in 2024.",
+  strengths: ["Ships with a working CoinJoin coordinator out of the box — no hunting for one", "Inherits Wasabi's client-side block filters, coin labelling, and built-in Tor", "Fully open source, community-maintained"],
+  watchOuts: ["Centralized WabiSabi coordinators carry some deanonymization risk — Joinmarket avoids a coordinator entirely", "Desktop only; a younger fork than upstream Wasabi"]
 }, {
   name: "Bitcoin Core",
   category: "desktop",
@@ -481,18 +488,25 @@ const WALLET_REVIEWS = [{
   strengths: ["Replaces BitPay-style processors that doxx every customer", "Built-in Payjoin + CoinJoin support for merchant flows", "Plugin ecosystem (point-of-sale, accounting, gift cards)"],
   watchOuts: ["You're running infrastructure — backups, updates, and uptime are on you", "Best for merchants and power users; not a personal wallet"]
 }, {
+  name: "Cake Wallet",
+  category: "mobile",
+  os: "iOS · Android · macOS",
+  pitch: "Open-source mobile wallet for Bitcoin and Monero that brings desktop-grade privacy features — Silent Payments and Payjoin — to your phone.",
+  strengths: ["Silent Payments send + receive with on-device scanning (the server never learns which outputs are yours)", "Payjoin v2 in the default send flow — breaks the common-input heuristic on ordinary payments", "Open source; also holds Monero for cross-chain privacy"],
+  watchOuts: ["Multi-coin app is heavier than a Bitcoin-only wallet", "Built-in swap/exchange services are third parties — using them can pull in KYC"]
+}, {
   name: "Blue Wallet",
   category: "mobile",
   os: "iOS · Android",
   pitch: "Open-source mobile Bitcoin wallet with HD support, multisig, Lightning (via LndHub), and Tor.",
-  strengths: ["HD wallet — fresh address per receive by default", "Optional Tor for connection privacy", "Multisig (Vault) support"],
+  strengths: ["HD wallet — fresh address per receive by default, plus Silent Payments receiving (BIP352)", "Optional Tor for connection privacy", "Multisig (Vault) support"],
   watchOuts: ["Default Lightning is custodial (LndHub) — fine for spending money, not savings", "Mobile means limited coin control vs. desktop"]
 }, {
   name: "Nunchuk",
   category: "mobile",
   os: "iOS · Android · macOS · Windows · Linux",
   pitch: "Privacy-focused multisig wallet with strong UTXO management and collaborative custody.",
-  strengths: ["First-class multisig + assisted recovery", "Per-UTXO tagging and coin control", "Works with most hardware wallets"],
+  strengths: ["First-class multisig + assisted recovery", "Per-UTXO tagging and coin control, plus Silent Payments receiving (BIP352)", "Works with most hardware wallets"],
   watchOuts: ["Some features (key recovery service) involve trusting Nunchuk Pro — read the model before enabling", "Best for users already comfortable with multisig concepts"]
 }, {
   name: "Phoenix Wallet",
