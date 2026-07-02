@@ -5159,7 +5159,7 @@ function Landing({
   }), React.createElement("section", {
     style: {
       position: "relative",
-      padding: isMobile ? "56px 20px 48px" : "80px 48px 64px",
+      padding: isMobile ? "34px 20px 40px" : "50px 48px 56px",
       maxWidth: 860,
       margin: "0 auto",
       width: "100%",
@@ -5170,7 +5170,7 @@ function Landing({
       fontFamily: T.mono,
       fontSize: 10,
       letterSpacing: 2.5,
-      marginBottom: 18,
+      marginBottom: 14,
       animation: "fadeUp .5s ease both",
       display: "flex",
       gap: 8,
@@ -5205,17 +5205,16 @@ function Landing({
     style: {
       fontSize: isMobile ? 15 : 18,
       color: T.textMid,
-      lineHeight: 1.7,
-      marginBottom: 32,
+      lineHeight: 1.6,
       fontWeight: 300,
       animation: "fadeUp .5s ease .14s both",
       maxWidth: 560,
-      margin: "0 auto 32px"
+      margin: "0 auto 20px"
     }
   }, t("hero.sub")), !isLn && React.createElement("div", {
     style: {
       maxWidth: 480,
-      margin: "0 auto 28px",
+      margin: "0 auto 16px",
       animation: "fadeUp .5s ease .16s both"
     }
   }, React.createElement("div", {
