@@ -2562,9 +2562,9 @@ function Landing({ onAnalyze, isMobile, onCases }) {
         <div className="aurora" style={{ bottom: "-24%", left: "32%", width: 400, height: 400, background: "radial-gradient(circle,#22D3EE12 0%,transparent 70%)", animationDelay: "-15s" }} />
         <div className="scan-ov" />
 
-        <section style={{ position: "relative", padding: isMobile ? "56px 20px 48px" : "80px 48px 64px", maxWidth: 860, margin: "0 auto", width: "100%", textAlign: "center" }}>
+        <section style={{ position: "relative", padding: isMobile ? "34px 20px 40px" : "50px 48px 56px", maxWidth: 860, margin: "0 auto", width: "100%", textAlign: "center" }}>
           {/* Eyebrow */}
-          <div style={{ fontFamily: T.mono, fontSize: 10, letterSpacing: 2.5, marginBottom: 18, animation: "fadeUp .5s ease both", display: "flex", gap: 8, alignItems: "center", justifyContent: "center" }}>
+          <div style={{ fontFamily: T.mono, fontSize: 10, letterSpacing: 2.5, marginBottom: 14, animation: "fadeUp .5s ease both", display: "flex", gap: 8, alignItems: "center", justifyContent: "center" }}>
             <span style={{ color: T.btc }}>₿</span>
             <span style={{ color: T.cyan }}>{t("hero.eyebrow")}</span>
           </div>
@@ -2574,13 +2574,13 @@ function Landing({ onAnalyze, isMobile, onCases }) {
             {t("hero.h1.line1")}<br />{t("hero.h1.line2")}<br /><em className="accent-glow" style={{ color: T.cyan, fontStyle: "italic" }}>{t("hero.h1.em")}</em>
           </h1>
 
-          <p style={{ fontSize: isMobile ? 15 : 18, color: T.textMid, lineHeight: 1.7, marginBottom: 32, fontWeight: 300, animation: "fadeUp .5s ease .14s both", maxWidth: 560, margin: "0 auto 32px" }}>
+          <p style={{ fontSize: isMobile ? 15 : 18, color: T.textMid, lineHeight: 1.6, fontWeight: 300, animation: "fadeUp .5s ease .14s both", maxWidth: 560, margin: "0 auto 20px" }}>
             {t("hero.sub")}
           </p>
 
           {/* Score spectrum — slim, inline — hidden when Lightning detected */}
           {!isLn && (
-            <div style={{ maxWidth: 480, margin: "0 auto 28px", animation: "fadeUp .5s ease .16s both" }}>
+            <div style={{ maxWidth: 480, margin: "0 auto 16px", animation: "fadeUp .5s ease .16s both" }}>
               <div style={{ position: "relative", height: 6, borderRadius: 6, background: `linear-gradient(90deg, ${T.red} 0%, ${T.btc} 40%, ${T.amber} 60%, ${T.green} 100%)`, marginBottom: 6 }}>
                 <div style={{ position: "absolute", top: "50%", left: "38%", transform: "translate(-50%,-50%)", width: 12, height: 12, borderRadius: "50%", background: T.bg, border: `2px solid ${T.btc}`, boxShadow: `0 0 8px ${T.btc}`, animation: "dotPulse 2.4s ease-out infinite" }} />
               </div>
