@@ -273,8 +273,8 @@ const STRINGS = {
     "spectrum.low": "0 · Fully traceable",
     "spectrum.avg": "avg wallet: 38",
     "spectrum.high": "100 · Invisible",
-    "trust.btc": "₿ Bitcoin addresses are public by design — we read the blockchain like a block explorer. Your address is never logged or stored.",
-    "trust.ln": "⚡ Lightning node pubkeys are public on the gossip network — we query mempool.space's public API. Your pubkey is never logged or stored.",
+    "trust.btc": "₿ Bitcoin addresses are public by design. Your browser reads the chain directly from a public explorer (blockstream.info) — AnonScore never sees or stores your address, but that explorer sees your IP alongside it. Browse over Tor to hide even that link.",
+    "trust.ln": "⚡ Lightning node pubkeys are public on the gossip network. Your browser queries mempool.space directly — AnonScore never sees or stores your pubkey, but that API sees your IP alongside it. Browse over Tor to hide even that link.",
     "cta.analyze": "Analyze →",
     "cta.audit": "⚡ Audit →",
     "sample.divider": "or try a sample",
@@ -314,8 +314,8 @@ const STRINGS = {
     "spectrum.low": "0 · Totalmente rastreable",
     "spectrum.avg": "billetera promedio: 38",
     "spectrum.high": "100 · Invisible",
-    "trust.btc": "₿ Las direcciones de Bitcoin son públicas por diseño — leemos la blockchain como un explorador de bloques. Tu dirección nunca se registra ni se guarda.",
-    "trust.ln": "⚡ Las claves públicas de nodos Lightning son públicas en la red de gossip — consultamos la API pública de mempool.space. Tu clave nunca se registra ni se guarda.",
+    "trust.btc": "₿ Las direcciones de Bitcoin son públicas por diseño. Tu navegador lee la cadena directamente desde un explorador público (blockstream.info) — AnonScore nunca ve ni guarda tu dirección, pero ese explorador ve tu IP junto a ella. Navega con Tor para ocultar incluso ese vínculo.",
+    "trust.ln": "⚡ Las claves públicas de nodos Lightning son públicas en la red de gossip. Tu navegador consulta mempool.space directamente — AnonScore nunca ve ni guarda tu clave, pero esa API ve tu IP junto a ella. Navega con Tor para ocultar incluso ese vínculo.",
     "cta.analyze": "Analizar →",
     "cta.audit": "⚡ Auditar →",
     "sample.divider": "o prueba un ejemplo",
@@ -8718,7 +8718,7 @@ function ConfirmScanModal({
       lineHeight: 1.65,
       marginBottom: 20
     }
-  }, "This will query the public blockchain API for this address. The address itself is public data \u2014 nothing private leaves your browser."), React.createElement("div", {
+  }, "This queries a public block explorer directly from your browser. The address is public data \u2014 but the explorer sees your IP alongside it. On Tor or your own node, even that link stays private."), React.createElement("div", {
     style: {
       display: "flex",
       gap: 10
