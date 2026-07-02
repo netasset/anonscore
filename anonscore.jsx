@@ -1846,10 +1846,48 @@ function VisualScoreCard({ score, grade, checks, address, isLightning = false, c
 }
 
 /* ─────────────────────────────────────────────
+   MODAL A11Y — one hook every dialog shares. On open: move focus into the
+   panel; while open: trap Tab within it and close on Escape; on close: restore
+   focus to whatever the user was on before (the trigger). Attach the returned
+   ref to the panel element, and give that element role="dialog" aria-modal
+   aria-label + tabIndex={-1}. onClose fires on Escape.
+───────────────────────────────────────────── */
+function useDialog(onClose) {
+  const ref = useRef(null);
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
+  useEffect(() => {
+    const node = ref.current;
+    if (!node) return;
+    const prev = document.activeElement;
+    const focusable = () => [...node.querySelectorAll(
+      'a[href],button:not([disabled]),input:not([disabled]),textarea:not([disabled]),select:not([disabled]),[tabindex]:not([tabindex="-1"])'
+    )].filter(el => el.offsetParent !== null || el === document.activeElement);
+    (focusable()[0] || node).focus();
+    const onKey = (e) => {
+      if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); closeRef.current && closeRef.current(); return; }
+      if (e.key !== "Tab") return;
+      const f = focusable();
+      if (!f.length) { e.preventDefault(); node.focus(); return; }
+      const first = f[0], last = f[f.length - 1], active = document.activeElement;
+      if (e.shiftKey && (active === first || !node.contains(active))) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && (active === last || !node.contains(active))) { e.preventDefault(); first.focus(); }
+    };
+    document.addEventListener("keydown", onKey, true);
+    return () => {
+      document.removeEventListener("keydown", onKey, true);
+      if (prev && typeof prev.focus === "function") prev.focus();
+    };
+  }, []);
+  return ref;
+}
+
+/* ─────────────────────────────────────────────
    SHARE MODAL
 ───────────────────────────────────────────── */
 function ShareCard({ score, grade, checks, address, isLightning = false, onClose }) {
   const col = scoreColor(score);
+  const dialogRef = useDialog(onClose);
   const [mode, setMode] = useState("copy");
   const [didCopy, setDidCopy] = useState(false);
   const [nostrSent, setNostrSent] = useState(false);
@@ -1908,7 +1946,8 @@ function ShareCard({ score, grade, checks, address, isLightning = false, onClose
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 800, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
       <div onClick={onClose} style={{ position: "absolute", inset: 0, background: "#00000088" }} />
-      <div style={{ position: "relative", background: T.card, border: `1px solid ${T.border}`, borderRadius: 20, padding: 24,
+      <div ref={dialogRef} role="dialog" aria-modal="true" aria-label="Share your privacy score" tabIndex={-1}
+        style={{ position: "relative", background: T.card, border: `1px solid ${T.border}`, borderRadius: 20, padding: 24,
         width: isCard ? "min(380px,96vw)" : "min(400px,94vw)", animation: "fadeUp .3s ease both", transition: "width .2s ease" }}>
 
         {/* Tab strip */}
@@ -3269,11 +3308,12 @@ function ParticleCanvas({ width, height, color = T.cyan }) {
 ───────────────────────────────────────────── */
 function FundingDisclosure({ onClose }) {
   const affiliates = Object.keys(TOOL_AFFILIATE_URL);
+  const dialogRef = useDialog(onClose);
   return (
-    <div role="dialog" aria-modal="true" aria-label="How we get paid"
-      onClick={onClose}
+    <div onClick={onClose}
       style={{ position: "fixed", inset: 0, zIndex: 950, background: "#000000aa", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
-      <div onClick={e => e.stopPropagation()}
+      <div ref={dialogRef} role="dialog" aria-modal="true" aria-label="How we get paid" tabIndex={-1}
+        onClick={e => e.stopPropagation()}
         style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 18, padding: 28, width: "min(560px,94vw)", maxHeight: "88vh", overflow: "auto", animation: "fadeUp .25s ease" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
           <div>
@@ -3858,9 +3898,11 @@ Rules:
 /* ── Consent gate — shown before any data leaves the browser ── */
 function AiConsentGate({ score, grade, checks, recommendations, walletMeta, onAccept, onDecline }) {
   const { preview } = buildAiContext(checks, recommendations, score, grade, walletMeta);
+  const dialogRef = useDialog(onDecline);
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 950, display: "flex", alignItems: "center", justifyContent: "center", padding: 20, background: "#000000bb" }}>
-      <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 20, padding: 28, width: "min(420px,96vw)", animation: "fadeUp .25s ease both" }}>
+      <div ref={dialogRef} role="dialog" aria-modal="true" aria-label="AI assistant data disclosure" tabIndex={-1}
+        style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 20, padding: 28, width: "min(420px,96vw)", animation: "fadeUp .25s ease both" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 20 }}>
           <div style={{ width: 32, height: 32, background: T.cyan + "18", border: `1px solid ${T.cyan}33`, borderRadius: 9, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15 }}>✦</div>
           <div>
@@ -3913,6 +3955,40 @@ function AiConsentGate({ score, grade, checks, recommendations, walletMeta, onAc
           </button>
           <button onClick={onAccept} style={{ flex: 1, padding: "12px", background: T.cyan, border: "none", borderRadius: 10, color: T.bg, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
             I understand — continue
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── Shared-scan-link confirm — a ?scan= link never auto-fires; the user
+   confirms first. Its own component so it mounts/unmounts with the prompt
+   and gets the shared dialog a11y (focus + Escape + trap). ── */
+function ConfirmScanModal({ pendingScan, onCancel, onConfirm }) {
+  const dialogRef = useDialog(onCancel);
+  const kind = pendingScan.inputType === "btc" ? "Bitcoin address" : pendingScan.inputType === "ln_address" ? "Lightning address" : "Lightning node";
+  return (
+    <div style={{ position: "fixed", inset: 0, zIndex: 900, display: "flex", alignItems: "center", justifyContent: "center", padding: 20, background: "#000000aa" }}>
+      <div ref={dialogRef} role="dialog" aria-modal="true" aria-label="Confirm shared scan link" tabIndex={-1}
+        style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 18, padding: 28, width: "min(400px,94vw)", animation: "fadeUp .25s ease" }}>
+        <div style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim, letterSpacing: 2, marginBottom: 14 }}>SHARED SCAN LINK</div>
+        <div style={{ fontFamily: T.serif, fontSize: 20, color: T.text, marginBottom: 10, fontWeight: 400 }}>
+          You were linked to scan this {kind}
+        </div>
+        <div style={{ fontFamily: T.mono, fontSize: 11, color: T.textDim, background: T.surface, border: `1px solid ${T.border}`, borderRadius: 8, padding: "10px 14px", marginBottom: 16, wordBreak: "break-all" }}>
+          {pendingScan.addr.length > 30 ? `${pendingScan.addr.slice(0, 20)}…${pendingScan.addr.slice(-8)}` : pendingScan.addr}
+        </div>
+        <div style={{ fontSize: 13, color: T.textMid, lineHeight: 1.65, marginBottom: 20 }}>
+          This will query the public blockchain API for this address. The address itself is public data — nothing private leaves your browser.
+        </div>
+        <div style={{ display: "flex", gap: 10 }}>
+          <button onClick={onCancel} style={{ flex: 1, padding: "12px", background: "transparent", border: `1.5px solid ${T.border}`, borderRadius: 10, color: T.textMid, fontSize: 13, cursor: "pointer" }}>
+            Cancel
+          </button>
+          <button onClick={onConfirm}
+            style={{ flex: 1, padding: "12px", background: T.cyan, border: "none", borderRadius: 10, color: T.bg, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
+            Scan it →
           </button>
         </div>
       </div>
@@ -5510,29 +5586,11 @@ function App() {
 
       {/* ?scan= confirmation — shown over landing, never auto-fires */}
       {pendingScan && page === "landing" && (
-        <div style={{ position: "fixed", inset: 0, zIndex: 900, display: "flex", alignItems: "center", justifyContent: "center", padding: 20, background: "#000000aa" }}>
-          <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 18, padding: 28, width: "min(400px,94vw)", animation: "fadeUp .25s ease" }}>
-            <div style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim, letterSpacing: 2, marginBottom: 14 }}>SHARED SCAN LINK</div>
-            <div style={{ fontFamily: T.serif, fontSize: 20, color: T.text, marginBottom: 10, fontWeight: 400 }}>
-              You were linked to scan this {pendingScan.inputType === "btc" ? "Bitcoin address" : pendingScan.inputType === "ln_address" ? "Lightning address" : "Lightning node"}
-            </div>
-            <div style={{ fontFamily: T.mono, fontSize: 11, color: T.textDim, background: T.surface, border: `1px solid ${T.border}`, borderRadius: 8, padding: "10px 14px", marginBottom: 16, wordBreak: "break-all" }}>
-              {pendingScan.addr.length > 30 ? `${pendingScan.addr.slice(0, 20)}…${pendingScan.addr.slice(-8)}` : pendingScan.addr}
-            </div>
-            <div style={{ fontSize: 13, color: T.textMid, lineHeight: 1.65, marginBottom: 20 }}>
-              This will query the public blockchain API for this address. The address itself is public data — nothing private leaves your browser.
-            </div>
-            <div style={{ display: "flex", gap: 10 }}>
-              <button onClick={() => setPendingScan(null)} style={{ flex: 1, padding: "12px", background: "transparent", border: `1.5px solid ${T.border}`, borderRadius: 10, color: T.textMid, fontSize: 13, cursor: "pointer" }}>
-                Cancel
-              </button>
-              <button onClick={() => { const p = pendingScan; setPendingScan(null); analyze(p.addr, false, p.inputType); }}
-                style={{ flex: 1, padding: "12px", background: T.cyan, border: "none", borderRadius: 10, color: T.bg, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
-                Scan it →
-              </button>
-            </div>
-          </div>
-        </div>
+        <ConfirmScanModal
+          pendingScan={pendingScan}
+          onCancel={() => setPendingScan(null)}
+          onConfirm={() => { const p = pendingScan; setPendingScan(null); analyze(p.addr, false, p.inputType); }}
+        />
       )}
 
       {/* Page transition: opacity-only fade on every navigation (keyed by page so it replays; no transform → sticky nav preserved) */}
