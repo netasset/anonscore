@@ -5,3 +5,12 @@ compatibility_date = "2026-01-01"
 # Stateless by design: no KV, no D1, no R2, no Durable Objects, no bindings.
 # Nothing to store means nothing to log. The relay's whole value is that it
 # holds no data about who looked up what — see worker.js for the full rationale.
+
+# Observability is explicitly OFF and pinned here so it stays off across every
+# future deploy. Logs/traces would capture request URLs — which contain the
+# addresses users look up — so for this Worker, "no observability" IS the
+# feature. This line makes the dashboard's Logs/Traces/Exports/Sampling
+# "Disabled" state verifiable in the open-source repo, not just a settings
+# screen you have to take our word for.
+[observability]
+enabled = false

@@ -2118,10 +2118,22 @@ function RelayToggle() {
 /* ─────────────────────────────────────────────
    TRUST BOX — collapsed by default, expands on click
 ───────────────────────────────────────────── */
+// Every claim links to its proof. That's the standard an open-source privacy
+// tool should hold itself to: don't ask for trust — hand over the evidence.
+const REPO = "https://github.com/netasset/anonscore";
 const GUARANTEES = [
-  { icon: "⬡", label: "No server, no backend", desc: "By default your address goes directly from your browser to Blockstream's public API — it never touches our infrastructure. (Turn on the optional privacy relay and it routes through our stateless no-log Worker instead, to hide your IP from the explorer.)" },
-  { icon: "◌", label: "Nothing stored or logged", desc: "We have no database, no analytics, no session tracking. Close the tab and it's gone." },
-  { icon: "◎", label: "Scoring runs in your browser", desc: "All 10 heuristics execute locally. Your score and results are computed on your device and sent nowhere — not even to us. (The address itself does reach Blockstream's public API to fetch the chain data, as noted above.)" },
+  { icon: "⬡", label: "No server, no backend", desc: "By default your address goes directly from your browser to Blockstream's public API — it never touches our infrastructure. (Turn on the optional privacy relay and it routes through our stateless no-log Worker instead, to hide your IP from the explorer.)",
+    proof: "read the fetch code", href: `${REPO}/blob/main/anonscore.jsx` },
+  { icon: "◌", label: "Nothing stored or logged", desc: "We have no database, no analytics, no session tracking — there is no server that could remember you. Your scan history lives only in your own browser's local storage (clearable in the UI) and is never transmitted.",
+    proof: "see the privacy stance", href: `${REPO}#privacy-stance-what-makes-this-site-different` },
+  { icon: "◎", label: "Scoring runs in your browser", desc: "All 10 heuristics execute locally. Your score and results are computed on your device and sent nowhere — not even to us. (The address itself does reach Blockstream's public API to fetch the chain data, as noted above.)",
+    proof: "read the heuristics", href: `${REPO}/blob/main/anonscore.jsx` },
+  { icon: "⬢", label: "Zero third-party requests", desc: "Every script, font, and icon is self-hosted — no CDNs, no trackers. A strict Content-Security-Policy makes your browser physically block requests to anywhere except the public explorers and our two opt-in workers. It's enforced by your browser, not by our promise.",
+    proof: "read the CSP header", href: `${REPO}/blob/main/_headers` },
+  { icon: "◇", label: "Even the relay can't remember you", desc: "The optional privacy relay is a stateless Worker: no storage bindings, no logging code, and observability is pinned off in its deploy config — so 'no logs' is a setting in the open-source repo, not a dashboard state you'd have to take on faith.",
+    proof: "read the relay source", href: `${REPO}/blob/main/workers/relay/worker.js` },
+  { icon: "▣", label: "Open source, MIT, auditable in minutes", desc: "The entire tool — site, heuristics, and relay — is one readable repo. Security issues have a private disclosure path, and even how we're paid for is disclosed in the footer.",
+    proof: "browse the repo", href: REPO },
 ];
 
 function TrustBox() {
@@ -2131,7 +2143,7 @@ function TrustBox() {
       {/* Collapsed header — always visible */}
       <button onClick={() => setOpen(o => !o)} style={{ width: "100%", background: "transparent", border: "none", padding: "12px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-          {GUARANTEES.map((g, i) => (
+          {GUARANTEES.slice(0, 3).map((g, i) => (
             <div key={i} style={{ display: "flex", alignItems: "center", gap: 5 }}>
               <span style={{ color: T.green, fontSize: 11 }}>✓</span>
               <span style={{ fontFamily: T.mono, fontSize: 11, color: T.textMid, letterSpacing: .5, whiteSpace: "nowrap" }}>{g.label}</span>
@@ -2150,12 +2162,13 @@ function TrustBox() {
                 <div>
                   <span style={{ fontSize: 13, fontWeight: 600, color: T.text }}>{g.label} </span>
                   <span style={{ fontSize: 13, color: T.textMid }}>{g.desc}</span>
+                  {g.href && <>{" "}<a href={g.href} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, color: T.cyan, textDecoration: "none", fontFamily: T.mono, whiteSpace: "nowrap" }}>verify: {g.proof} ↗</a></>}
                 </div>
               </div>
             ))}
           </div>
           <div style={{ marginTop: 12, paddingTop: 10, borderTop: `1px solid ${T.borderLo}` }}>
-            <a href="https://github.com/netasset/anonscore" target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, color: T.cyan, textDecoration: "none", fontFamily: T.mono }}>Don't take our word for it — audit the source on GitHub ↗</a>
+            <a href="https://github.com/netasset/anonscore" target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, color: T.cyan, textDecoration: "none", fontFamily: T.mono }}>Don't take our word for it — every claim above links to its proof. Audit the full source on GitHub ↗</a>
           </div>
         </div>
       )}
@@ -2854,6 +2867,14 @@ function Landing({ onAnalyze, isMobile, onCases }) {
               </div>
             ))}
           </div>
+        </div>
+      </div>
+
+      {/* ── OPENNESS & PRIVACY — every claim links to its proof ── */}
+      <div className="reveal" style={{ padding: isMobile ? "28px 20px 0" : "36px 48px 0" }}>
+        <div style={{ maxWidth: 860, margin: "0 auto" }}>
+          <div style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim, letterSpacing: 2, marginBottom: 10 }}>RADICALLY OPEN · VERIFY, DON'T TRUST</div>
+          <TrustBox />
         </div>
       </div>
 
