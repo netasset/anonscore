@@ -1234,17 +1234,17 @@ function runLightningEngine(node = {}, channels = []) {
       "No open channels found. A node with no channels has limited routing privacy and cannot receive spontaneous payments.", "medium", -6);
   else if (chCount < 3)
     add("channels", "Channel Diversity", "warn",
-      `Only ${chCount} channel${chCount > 1 ? "s" : ""}. Low channel count limits routing path diversity, making payment flows easier to trace.`, "medium", -4);
+      `Only ${chCount} publicly-announced channel${chCount > 1 ? "s" : ""} — low public routing diversity. (Private, unannounced channels don't show up here; keeping channels unannounced is more private, not less.)`, "medium", -4);
   else
     add("channels", "Channel Diversity", "pass",
-      `${chCount} channels — good routing diversity makes payment flows harder to trace.`, "clean", 0);
+      `${chCount} publicly-announced channels — good routing diversity makes payment flows harder to trace.`, "clean", 0);
 
   // 5. Large single channel dominance
   const totalCap = channels.reduce((s, c) => s + (c.capacity || 0), 0);
   const maxCap = channels.length ? Math.max(...channels.map(c => c.capacity || 0)) : 0;
   if (totalCap > 0 && maxCap / totalCap > 0.8)
     add("cap_conc", "Channel Capacity Concentration", "warn",
-      "Over 80% of your node capacity is in one channel. This makes your routing patterns highly predictable.", "medium", -6);
+      "Over 80% of your publicly-visible capacity is in one channel. This makes your routing patterns highly predictable.", "medium", -6);
   else
     add("cap_conc", "Channel Capacity Concentration", "pass",
       "Your capacity is distributed across channels — good for routing privacy.", "clean", 0);
@@ -1278,11 +1278,11 @@ function runLightningEngine(node = {}, channels = []) {
   const openedChannels = channels.length;
   if (openedChannels > 10)
     add("onchain", "On-Chain Channel Footprint", "warn",
-      `${openedChannels} channel opens/closes are recorded on-chain. Each one is a permanent trace linking your Lightning and on-chain identity. Funding channels directly from KYC exchange withdrawals is the riskiest pattern.`,
+      `${openedChannels} publicly-visible channel opens/closes are recorded on-chain. Each one is a permanent trace linking your Lightning and on-chain identity — and private channels add to this on-chain too, they just aren't listed in gossip. Funding channels directly from KYC exchange withdrawals is the riskiest pattern.`,
       "medium", -5);
   else if (openedChannels > 0)
     add("onchain", "On-Chain Channel Footprint", "pass",
-      `${openedChannels} channel${openedChannels > 1 ? "s" : ""} — modest on-chain footprint. Ensure you fund channels from non-KYC UTXOs to avoid linking your identities.`,
+      `${openedChannels} publicly-visible channel${openedChannels > 1 ? "s" : ""} — modest public footprint (private channels have on-chain opens too, not shown here). Ensure you fund channels from non-KYC UTXOs to avoid linking your identities.`,
       "clean", 0);
   else
     add("onchain", "On-Chain Channel Footprint", "pass",
