@@ -1478,27 +1478,27 @@ function runEngine(utxos = [], txs = [], txCount = 0) {
     icon: "🔄",
     action: "Use a new address every time",
     plain: "Your wallet can generate unlimited fresh addresses. Every reuse permanently links your transactions for any analyst to trace.",
-    detail: "All HD wallets generate a new address automatically on every 'Receive'. The key is discipline — never copy-paste a previous address.",
+    detail: "Every HD wallet generates a new address on each 'Receive' — the trick is discipline: never re-paste an old one. If you need a fixed address to publish (a donation link, an invoice), use a Silent Payment (BIP352): you share ONE reusable string ('sp1…') and the sender's wallet derives a fresh, unlinkable on-chain address for every payment — so a public address never causes reuse. Sparrow, Cake Wallet, Nunchuk and BlueWallet support receiving them today.",
     impact: 15,
     effort: "Easy",
     tools: [{
       name: "Sparrow Wallet",
-      note: "Full coin control + address labelling, desktop"
+      note: "Coin control + labelling, and Silent Payments send/receive, desktop"
     }, {
-      name: "Wasabi Wallet",
-      note: "Privacy-focused, automatic rotation, desktop"
+      name: "Cake Wallet",
+      note: "Silent Payments send + receive with on-device scanning, mobile"
+    }, {
+      name: "Nunchuk",
+      note: "Silent Payments receiving + multisig, mobile + desktop"
+    }, {
+      name: "Blue Wallet",
+      note: "Silent Payments receiving, open source, mobile"
     }, {
       name: "Electrum",
       note: "Lightweight, long-standing open source, desktop"
     }, {
       name: "Bitcoin Core",
       note: "Full node wallet, maximum sovereignty"
-    }, {
-      name: "Blue Wallet",
-      note: "Mobile, open source, simple UX"
-    }, {
-      name: "Nunchuk",
-      note: "Mobile + desktop, multisig support"
     }],
     key: "reuse"
   });

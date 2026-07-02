@@ -984,13 +984,13 @@ function runEngine(utxos = [], txs = [], txCount = 0) {
       { name:"Payjoin Dev Kit",note:"Open-source Rust library (BIP78 + BIP77) for wallet builders" },
     ], key:"payjoin" });
   if (failed.find(f => f.key === "reuse"))
-    recs.push({ icon:"🔄", action:"Use a new address every time", plain:"Your wallet can generate unlimited fresh addresses. Every reuse permanently links your transactions for any analyst to trace.", detail:"All HD wallets generate a new address automatically on every 'Receive'. The key is discipline — never copy-paste a previous address.", impact:15, effort:"Easy", tools:[
-      { name:"Sparrow Wallet",  note:"Full coin control + address labelling, desktop" },
-      { name:"Wasabi Wallet",   note:"Privacy-focused, automatic rotation, desktop" },
+    recs.push({ icon:"🔄", action:"Use a new address every time", plain:"Your wallet can generate unlimited fresh addresses. Every reuse permanently links your transactions for any analyst to trace.", detail:"Every HD wallet generates a new address on each 'Receive' — the trick is discipline: never re-paste an old one. If you need a fixed address to publish (a donation link, an invoice), use a Silent Payment (BIP352): you share ONE reusable string ('sp1…') and the sender's wallet derives a fresh, unlinkable on-chain address for every payment — so a public address never causes reuse. Sparrow, Cake Wallet, Nunchuk and BlueWallet support receiving them today.", impact:15, effort:"Easy", tools:[
+      { name:"Sparrow Wallet",  note:"Coin control + labelling, and Silent Payments send/receive, desktop" },
+      { name:"Cake Wallet",     note:"Silent Payments send + receive with on-device scanning, mobile" },
+      { name:"Nunchuk",         note:"Silent Payments receiving + multisig, mobile + desktop" },
+      { name:"Blue Wallet",     note:"Silent Payments receiving, open source, mobile" },
       { name:"Electrum",        note:"Lightweight, long-standing open source, desktop" },
       { name:"Bitcoin Core",    note:"Full node wallet, maximum sovereignty" },
-      { name:"Blue Wallet",     note:"Mobile, open source, simple UX" },
-      { name:"Nunchuk",         note:"Mobile + desktop, multisig support" },
     ], key:"reuse" });
   recs.push({ icon:"⚡", action:"Move spending money to Lightning", plain:"Lightning payments don't appear on-chain at all — zero on-chain footprint for every day-to-day purchase.", detail:"Open a channel from a clean UTXO, then use Lightning for all spending. Options range from fully self-custodial to simple custodial — choose based on how much sovereignty you want.", impact:12, effort:"Medium", tools:[
     { name:"Phoenix Wallet", note:"Self-custodial, mobile, simple UX, automatic channels" },
