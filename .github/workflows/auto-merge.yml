@@ -67,6 +67,16 @@ jobs:
               if (pr.draft) { console.log(`Skip ${tag}: draft`); continue; }
               if (pr.mergeable_state === "dirty") { console.log(`Skip ${tag}: conflicts`); continue; }
 
+              // Safety: never hands-free-merge a PR that modifies its own gate.
+              // A PR touching the test suite, the build, or CI workflows could
+              // weaken/disable the very checks that guard main — require a human.
+              const { data: prFiles } = await github.rest.pulls.listFiles({
+                owner: context.repo.owner, repo: context.repo.repo,
+                pull_number: pr.number, per_page: 100,
+              });
+              const guarded = prFiles.some(f => /^(scripts\/test\.mjs|build\.mjs|\.github\/)/.test(f.filename));
+              if (guarded) { console.log(`Skip ${tag}: modifies the merge gate (test/build/CI) — needs human review`); continue; }
+
               const { data: { check_runs } } = await github.rest.checks.listForRef({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
