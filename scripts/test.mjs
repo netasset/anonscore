@@ -218,14 +218,14 @@ await page.waitForTimeout(3500);
 const dashText = await page.evaluate(() => document.body.innerText);
 if (!dashText.includes("Grade")) fail("Dashboard didn't render after demo scan");
 else pass("Dashboard renders after demo scan");
-for (const tab of ["Fix It", "Overview", "UTXOs", "Transactions", "Methodology"]) {
+for (const tab of ["Fix It", "Overview", "Flow", "UTXOs", "Transactions", "Methodology"]) {
   const el = page.getByText(tab, { exact: true }).first();
   if (await el.count() === 0) { fail(`Dashboard tab missing: ${tab}`); continue; }
   await el.click(); await page.waitForTimeout(250);
   const txt = await page.evaluate(() => document.body.innerText);
   if (txt.length < 500) fail(`Tab ${tab} rendered too little (${txt.length} chars)`);
 }
-pass("All 5 dashboard tabs rendered");
+pass("All 6 dashboard tabs rendered");
 
 // Wallet recommendations should be real outbound links (affiliate scaffolding).
 // Find Sparrow links and verify they point to a real URL.
