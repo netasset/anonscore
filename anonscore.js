@@ -9073,6 +9073,7 @@ function ExposureFlow({
       barMax = isMobile ? 78 : 100;
     const worst = flags.some(f => f.c === T.red) ? T.red : coinjoin ? T.green : hasRound ? T.btc : T.cyan;
     const age = tx.status?.block_time ? Math.floor((Date.now() / 1000 - tx.status.block_time) / 86400) : null;
+    const explain = coinjoin ? "Joined a set of equal-value outputs — a CoinJoin that breaks the trail between your coins." : consolidation ? `Merged ${inCount} separate inputs into one output — those coins are now provably the same owner.` : hasReuse ? "Change returned to an address you'd already used — this links the spend back to your history." : hasDust ? "Contains a dust output — a tiny ‘beacon’ analysts plant to track where your coins go next." : hasRound ? "A round-number output — the classic fingerprint of a withdrawal straight from a KYC exchange." : "No obvious linkage leak here — the inputs and outputs don't tie back to your other coins.";
     return React.createElement("div", {
       key: tx.txid || ti,
       style: {
@@ -9193,7 +9194,16 @@ function ExposureFlow({
       fontFamily: T.mono,
       fontSize: "9",
       fill: T.textDim
-    }, "+", extra, " more output", extra !== 1 ? "s" : "")));
+    }, "+", extra, " more output", extra !== 1 ? "s" : "")), React.createElement("div", {
+      style: {
+        fontSize: 12.5,
+        color: T.textMid,
+        lineHeight: 1.55,
+        marginTop: 10,
+        borderTop: `1px solid ${T.borderLo}`,
+        paddingTop: 10
+      }
+    }, explain));
   }));
 }
 function Dashboard({
