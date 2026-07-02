@@ -13,7 +13,7 @@ Live: <https://anonscore.com>
 - **10 Bitcoin heuristics**: address reuse, dust attacks, round amounts, CoinJoin usage, unsafe consolidation, UTXO count, fee fingerprinting, change address reuse, balance concentration, script-type mixing.
 - **8 Lightning heuristics**: KYC peers, channel diversity, Tor/IP exposure, alias privacy, capacity concentration, peer analysis, node age, fee fingerprinting.
 - **Plain-English mode**: every check rephrased for non-technical users.
-- **AI Privacy Assistant** (optional, consent-gated): personalized guidance for *your* specific issues. Only the score + issue names are sent. Never the address.
+- **AI Privacy Assistant** (optional, consent-gated): personalized guidance for *your* specific issues. Your address is never sent — only your analysis results: the score, the findings (each with its plain-English explanation), and the ranked recommendations. For public/institutional wallets (Case Files, forensic mode) the payload also includes public on-chain transaction and UTXO summaries — all data anyone can already read off the chain. A preview of exactly what will be sent is shown in the consent gate before anything leaves the browser.
 - **Case Files**: forensic narratives of notable Bitcoin wallets (Bitfinex, Binance, Silk Road, etc.).
 - **PWA**: works fully offline after first visit. Installable to home screen.
 
@@ -25,7 +25,7 @@ Single static site. No backend, no database, no analytics.
 
 | File | Role |
 |---|---|
-| `anonscore.jsx` | **Source of truth.** ~4,100 lines of React with inline styles. Edit this. |
+| `anonscore.jsx` | **Source of truth.** ~5,500 lines of React with inline styles. Edit this. |
 | `anonscore.js` | **Auto-generated** from `anonscore.jsx` (classic React runtime, no in-browser Babel). |
 | `index.html` | Static shell: pre-rendered hero (instant paint), defer-loaded scripts, manifest + favicon + JSON-LD. |
 | `sw.js` | Service worker. Precaches everything for offline. Cache key auto-stamped by build. |
@@ -77,14 +77,7 @@ const TOOL_AFFILIATE_URL = {
 };
 ```
 
-The link gets auto-tagged "↗ affiliate" and the disclosure modal (footer → "How we're paid for") auto-updates from this map. There's no separate page to keep in sync.
-
-Programs worth applying to (none signed up yet — research first):
-- **Hardware wallets**: Trezor, Ledger, Foundation (Passport), Coldcard, BitBox
-- **Software wallets**: BTCPay merchants (Wasabi, Sparrow are no-affiliate / community)
-- **Lightning**: Phoenix (Acinq), Voltage
-- **Nodes**: Umbrel, Start9
-- **No-KYC P2P**: Robosats, AgoraDesk, Bisq
+The link gets auto-tagged "↗ affiliate" and the disclosure modal (footer → "How we're paid for") auto-updates from this map. There's no separate page to keep in sync. Until you add a URL, every recommendation links to the tool's canonical homepage with no kickback.
 
 ### 3. Newsletter (On-Chain Forensics)
 
@@ -97,13 +90,11 @@ const NEWSLETTER = {
 };
 ```
 
-Until `endpoint` is set, the signup form opens a `mailto:` link instead. Set up a real provider when you're ready to send issues.
-
-Recommended provider order: **Buttondown** (privacy-first, $9/mo, RSS for paid tier) > Beehiiv (free tier, growth tools) > Substack (largest network, takes 10%).
+Until `endpoint` is set, the signup form opens a `mailto:` link instead. Point it at whatever email provider you use once you're ready to send issues.
 
 ### 4. AI Assistant (already configured)
 
-The AI worker URL (`anonscore-ai.netassetpremium.workers.dev`) is wired in. The 5-message daily cap is enforced server-side. A paid Coach tier can be layered on top later.
+The AI worker URL (`anonscore-ai.netassetpremium.workers.dev`) is wired in. The 5-message daily cap is enforced server-side. The worker only ever receives what the consent gate previews — never the user's address.
 
 ### 5. Languages (i18n)
 
@@ -119,17 +110,36 @@ const STRINGS = {
 };
 ```
 
-Spanish currently covers the landing + scanning surfaces. The dashboard/case-files still fall back to English. **Before promoting a locale, get a native-speaker pass** — for a security tool, a mistranslated privacy instruction can mislead someone in a high-stakes situation. A full translation pass is a natural fit for privacy-grant funding (e.g. HRF, Open Sats).
+Spanish currently covers the landing + scanning surfaces. The dashboard/case-files still fall back to English. **Before promoting a locale, get a native-speaker pass** — for a security tool, a mistranslated privacy instruction can mislead someone in a high-stakes situation.
 
 ---
 
 ## Privacy stance (what makes this site different)
 
 - **Zero third-party requests at runtime.** Every script, font, and asset is self-hosted under `/vendor/`. The only outbound calls are: the public blockchain APIs (blockstream.info, mempool.space) for the address you paste, and the AI worker if you opt in.
-- **No cookies, no localStorage tracking, no analytics.** localStorage is used only for: scan history (last 5 addresses, user-deletable), dismissed fix items per-address, and a "have you visited before" flag for the auto-demo.
+- **No cookies, no localStorage tracking, no analytics.** localStorage holds exactly three things, all local to your browser and never transmitted: your language choice (`anonscore_lang`), your recent scan history (`anonscore_history_v1` — last 5 addresses, clearable from the UI), and which fix items you've dismissed for a given address (`anonscore_fixes_v1:<addr>`). Nothing else — no visitor ID, no session token, no analytics beacon.
 - **Strict CSP**: `script-src 'self'`. No inline scripts. No eval.
 - **Tor compatible**: no fingerprinting, no canvas tricks, no third-party requests.
 - **Open source under MIT.** The full audit logic is in `anonscore.jsx`, plain JavaScript. Verifiable in minutes.
+
+---
+
+## Security
+
+Found a vulnerability? Please report it privately first — don't open a public issue for anything exploitable.
+
+- **Preferred:** [open a GitHub security advisory](https://github.com/netasset/anonscore/security/advisories/new) (private, coordinated disclosure).
+- **Or email:** <netassetpremium@gmail.com>.
+
+These same contacts are published machine-readably at [`/.well-known/security.txt`](.well-known/security.txt).
+
+**What we care about most**, given the threat model of a client-side privacy tool:
+
+- Anything that could leak a user's address off their device — the core promise is that the address you scan never reaches the AI worker or any server. The only outbound calls are the public blockchain APIs (for the address you paste) and, if you opt in, the AI worker with the payload previewed in the consent gate.
+- CSP or self-hosting bypasses that would introduce a third-party runtime request.
+- XSS or injection via scanned addresses, URL params, or API responses.
+
+There's no bug-bounty budget (this is a free, open-source project), but real reports get real credit. The whole audit surface is `anonscore.jsx` in plain JavaScript — verifiable in minutes.
 
 ---
 
