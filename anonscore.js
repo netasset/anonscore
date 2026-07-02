@@ -8916,6 +8916,297 @@ function AiAssistant({
     }
   }, "\u2192"))));
 }
+function ExposureFlow({
+  txs,
+  isMobile
+}) {
+  const list = (txs || []).slice(0, 8);
+  const isRound = v => v >= 100000 && (v % 1000000 === 0 || v % 500000 === 0);
+  const KIND = {
+    dust: {
+      color: T.red,
+      label: "Dust (tracking beacon)"
+    },
+    reuse: {
+      color: T.red,
+      label: "Change → address reuse"
+    },
+    mix: {
+      color: T.green,
+      label: "Mixed (CoinJoin)"
+    },
+    round: {
+      color: T.btc,
+      label: "Round amount (exchange tell)"
+    },
+    spend: {
+      color: T.cyan,
+      label: "Ordinary spend"
+    }
+  };
+  if (!list.length) return React.createElement("div", {
+    style: {
+      background: T.card,
+      border: `1px solid ${T.border}`,
+      borderRadius: 16,
+      padding: 28,
+      textAlign: "center",
+      color: T.textMid,
+      fontSize: 14
+    }
+  }, "No transactions to map \u2014 this address has no spending history to trace.");
+  return React.createElement("div", {
+    style: {
+      display: "flex",
+      flexDirection: "column",
+      gap: 14
+    }
+  }, React.createElement("div", {
+    style: {
+      background: T.card,
+      border: `1px solid ${T.border}`,
+      borderRadius: 16,
+      padding: isMobile ? "16px 18px" : "20px 24px"
+    }
+  }, React.createElement("div", {
+    style: {
+      fontFamily: T.mono,
+      fontSize: 9,
+      color: T.cyan,
+      letterSpacing: 2,
+      marginBottom: 8
+    }
+  }, "EXPOSURE MAP"), React.createElement("div", {
+    style: {
+      fontFamily: T.serif,
+      fontSize: isMobile ? 19 : 22,
+      color: T.text,
+      fontWeight: 400,
+      marginBottom: 8
+    }
+  }, "What a blockchain analyst sees"), React.createElement("div", {
+    style: {
+      fontSize: 13,
+      color: T.textMid,
+      lineHeight: 1.65,
+      marginBottom: 14
+    }
+  }, "Every transaction is public and permanent. Your coins flow left \u2192 right: inputs into each transaction, then out to their destinations. Each output is colored by what it leaks \u2014 this is the exact view surveillance firms build from the chain."), React.createElement("div", {
+    style: {
+      display: "flex",
+      flexWrap: "wrap",
+      gap: 12
+    }
+  }, [KIND.spend, KIND.mix, KIND.round, KIND.reuse, KIND.dust].map(k => React.createElement("span", {
+    key: k.label,
+    style: {
+      display: "inline-flex",
+      alignItems: "center",
+      gap: 5,
+      fontFamily: T.mono,
+      fontSize: 9,
+      color: T.textMid
+    }
+  }, React.createElement("span", {
+    style: {
+      width: 10,
+      height: 10,
+      borderRadius: 2,
+      background: k.color,
+      flexShrink: 0
+    }
+  }), k.label)))), list.map((tx, ti) => {
+    const vin = tx.vin || [],
+      vout = tx.vout || [];
+    const inputAddrs = new Set(vin.map(v => v.prevout?.scriptpubkey_address).filter(Boolean));
+    const outs = vout.slice(0, 8);
+    const extra = vout.length - outs.length;
+    const maxOut = Math.max(...vout.map(o => o.value || 0), 1);
+    const inCount = vin.length,
+      outCount = vout.length;
+    const denom = {};
+    vout.forEach(o => {
+      denom[o.value] = (denom[o.value] || 0) + 1;
+    });
+    const coinjoin = outCount >= 5 && Math.max(0, ...Object.values(denom)) >= 3;
+    const consolidation = inCount >= 4 && outCount <= 2;
+    const hasDust = vout.some(o => o.value < 546);
+    const hasReuse = vout.some(o => o.scriptpubkey_address && inputAddrs.has(o.scriptpubkey_address));
+    const hasRound = vout.some(o => isRound(o.value));
+    const classify = o => {
+      if (o.value < 546) return KIND.dust;
+      if (o.scriptpubkey_address && inputAddrs.has(o.scriptpubkey_address)) return KIND.reuse;
+      if (coinjoin && denom[o.value] >= 3) return KIND.mix;
+      if (isRound(o.value)) return KIND.round;
+      return KIND.spend;
+    };
+    const flags = [];
+    if (coinjoin) flags.push({
+      l: "CoinJoin",
+      c: T.green
+    });
+    if (consolidation) flags.push({
+      l: "Consolidation",
+      c: T.red
+    });
+    if (hasReuse) flags.push({
+      l: "Change reuse",
+      c: T.red
+    });
+    if (hasRound && !coinjoin) flags.push({
+      l: "Round amount",
+      c: T.btc
+    });
+    if (hasDust) flags.push({
+      l: "Dust",
+      c: T.red
+    });
+    if (!flags.length) flags.push({
+      l: "No obvious leak",
+      c: T.green
+    });
+    const rowH = 22,
+      top = 10,
+      H = Math.max(72, outs.length * rowH + top * 2);
+    const hubX = 118,
+      hubY = H / 2,
+      outX = 196,
+      barMax = isMobile ? 78 : 100;
+    const worst = flags.some(f => f.c === T.red) ? T.red : coinjoin ? T.green : hasRound ? T.btc : T.cyan;
+    const age = tx.status?.block_time ? Math.floor((Date.now() / 1000 - tx.status.block_time) / 86400) : null;
+    const explain = coinjoin ? "Joined a set of equal-value outputs — a CoinJoin that breaks the trail between your coins." : consolidation ? `Merged ${inCount} separate inputs into one output — those coins are now provably the same owner.` : hasReuse ? "Change returned to an address you'd already used — this links the spend back to your history." : hasDust ? "Contains a dust output — a tiny ‘beacon’ analysts plant to track where your coins go next." : hasRound ? "A round-number output — the classic fingerprint of a withdrawal straight from a KYC exchange." : "No obvious linkage leak here — the inputs and outputs don't tie back to your other coins.";
+    return React.createElement("div", {
+      key: tx.txid || ti,
+      style: {
+        background: T.card,
+        border: `1px solid ${T.border}`,
+        borderRadius: 14,
+        padding: isMobile ? "14px 14px" : "16px 20px"
+      }
+    }, React.createElement("div", {
+      style: {
+        display: "flex",
+        alignItems: "center",
+        gap: 8,
+        marginBottom: 10,
+        flexWrap: "wrap"
+      }
+    }, React.createElement("span", {
+      style: {
+        fontFamily: T.mono,
+        fontSize: 10,
+        color: T.textDim
+      }
+    }, fmt.txid(tx.txid)), age != null && React.createElement("span", {
+      style: {
+        fontFamily: T.mono,
+        fontSize: 9,
+        color: T.textDim
+      }
+    }, "\xB7 ", age === 0 ? "today" : age + "d ago"), React.createElement("span", {
+      style: {
+        marginLeft: "auto",
+        display: "flex",
+        gap: 5,
+        flexWrap: "wrap"
+      }
+    }, flags.map((f, fi) => React.createElement(Tag, {
+      key: fi,
+      label: f.l,
+      color: f.c,
+      size: 9
+    })))), React.createElement("svg", {
+      viewBox: `0 0 ${outX + barMax + 92} ${H}`,
+      style: {
+        display: "block",
+        width: "100%",
+        maxWidth: outX + barMax + 92,
+        height: "auto",
+        overflow: "visible"
+      },
+      role: "img",
+      "aria-label": `Transaction with ${inCount} input${inCount !== 1 ? "s" : ""} and ${outCount} output${outCount !== 1 ? "s" : ""}`
+    }, React.createElement("rect", {
+      x: "6",
+      y: hubY - 18,
+      width: "46",
+      height: "36",
+      rx: "8",
+      fill: T.cardAlt,
+      stroke: T.border
+    }), React.createElement("text", {
+      x: "29",
+      y: hubY - 1,
+      textAnchor: "middle",
+      fontFamily: T.mono,
+      fontSize: "12",
+      fill: T.text,
+      fontWeight: "700"
+    }, inCount), React.createElement("text", {
+      x: "29",
+      y: hubY + 11,
+      textAnchor: "middle",
+      fontFamily: T.mono,
+      fontSize: "7",
+      fill: T.textDim,
+      letterSpacing: "1"
+    }, inCount === 1 ? "INPUT" : "INPUTS"), React.createElement("path", {
+      d: `M52 ${hubY} C85 ${hubY} 85 ${hubY} ${hubX} ${hubY}`,
+      stroke: T.border,
+      strokeWidth: "2",
+      fill: "none"
+    }), React.createElement("circle", {
+      cx: hubX,
+      cy: hubY,
+      r: "5.5",
+      fill: worst,
+      style: {
+        filter: `drop-shadow(0 0 5px ${worst})`
+      }
+    }), outs.map((o, oi) => {
+      const k = classify(o),
+        y = top + oi * rowH + 6,
+        w = Math.max(7, o.value / maxOut * barMax);
+      return React.createElement("g", {
+        key: oi
+      }, React.createElement("path", {
+        d: `M${hubX + 5} ${hubY} C${(hubX + outX) / 2} ${hubY} ${(hubX + outX) / 2} ${y + 5} ${outX} ${y + 5}`,
+        stroke: k.color,
+        strokeOpacity: "0.45",
+        strokeWidth: "1.6",
+        fill: "none"
+      }), React.createElement("rect", {
+        x: outX,
+        y: y,
+        width: w,
+        height: "10",
+        rx: "4",
+        fill: k.color
+      }, React.createElement("title", null, fmt.btc(o.value), " \u2014 ", k.label)), React.createElement("text", {
+        x: outX + w + 6,
+        y: y + 9,
+        fontFamily: T.mono,
+        fontSize: "9",
+        fill: T.textDim
+      }, fmt.btc(o.value)));
+    }), extra > 0 && React.createElement("text", {
+      x: outX,
+      y: top + outs.length * rowH + 9,
+      fontFamily: T.mono,
+      fontSize: "9",
+      fill: T.textDim
+    }, "+", extra, " more output", extra !== 1 ? "s" : "")), React.createElement("div", {
+      style: {
+        fontSize: 12.5,
+        color: T.textMid,
+        lineHeight: 1.55,
+        marginTop: 10,
+        borderTop: `1px solid ${T.borderLo}`,
+        paddingTop: 10
+      }
+    }, explain));
+  }));
+}
 function Dashboard({
   address,
   addrInfo,
@@ -8968,7 +9259,7 @@ function Dashboard({
     return utxos.reduce((s, u) => s + u.value, 0);
   }, [addrInfo, utxos]);
   const issueCount = checks.filter(c => c.status !== "pass").length;
-  const TABS = isMobile ? ["Fix It", "Overview", "UTXOs", "Transactions"] : ["Fix It", "Overview", "UTXOs", "Transactions", "Methodology"];
+  const TABS = isMobile ? ["Fix It", "Overview", "Flow", "UTXOs", "Transactions"] : ["Fix It", "Overview", "Flow", "UTXOs", "Transactions", "Methodology"];
   useEffect(() => {
     if (!autoShare) return;
     const t = setTimeout(() => {
@@ -10469,7 +10760,10 @@ function Dashboard({
         color: T.textDim
       }
     }, tx.fee ? `${tx.fee.toLocaleString()} sats` : "—"));
-  }))), tab === "Methodology" && React.createElement("div", {
+  }))), tab === "Flow" && React.createElement(ExposureFlow, {
+    txs: txs,
+    isMobile: isMobile
+  }), tab === "Methodology" && React.createElement("div", {
     style: {
       display: "flex",
       flexDirection: "column",
@@ -10686,7 +10980,7 @@ function Dashboard({
       display: "flex",
       zIndex: 200
     }
-  }, ["Fix It", "Overview", "UTXOs", "Transactions"].map(t => React.createElement("button", {
+  }, ["Fix It", "Overview", "Flow", "UTXOs", "Transactions"].map(t => React.createElement("button", {
     key: t,
     onClick: () => setTab(t),
     style: {
@@ -10709,7 +11003,7 @@ function Dashboard({
     style: {
       fontSize: 15
     }
-  }, t === "Fix It" ? "★" : t === "Overview" ? "◎" : t === "Transactions" ? "↔" : "⬡"), t))), shareOpen && React.createElement(ShareCard, {
+  }, t === "Fix It" ? "★" : t === "Overview" ? "◎" : t === "Flow" ? "⋔" : t === "Transactions" ? "↔" : "⬡"), t))), shareOpen && React.createElement(ShareCard, {
     score: score,
     grade: grade,
     checks: checks,
