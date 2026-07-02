@@ -67,11 +67,15 @@ for (const f of ["vendor/react.production.min.js", "vendor/react-dom.production.
 }
 pass("All vendor files present");
 
-// Service worker must have a build hash injected (not the placeholder).
+// Service worker must have a named cache and use stale-while-revalidate so
+// clients get fresh code without a per-build cache-hash (which used to collide
+// across concurrent PRs). Freshness comes from revalidation, not the key.
 const swCode = readFileSync(join(ROOT, "sw.js"), "utf8");
-if (swCode.includes("__BUILD_HASH__")) fail("sw.js still has __BUILD_HASH__ placeholder — run `npm run build`");
-else if (!/anonscore-[a-f0-9]{12}/.test(swCode)) fail("sw.js cache key not in expected anonscore-<hash> format");
-else pass(`sw.js cache key stamped (${swCode.match(/anonscore-[a-f0-9]{12}/)[0]})`);
+const cacheKey = swCode.match(/const CACHE = "(anonscore-[\w.-]+)"/);
+if (!cacheKey) fail("sw.js has no named cache key (const CACHE = \"anonscore-…\")");
+else if (!/hit \|\| network/.test(swCode) || !/caches\.open\(CACHE\)\.then\(\(c\) => c\.put/.test(swCode))
+  fail("sw.js is not stale-while-revalidate — it must serve cache AND revalidate in the background, or clients get stuck on stale code");
+else pass(`sw.js cache "${cacheKey[1]}" uses stale-while-revalidate (no per-build hash to conflict on)`);
 
 // PWA manifest must be valid JSON with the keys browsers require for "installable".
 try {
