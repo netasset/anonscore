@@ -8922,6 +8922,8 @@ function ExposureFlow({
 }) {
   const list = (txs || []).slice(0, 8);
   const isRound = v => v >= 100000 && (v % 1000000 === 0 || v % 500000 === 0);
+  const isOpReturn = o => o.scriptpubkey_type === "op_return";
+  const isDust = o => !isOpReturn(o) && o.value > 0 && o.value < 546;
   const KIND = {
     dust: {
       color: T.red,
@@ -8942,6 +8944,10 @@ function ExposureFlow({
     spend: {
       color: T.cyan,
       label: "Ordinary spend"
+    },
+    data: {
+      color: T.textDim,
+      label: "Data (OP_RETURN)"
     }
   };
   if (!list.length) return React.createElement("div", {
@@ -8974,7 +8980,7 @@ function ExposureFlow({
     });
     const cj = vout.length >= 5 && Math.max(0, ...Object.values(dn)) >= 3;
     const cons = vin.length >= 4 && vout.length <= 2;
-    const dust = vout.some(o => o.value < 546);
+    const dust = vout.some(isDust);
     const reuse = vout.some(o => o.scriptpubkey_address && inAddrs.has(o.scriptpubkey_address));
     const round = vout.some(o => isRound(o.value));
     if (cj) stat.coinjoin++;
@@ -9051,7 +9057,7 @@ function ExposureFlow({
       flexWrap: "wrap",
       gap: 12
     }
-  }, [KIND.spend, KIND.mix, KIND.round, KIND.reuse, KIND.dust].map(k => React.createElement("span", {
+  }, [KIND.spend, KIND.mix, KIND.round, KIND.reuse, KIND.dust, KIND.data].map(k => React.createElement("span", {
     key: k.label,
     style: {
       display: "inline-flex",
@@ -9154,11 +9160,12 @@ function ExposureFlow({
     });
     const coinjoin = outCount >= 5 && Math.max(0, ...Object.values(denom)) >= 3;
     const consolidation = inCount >= 4 && outCount <= 2;
-    const hasDust = vout.some(o => o.value < 546);
+    const hasDust = vout.some(isDust);
     const hasReuse = vout.some(o => o.scriptpubkey_address && inputAddrs.has(o.scriptpubkey_address));
     const hasRound = vout.some(o => isRound(o.value));
     const classify = o => {
-      if (o.value < 546) return KIND.dust;
+      if (isOpReturn(o)) return KIND.data;
+      if (isDust(o)) return KIND.dust;
       if (o.scriptpubkey_address && inputAddrs.has(o.scriptpubkey_address)) return KIND.reuse;
       if (coinjoin && denom[o.value] >= 3) return KIND.mix;
       if (isRound(o.value)) return KIND.round;
