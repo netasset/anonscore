@@ -4092,7 +4092,7 @@ function AiAssistant({ checks, recommendations, score, grade, onClose, starters:
    "What a blockchain analyst sees": inputs → tx → outputs,
    each output colored by its privacy classification.
 ───────────────────────────────────────────── */
-function ExposureFlow({ txs, isMobile }) {
+function ExposureFlow({ txs, isMobile, onFix }) {
   const list = (txs || []).slice(0, 8);
   const isRound = v => v >= 100000 && (v % 1000000 === 0 || v % 500000 === 0);
   const KIND = {
@@ -4162,6 +4162,13 @@ function ExposureFlow({ txs, isMobile }) {
               </li>
             ))}
           </ul>
+        )}
+        {stat.leaky > 0 && onFix && (
+          <button onClick={onFix} style={{ marginTop: 14, background: "transparent", border: `1px solid ${T.cyan}55`, borderRadius: 10, padding: "9px 16px", color: T.cyan, fontFamily: T.sans, fontSize: 13, fontWeight: 600, cursor: "pointer", transition: "all .15s" }}
+            onMouseOver={e => { e.currentTarget.style.background = T.cyan + "14"; }}
+            onMouseOut={e => { e.currentTarget.style.background = "transparent"; }}>
+            See how to fix these →
+          </button>
         )}
       </div>
       {list.map((tx, ti) => {
@@ -4742,7 +4749,7 @@ function Dashboard({ address, addrInfo, utxos, txs, isMobile, onBack, onRescan, 
 
         {/* ── FLOW / EXPOSURE MAP ── */}
         {tab === "Flow" && (
-          <ExposureFlow txs={txs} isMobile={isMobile} />
+          <ExposureFlow txs={txs} isMobile={isMobile} onFix={() => setTab("Fix It")} />
         )}
 
         {/* ── METHODOLOGY ── */}

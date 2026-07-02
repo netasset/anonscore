@@ -8918,7 +8918,8 @@ function AiAssistant({
 }
 function ExposureFlow({
   txs,
-  isMobile
+  isMobile,
+  onFix
 }) {
   const list = (txs || []).slice(0, 8);
   const isRound = v => v >= 100000 && (v % 1000000 === 0 || v % 500000 === 0);
@@ -9118,7 +9119,28 @@ function ExposureFlow({
       marginTop: 1,
       fontFamily: T.mono
     }
-  }, f.ok ? "✓" : "→"), f.t)))), list.map((tx, ti) => {
+  }, f.ok ? "✓" : "→"), f.t))), stat.leaky > 0 && onFix && React.createElement("button", {
+    onClick: onFix,
+    style: {
+      marginTop: 14,
+      background: "transparent",
+      border: `1px solid ${T.cyan}55`,
+      borderRadius: 10,
+      padding: "9px 16px",
+      color: T.cyan,
+      fontFamily: T.sans,
+      fontSize: 13,
+      fontWeight: 600,
+      cursor: "pointer",
+      transition: "all .15s"
+    },
+    onMouseOver: e => {
+      e.currentTarget.style.background = T.cyan + "14";
+    },
+    onMouseOut: e => {
+      e.currentTarget.style.background = "transparent";
+    }
+  }, "See how to fix these \u2192")), list.map((tx, ti) => {
     const vin = tx.vin || [],
       vout = tx.vout || [];
     const inputAddrs = new Set(vin.map(v => v.prevout?.scriptpubkey_address).filter(Boolean));
@@ -10865,7 +10887,8 @@ function Dashboard({
     }, tx.fee ? `${tx.fee.toLocaleString()} sats` : "—"));
   }))), tab === "Flow" && React.createElement(ExposureFlow, {
     txs: txs,
-    isMobile: isMobile
+    isMobile: isMobile,
+    onFix: () => setTab("Fix It")
   }), tab === "Methodology" && React.createElement("div", {
     style: {
       display: "flex",
