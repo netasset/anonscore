@@ -4095,12 +4095,18 @@ function AiAssistant({ checks, recommendations, score, grade, onClose, starters:
 function ExposureFlow({ txs, isMobile, onFix }) {
   const list = (txs || []).slice(0, 8);
   const isRound = v => v >= 100000 && (v % 1000000 === 0 || v % 500000 === 0);
+  // A dust "beacon" is a tiny *spendable* output planted to track you. An
+  // OP_RETURN is a provably-unspendable data carrier (value 0) — NOT dust, and
+  // flagging it as a tracking beacon (red, +leaky) is simply wrong. Guard both.
+  const isOpReturn = o => o.scriptpubkey_type === "op_return";
+  const isDust = o => !isOpReturn(o) && o.value > 0 && o.value < 546;
   const KIND = {
-    dust:  { color: T.red,   label: "Dust (tracking beacon)" },
-    reuse: { color: T.red,   label: "Change → address reuse" },
-    mix:   { color: T.green, label: "Mixed (CoinJoin)" },
-    round: { color: T.btc,   label: "Round amount (exchange tell)" },
-    spend: { color: T.cyan,  label: "Ordinary spend" },
+    dust:  { color: T.red,    label: "Dust (tracking beacon)" },
+    reuse: { color: T.red,    label: "Change → address reuse" },
+    mix:   { color: T.green,  label: "Mixed (CoinJoin)" },
+    round: { color: T.btc,    label: "Round amount (exchange tell)" },
+    spend: { color: T.cyan,   label: "Ordinary spend" },
+    data:  { color: T.textDim, label: "Data (OP_RETURN)" },
   };
   if (!list.length) return (
     <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 16, padding: 28, textAlign: "center", color: T.textMid, fontSize: 14 }}>
@@ -4115,7 +4121,7 @@ function ExposureFlow({ txs, isMobile, onFix }) {
     const dn = {}; vout.forEach(o => { dn[o.value] = (dn[o.value] || 0) + 1; });
     const cj = vout.length >= 5 && Math.max(0, ...Object.values(dn)) >= 3;
     const cons = vin.length >= 4 && vout.length <= 2;
-    const dust = vout.some(o => o.value < 546);
+    const dust = vout.some(isDust);
     const reuse = vout.some(o => o.scriptpubkey_address && inAddrs.has(o.scriptpubkey_address));
     const round = vout.some(o => isRound(o.value));
     if (cj) stat.coinjoin++;
@@ -4143,7 +4149,7 @@ function ExposureFlow({ txs, isMobile, onFix }) {
           Every transaction is public and permanent. Your coins flow left → right: inputs into each transaction, then out to their destinations. Each output is colored by what it leaks — this is the exact view surveillance firms build from the chain.
         </div>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
-          {[KIND.spend, KIND.mix, KIND.round, KIND.reuse, KIND.dust].map(k => (
+          {[KIND.spend, KIND.mix, KIND.round, KIND.reuse, KIND.dust, KIND.data].map(k => (
             <span key={k.label} style={{ display: "inline-flex", alignItems: "center", gap: 5, fontFamily: T.mono, fontSize: 9, color: T.textMid }}>
               <span style={{ width: 10, height: 10, borderRadius: 2, background: k.color, flexShrink: 0 }} />{k.label}
             </span>
@@ -4181,11 +4187,12 @@ function ExposureFlow({ txs, isMobile, onFix }) {
         const denom = {}; vout.forEach(o => { denom[o.value] = (denom[o.value] || 0) + 1; });
         const coinjoin = outCount >= 5 && Math.max(0, ...Object.values(denom)) >= 3;
         const consolidation = inCount >= 4 && outCount <= 2;
-        const hasDust = vout.some(o => o.value < 546);
+        const hasDust = vout.some(isDust);
         const hasReuse = vout.some(o => o.scriptpubkey_address && inputAddrs.has(o.scriptpubkey_address));
         const hasRound = vout.some(o => isRound(o.value));
         const classify = o => {
-          if (o.value < 546) return KIND.dust;
+          if (isOpReturn(o)) return KIND.data;
+          if (isDust(o)) return KIND.dust;
           if (o.scriptpubkey_address && inputAddrs.has(o.scriptpubkey_address)) return KIND.reuse;
           if (coinjoin && denom[o.value] >= 3) return KIND.mix;
           if (isRound(o.value)) return KIND.round;
