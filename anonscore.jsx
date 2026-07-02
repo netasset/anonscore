@@ -2058,7 +2058,7 @@ function ShareCard({ score, grade, checks, address, isLightning = false, onClose
 const GUARANTEES = [
   { icon: "⬡", label: "No server, no backend", desc: "Your address goes directly from your browser to Blockstream's public API. It never touches our infrastructure." },
   { icon: "◌", label: "Nothing stored or logged", desc: "We have no database, no analytics, no session tracking. Close the tab and it's gone." },
-  { icon: "◎", label: "Scoring runs in your browser", desc: "All 10 heuristics execute locally. Your address, score, and results never leave your device." },
+  { icon: "◎", label: "Scoring runs in your browser", desc: "All 10 heuristics execute locally. Your score and results are computed on your device and sent nowhere — not even to us. (The address itself does reach Blockstream's public API to fetch the chain data, as noted above.)" },
 ];
 
 function TrustBox() {

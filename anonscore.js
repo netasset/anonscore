@@ -3729,7 +3729,7 @@ const GUARANTEES = [{
 }, {
   icon: "◎",
   label: "Scoring runs in your browser",
-  desc: "All 10 heuristics execute locally. Your address, score, and results never leave your device."
+  desc: "All 10 heuristics execute locally. Your score and results are computed on your device and sent nowhere — not even to us. (The address itself does reach Blockstream's public API to fetch the chain data, as noted above.)"
 }];
 function TrustBox() {
   const [open, setOpen] = useState(false);
