@@ -5,7 +5,7 @@
   Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=()
   X-XSS-Protection: 1; mode=block
   Strict-Transport-Security: max-age=31536000; includeSubDomains; preload
-  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; connect-src 'self' https://blockstream.info https://mempool.space https://anonscore-ai.netassetpremium.workers.dev; img-src 'self' data: blob:; base-uri 'self'; form-action 'none'; object-src 'none'; frame-ancestors 'none'
+  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; connect-src 'self' https://blockstream.info https://mempool.space https://anonscore-ai.netassetpremium.workers.dev https://anonscore-relay.netassetpremium.workers.dev; img-src 'self' data: blob:; base-uri 'self'; form-action 'none'; object-src 'none'; frame-ancestors 'none'
 
 # Self-hosted libraries are stable — cache hard.
 /vendor/*
