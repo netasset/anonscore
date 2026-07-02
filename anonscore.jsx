@@ -393,9 +393,9 @@ const WALLET_REVIEWS = [
   { name: "Sparrow Wallet", category: "desktop", os: "macOS · Windows · Linux", pitch: "The pro's desktop Bitcoin wallet. Best-in-class coin control, UTXO labelling, hardware-wallet support, and Tor / your-own-node connectivity by default.",
     strengths: ["Per-UTXO freeze, label, and select before every spend", "Connects to your own Electrum server or Bitcoin Core out of the box — no leaking queries", "Strong hardware wallet support (Coldcard, Trezor, Ledger, Foundation, BitBox, Jade)"],
     watchOuts:  ["Desktop only — there is no mobile app", "Whirlpool CoinJoin coordinator (Samourai) was shut down in 2024; CoinJoin features require Whirlpool-compatible alternatives or manual joins"] },
-  { name: "Wasabi Wallet", category: "desktop", os: "macOS · Windows · Linux", pitch: "Privacy-first desktop Bitcoin wallet with built-in WabiSabi CoinJoin and automatic coin labelling. Beginner-friendlier than Sparrow.",
-    strengths: ["WabiSabi CoinJoin runs automatically once configured", "Default labels every coin by source, helping avoid accidental cluster merges", "Built-in Tor"],
-    watchOuts:  ["WabiSabi coordinator is operator-run (zkSNACKs) — review their blacklisting / sanctions policy before relying on it", "Desktop only"] },
+  { name: "Wasabi Wallet", category: "desktop", os: "macOS · Windows · Linux", pitch: "Privacy-first desktop Bitcoin wallet with WabiSabi CoinJoin and automatic coin labelling. Beginner-friendlier than Sparrow.",
+    strengths: ["WabiSabi CoinJoin runs automatically once you pick a coordinator", "Default labels every coin by source, helping avoid accidental cluster merges", "Built-in Tor"],
+    watchOuts:  ["Its original coordinator (zkSNACKs) shut down in 2024 — you now select a community-run coordinator via 'Change Coordinator'", "Centralized WabiSabi coordinators carry some deanonymization risk; Joinmarket avoids a coordinator entirely", "Desktop only"] },
   { name: "Bitcoin Core", category: "desktop", os: "macOS · Windows · Linux · BSD", pitch: "The reference Bitcoin implementation. The wallet is bundled with a full node, so by definition you query no one but yourself.",
     strengths: ["You ARE your own node — no third-party query leaks possible", "Maximum sovereignty + verification", "Free and battle-tested since 2009"],
     watchOuts:  ["Initial block download requires ~600GB and several days", "UX is functional, not friendly — best paired with a wallet front-end (Sparrow, Electrum, Specter)"] },
@@ -969,13 +969,20 @@ function runEngine(utxos = [], txs = [], txCount = 0) {
   const recs = [];
   const failed = checks.filter(c => c.status !== "pass");
   if (failed.find(f => f.key === "cj"))
-    recs.push({ icon:"🔀", action:"Mix your coins with CoinJoin", plain:"CoinJoin pools your Bitcoin with others in a single transaction, making it impossible to trace which output is yours.", detail:"The tools below each implement CoinJoin differently — pick what fits your setup and technical comfort level. Aim for anonymity sets of 50+ participants and time it during low-fee periods.", impact:18, effort:"Medium", tools:[
-      { name:"Wasabi Wallet",  note:"Automatic WabiSabi CoinJoin, desktop, beginner-friendly" },
-      { name:"Sparrow Wallet", note:"Manual Whirlpool-compatible CoinJoin, desktop" },
-      { name:"Joinmarket",     note:"Peer-to-peer maker/taker model, earn fees as a maker" },
+    recs.push({ icon:"🔀", action:"Mix your coins with CoinJoin", plain:"CoinJoin pools your Bitcoin with others in a single transaction, making it impossible to trace which output is yours.", detail:"The mixing landscape changed in 2024 — Samourai's Whirlpool was seized and Wasabi's original coordinator shut down. CoinJoin still works: you now connect to a community-run coordinator (built into Wasabi 2.x and its forks) or use Joinmarket's coordinator-free peer-to-peer model. Aim for large anonymity sets and time it during low-fee periods. (Note: centralized WabiSabi coordinators carry some deanonymization risk — Joinmarket avoids a coordinator entirely.)", impact:18, effort:"Medium", tools:[
+      { name:"Wasabi Wallet",  note:"WabiSabi CoinJoin — since its default coordinator closed in 2024, pick a community coordinator in-app (Change Coordinator)" },
+      { name:"Ginger Wallet",  note:"Wasabi fork that runs its own active CoinJoin coordinator, desktop" },
+      { name:"Joinmarket",     note:"Peer-to-peer, no central coordinator — the most censorship-resistant option" },
       { name:"JoinStr",        note:"Nostr-coordinated CoinJoin, experimental" },
-      { name:"BTCPay Server",  note:"Self-hosted, Payjoin + CoinJoin for merchants" },
+      { name:"BTCPay Server",  note:"Self-hosted Payjoin for merchants — breaks the common-input heuristic" },
     ], key:"cj" });
+  if (failed.find(f => f.key === "cj") || cons.length)
+    recs.push({ icon:"🤝", action:"Use Payjoin when you pay or get paid", plain:"Payjoin is a payment where the receiver quietly adds one of their own coins to your transaction. Analysts assume every input to a transaction has one owner — Payjoin breaks that assumption on an ordinary-looking payment, no mixing round or anonymity set required.", detail:"Payjoin (BIP78, and the newer async Payjoin / BIP77) needs a receiver who supports it, so it works best when transacting with Payjoin-enabled wallets and merchants. Adoption is climbing fast: Cake Wallet and Bull Bitcoin ship it, and the Payjoin Foundation (2025) is pushing it toward the default payment experience. It's coordinator-free and cheap — a great complement to CoinJoin.", impact:9, effort:"Easy", tools:[
+      { name:"Cake Wallet",    note:"Mobile, ships Payjoin v2 (async) in the default send flow" },
+      { name:"Bull Bitcoin",   note:"Non-custodial, Payjoin-enabled buy/sell and payments" },
+      { name:"BTCPay Server",  note:"Receive Payjoin payments as a merchant, self-hosted" },
+      { name:"Payjoin Dev Kit",note:"Open-source Rust library (BIP78 + BIP77) for wallet builders" },
+    ], key:"payjoin" });
   if (failed.find(f => f.key === "reuse"))
     recs.push({ icon:"🔄", action:"Use a new address every time", plain:"Your wallet can generate unlimited fresh addresses. Every reuse permanently links your transactions for any analyst to trace.", detail:"All HD wallets generate a new address automatically on every 'Receive'. The key is discipline — never copy-paste a previous address.", impact:15, effort:"Easy", tools:[
       { name:"Sparrow Wallet",  note:"Full coin control + address labelling, desktop" },
@@ -1405,6 +1412,7 @@ const SIMPLE = {
     reuse:   { action: "Use a fresh address every time",      plain: "Your wallet can make unlimited new addresses for free. Tap 'Receive' and get a new one every time someone sends you Bitcoin. Never reuse an old one." },
     lightning:{ action: "Pay small amounts over Lightning",   plain: "Lightning lets you send Bitcoin instantly without any record on the public blockchain. Perfect for everyday spending — like cash, but digital." },
     cons:    { action: "Keep your coins separate",            plain: "Don't mix coins from your exchange with coins you bought privately. Use separate wallets, and never send between them directly." },
+    payjoin: { action: "Pay with Payjoin when you can",       plain: "Some wallets and shops support 'Payjoin' — when you pay, they quietly add one of their own coins to the transaction. That hides which coins are really yours, with no special mixing step. Look for it in wallets like Cake Wallet." },
     dust:    { action: "Freeze your tracking coins",          plain: "Find those tiny amounts in your wallet and mark them as 'frozen' or 'do not spend.' They're traps — spending them tags your entire wallet." },
     round:   { action: "Withdraw odd amounts from exchanges", plain: "Instead of withdrawing exactly 0.1 BTC, withdraw 0.10743. Round numbers are a dead giveaway that coins came from an exchange." },
     change:  { action: "Make sure change goes to new addresses", plain: "When you send Bitcoin, your leftover change should go to a brand new address — not back to one you've used before. Most modern wallets do this automatically." },
