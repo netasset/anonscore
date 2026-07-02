@@ -4107,6 +4107,33 @@ function ExposureFlow({ txs, isMobile }) {
       No transactions to map — this address has no spending history to trace.
     </div>
   );
+  // Aggregate forensic readout across the mapped transactions.
+  const stat = { consolidation: 0, coinjoin: 0, reuse: 0, dust: 0, round: 0, linked: 0, leaky: 0 };
+  list.forEach(tx => {
+    const vin = tx.vin || [], vout = tx.vout || [];
+    const inAddrs = new Set(vin.map(v => v.prevout?.scriptpubkey_address).filter(Boolean));
+    const dn = {}; vout.forEach(o => { dn[o.value] = (dn[o.value] || 0) + 1; });
+    const cj = vout.length >= 5 && Math.max(0, ...Object.values(dn)) >= 3;
+    const cons = vin.length >= 4 && vout.length <= 2;
+    const dust = vout.some(o => o.value < 546);
+    const reuse = vout.some(o => o.scriptpubkey_address && inAddrs.has(o.scriptpubkey_address));
+    const round = vout.some(o => isRound(o.value));
+    if (cj) stat.coinjoin++;
+    if (cons) { stat.consolidation++; stat.linked += vin.length; }
+    if (dust) stat.dust++;
+    if (reuse) stat.reuse++;
+    if (round && !cj) stat.round++;
+    if (cons || dust || reuse || (round && !cj)) stat.leaky++;
+  });
+  const verdict = stat.leaky === 0
+    ? "Clean pass — nothing in these transactions obviously links your coins or identifies you."
+    : `An analyst can tie your activity together from ${stat.leaky} of ${list.length} transaction${list.length !== 1 ? "s" : ""} here.`;
+  const findings = [];
+  if (stat.consolidation) findings.push({ ok: false, t: `${stat.linked}+ of your addresses provably share one owner (consolidation)` });
+  if (stat.round) findings.push({ ok: false, t: `${stat.round} withdrawal${stat.round !== 1 ? "s" : ""} fingerprint a KYC exchange (round amounts)` });
+  if (stat.reuse) findings.push({ ok: false, t: `${stat.reuse} change output${stat.reuse !== 1 ? "s" : ""} returned to an address you'd reused` });
+  if (stat.dust) findings.push({ ok: false, t: `${stat.dust} transaction${stat.dust !== 1 ? "s" : ""} carry dust tracking beacons` });
+  if (stat.coinjoin) findings.push({ ok: true, t: `${stat.coinjoin} CoinJoin${stat.coinjoin !== 1 ? "s" : ""} break${stat.coinjoin === 1 ? "s" : ""} the trail — your defence here` });
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
       <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 16, padding: isMobile ? "16px 18px" : "20px 24px" }}>
@@ -4122,6 +4149,20 @@ function ExposureFlow({ txs, isMobile }) {
             </span>
           ))}
         </div>
+      </div>
+      <div style={{ background: stat.leaky ? T.red + "10" : T.green + "12", border: `1px solid ${stat.leaky ? T.red + "40" : T.green + "45"}`, borderRadius: 16, padding: isMobile ? "16px 18px" : "18px 22px" }}>
+        <div style={{ fontFamily: T.mono, fontSize: 9, color: stat.leaky ? T.red : T.green, letterSpacing: 2, marginBottom: 8 }}>FORENSIC READOUT</div>
+        <div style={{ fontSize: isMobile ? 14 : 15, color: T.text, lineHeight: 1.6, marginBottom: findings.length ? 12 : 0, fontWeight: 500 }}>{verdict}</div>
+        {findings.length > 0 && (
+          <ul style={{ listStyle: "none", display: "flex", flexDirection: "column", gap: 7, padding: 0, margin: 0 }}>
+            {findings.map((f, i) => (
+              <li key={i} style={{ display: "flex", gap: 8, alignItems: "flex-start", fontSize: 13, color: T.textMid, lineHeight: 1.5 }}>
+                <span style={{ color: f.ok ? T.green : T.red, flexShrink: 0, marginTop: 1, fontFamily: T.mono }}>{f.ok ? "✓" : "→"}</span>
+                {f.t}
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
       {list.map((tx, ti) => {
         const vin = tx.vin || [], vout = tx.vout || [];
