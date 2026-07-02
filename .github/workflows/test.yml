@@ -23,11 +23,11 @@ jobs:
         run: npx playwright install --with-deps chromium
       - name: Build
         run: npm run build
-      - name: Verify build is up-to-date (anonscore.js matches source)
+      - name: Verify build is up-to-date (anonscore.js + sw.js match source)
         run: |
-          if ! git diff --quiet -- anonscore.js; then
-            echo "::error::anonscore.js is out of sync with anonscore.jsx. Run 'npm run build' and commit."
-            git --no-pager diff anonscore.js | head -40
+          if ! git diff --quiet -- anonscore.js sw.js; then
+            echo "::error::anonscore.js or sw.js is out of sync with source. Run 'npm run build' and commit both."
+            git --no-pager diff anonscore.js sw.js | head -60
             exit 1
           fi
       - name: Run test suite
