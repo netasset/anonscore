@@ -820,6 +820,11 @@ const removeFromHistory = addr => {
     localStorage.setItem(HISTORY_KEY, JSON.stringify(getHistory().filter(e => e.addr !== addr)));
   } catch {}
 };
+const clearAllHistory = () => {
+  try {
+    localStorage.removeItem(HISTORY_KEY);
+  } catch {}
+};
 const FIXES_KEY = "anonscore_fixes_v1";
 const getDoneFixes = addr => {
   try {
@@ -4925,6 +4930,10 @@ function Landing({
     removeFromHistory(addr);
     setHistory(getHistory());
   };
+  const wipeHistory = () => {
+    clearAllHistory();
+    setHistory([]);
+  };
   const [showFunding, setShowFunding] = useState(false);
   const [tipCopied, setTipCopied] = useState("");
   const copyTip = (label, value) => {
@@ -5512,12 +5521,35 @@ function Landing({
     }
   }, React.createElement("div", {
     style: {
+      display: "flex",
+      alignItems: "center",
+      gap: 8
+    }
+  }, React.createElement("div", {
+    style: {
       fontFamily: T.mono,
       fontSize: 8,
       color: T.textDim,
       letterSpacing: 1.5
     }
-  }, t("recent.title")), history.length >= 2 && React.createElement(Sparkline, {
+  }, t("recent.title")), React.createElement("button", {
+    onClick: wipeHistory,
+    "aria-label": "Clear all scan history from this browser",
+    style: {
+      background: "none",
+      border: "none",
+      fontFamily: T.mono,
+      fontSize: 8,
+      letterSpacing: 1,
+      color: T.textDim,
+      cursor: "pointer",
+      padding: 0,
+      textDecoration: "underline",
+      textUnderlineOffset: 2
+    },
+    onMouseOver: e => e.currentTarget.style.color = T.red,
+    onMouseOut: e => e.currentTarget.style.color = T.textDim
+  }, "CLEAR ALL")), history.length >= 2 && React.createElement(Sparkline, {
     history: history.map(h => h.score),
     width: 64,
     height: 22
@@ -5610,7 +5642,16 @@ function Landing({
       onMouseOver: e => e.currentTarget.style.color = T.red,
       onMouseOut: e => e.currentTarget.style.color = T.textDim
     }, "\u2715"));
-  }))), React.createElement("div", {
+  })), React.createElement("div", {
+    style: {
+      fontFamily: T.mono,
+      fontSize: 9,
+      color: T.textDim,
+      marginTop: 5,
+      textAlign: "left",
+      lineHeight: 1.5
+    }
+  }, "Saved only in this browser's local storage \u2014 never sent anywhere. We have no server that could see it.")), React.createElement("div", {
     style: {
       display: "flex",
       flexDirection: "column",
@@ -8700,7 +8741,15 @@ function AiConsentGate({
       marginTop: 10,
       lineHeight: 1.5
     }
-  }, "This is the complete list. Nothing else leaves your browser.")), React.createElement("div", {
+  }, "This is the complete list. Nothing else leaves your browser.", " ", React.createElement("a", {
+    href: "https://github.com/netasset/anonscore/blob/main/anonscore.jsx",
+    target: "_blank",
+    rel: "noopener noreferrer",
+    style: {
+      color: T.cyan,
+      textDecoration: "none"
+    }
+  }, "verify: the open-source code that builds this exact payload (search \"buildAiContext\") \u2197"))), React.createElement("div", {
     style: {
       background: T.redLo,
       border: `1px solid ${T.red}22`,
