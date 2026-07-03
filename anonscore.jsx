@@ -5745,11 +5745,19 @@ function ScrollProgress() {
    background:transparent so this shows through; opaque section strips
    (T.surface) deliberately mask it, giving the page depth rhythm.
 ───────────────────────────────────────────── */
-function AmbientBackground() {
+function AmbientBackground({ tint }) {
+  // Score-reactive layer: while a dashboard is showing, the atmosphere leans
+  // toward the grade color (red→green family from scoreColor). The last hue is
+  // remembered so the fade-OUT keeps its color instead of snapping to nothing.
+  const lastTint = useRef(tint);
+  if (tint) lastTint.current = tint;
+  const tc = lastTint.current;
   return (
     <div aria-hidden="true" style={{ position: "fixed", inset: 0, zIndex: -1, pointerEvents: "none", overflow: "hidden", background: T.bg }}>
       {/* Deep-space tint: indigo nebula up top, subtle vignette below */}
       <div style={{ position: "absolute", inset: 0, background: "radial-gradient(120% 70% at 50% -12%, #1b214066 0%, transparent 60%), radial-gradient(90% 90% at 50% 115%, #0d101f88 0%, transparent 55%)" }} />
+      {/* Grade glow — fades in over the dashboard, out everywhere else */}
+      {tc && <div className="amb" style={{ top: "-12%", left: "26%", width: "58vmax", height: "58vmax", background: `radial-gradient(circle, ${tc}10 0%, transparent 60%)`, opacity: tint ? 1 : 0, transition: "opacity 1.6s ease", animationDelay: "-9s" }} />}
       {/* Slow-drifting glow orbs — brand cyan + Bitcoin orange, whisper-quiet alphas */}
       <div className="amb" style={{ top: "2%", left: "-18%", width: "56vmax", height: "56vmax", background: "radial-gradient(circle,#22D3EE0a 0%,transparent 62%)" }} />
       <div className="amb" style={{ top: "32%", right: "-22%", width: "60vmax", height: "60vmax", background: "radial-gradient(circle,#F7931A08 0%,transparent 60%)", animationDelay: "-18s", animationDuration: "54s" }} />
@@ -5766,6 +5774,7 @@ function App() {
   const [page, setPage] = useState("landing");
   const [activeCaseFile, setActiveCaseFile] = useState(null);
   const [pendingScan, setPendingScan] = useState(null); // { addr, inputType } awaiting user confirmation
+  const [scoreTint, setScoreTint] = useState(null);     // grade color for the ambient backdrop while a dashboard shows
 
   // Inject meta/OG tags
   useEffect(() => {
@@ -5849,6 +5858,7 @@ function App() {
           await new Promise(r => setTimeout(r, 1400));
           setLnNodeData(DEMO_LN.node);
           setLnChannels(DEMO_LN.channels);
+          setScoreTint(scoreColor(runLightningEngine(DEMO_LN.node, DEMO_LN.channels).score));
           setScanDataReady(true);
           await new Promise(r => setTimeout(r, 300));
           setPage("ln_dashboard");
@@ -5860,6 +5870,7 @@ function App() {
         setLnNodeData(data.node);
         setLnChannels(data.channels);
         addToHistory({ addr, score: result.score, grade: result.grade, label: scoreLabel(result.score), scanAt: Date.now(), isLightning: true, alias: data.node.alias });
+        setScoreTint(scoreColor(result.score));
         setScanDataReady(true);
         await new Promise(r => setTimeout(r, 300));
         setPage("ln_dashboard");
@@ -5890,6 +5901,7 @@ function App() {
         setUtxos(demoData.utxos);
         setTxs(demoData.txs);
         setScanAt(Date.now());
+        setScoreTint(scoreColor(runEngine(demoData.utxos, demoData.txs, demoData.addrInfo?.chain_stats?.tx_count || demoData.txs.length).score));
         setScanDataReady(true);
         await new Promise(r => setTimeout(r, 300));
         setPage("dashboard");
@@ -5904,6 +5916,7 @@ function App() {
       setTxs(data.txs);
       setScanAt(Date.now());
       addToHistory({ addr, score: analysis.score, grade: analysis.grade, label: analysis.riskLabel, scanAt: Date.now(), isLightning: false });
+      setScoreTint(scoreColor(analysis.score));
       setScanDataReady(true);
       await new Promise(r => setTimeout(r, 300));
       setPage("dashboard");
@@ -5921,7 +5934,7 @@ function App() {
   return (
     <>
       <style>{CSS}</style>
-      <AmbientBackground />
+      <AmbientBackground tint={(page === "dashboard" || page === "ln_dashboard") ? scoreTint : null} />
       <ScrollProgress />
       <Toast toasts={toast.toasts} />
 
