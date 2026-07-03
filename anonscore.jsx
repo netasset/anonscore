@@ -2773,7 +2773,7 @@ function Landing({ onAnalyze, isMobile, onCases }) {
                 })}
               </div>
               <div style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim, marginTop: 5, textAlign: "left", lineHeight: 1.5 }}>
-                Saved only in this browser's local storage — never sent anywhere; we have no server that could see it. Gone when you hit CLEAR ALL or clear this site's data in your browser. (Note: clearing browsing <em>history</em> alone doesn't remove site data.)
+                Saved only in this browser's local storage — gone when you hit CLEAR ALL or clear this site's data in your browser. (Note: clearing browsing <em>history</em> alone doesn't remove site data.)
               </div>
             </div>
           )}
