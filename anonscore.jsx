@@ -223,8 +223,8 @@ const STRINGS = {
     "spectrum.low": "0 · Fully traceable",
     "spectrum.avg": "avg wallet: 38",
     "spectrum.high": "100 · Invisible",
-    "trust.btc": "₿ Bitcoin addresses are public by design. Your browser reads the chain directly from a public explorer (blockstream.info) — AnonScore never sees or stores your address, but that explorer sees your IP alongside it. Browse over Tor to hide even that link.",
-    "trust.ln": "⚡ Lightning node pubkeys are public on the gossip network. Your browser queries mempool.space directly — AnonScore never sees or stores your pubkey, but that API sees your IP alongside it. Browse over Tor to hide even that link.",
+    "trust.btc": "₿ Bitcoin addresses are public by design. AnonScore never sees or stores your address — the lookup reads a public block explorer, and the relay setting below controls whether that explorer can see your IP.",
+    "trust.ln": "⚡ Lightning node pubkeys are public on the gossip network. AnonScore never sees or stores your pubkey — the lookup reads mempool.space's public API, and the relay setting below controls whether it can see your IP.",
     "cta.analyze": "Analyze →",
     "cta.audit": "⚡ Audit →",
     "sample.divider": "or try a sample",
@@ -264,8 +264,8 @@ const STRINGS = {
     "spectrum.low": "0 · Totalmente rastreable",
     "spectrum.avg": "billetera promedio: 38",
     "spectrum.high": "100 · Invisible",
-    "trust.btc": "₿ Las direcciones de Bitcoin son públicas por diseño. Tu navegador lee la cadena directamente desde un explorador público (blockstream.info) — AnonScore nunca ve ni guarda tu dirección, pero ese explorador ve tu IP junto a ella. Navega con Tor para ocultar incluso ese vínculo.",
-    "trust.ln": "⚡ Las claves públicas de nodos Lightning son públicas en la red de gossip. Tu navegador consulta mempool.space directamente — AnonScore nunca ve ni guarda tu clave, pero esa API ve tu IP junto a ella. Navega con Tor para ocultar incluso ese vínculo.",
+    "trust.btc": "₿ Las direcciones de Bitcoin son públicas por diseño. AnonScore nunca ve ni guarda tu dirección — la consulta lee un explorador de bloques público, y el relé configurable abajo controla si ese explorador puede ver tu IP.",
+    "trust.ln": "⚡ Las claves públicas de nodos Lightning son públicas en la red de gossip. AnonScore nunca ve ni guarda tu clave — la consulta lee la API pública de mempool.space, y el relé configurable abajo controla si puede ver tu IP.",
     "cta.analyze": "Analizar →",
     "cta.audit": "⚡ Auditar →",
     "sample.divider": "o prueba un ejemplo",
@@ -339,7 +339,12 @@ function useLang() {
    e.g. "https://anonscore-relay.netassetpremium.workers.dev" — and rebuild;
    the toggle then appears. The relay origin is already allowed in _headers. */
 const RELAY_URL = "https://anonscore-relay.netassetpremium.workers.dev";
-let _relay = (() => { try { return localStorage.getItem("anonscore_relay") === "1"; } catch { return false; } })();
+// Default ON: the average visitor gets IP↔address unlinkability out of the box,
+// and the relay is verifiably no-log (open source, stateless, observability
+// pinned off). The toggle stays one click away for anyone who prefers their
+// address to touch no AnonScore infrastructure at all — an explicit choice is
+// saved either way and wins over the default forever after.
+let _relay = (() => { try { const s = localStorage.getItem("anonscore_relay"); return s === null ? true : s === "1"; } catch { return true; } })();
 const _relayListeners = new Set();
 function setRelay(on) {
   _relay = !!on;
@@ -355,6 +360,33 @@ function useRelay() {
     return () => { _relayListeners.delete(fn); };
   }, []);
   return _relay;
+}
+
+/* BTC block-explorer choice ──────────────────────────────────────────
+   Both upstreams speak the same esplora API, so they're drop-in swaps —
+   direct or through the relay (which mirrors them at /btc and /btcm).
+   Lightning data always comes from mempool.space's LN endpoints. */
+const EXPLORERS = {
+  blockstream: { label: "blockstream.info", api: "https://blockstream.info/api", relayPath: "/btc" },
+  mempool:     { label: "mempool.space",    api: "https://mempool.space/api",    relayPath: "/btcm" },
+};
+let _explorer = (() => { try { const s = localStorage.getItem("anonscore_explorer"); return EXPLORERS[s] ? s : "blockstream"; } catch { return "blockstream"; } })();
+const _explorerListeners = new Set();
+function setExplorer(id) {
+  if (!EXPLORERS[id]) return;
+  _explorer = id;
+  try { localStorage.setItem("anonscore_explorer", id); } catch {}
+  _explorerListeners.forEach(fn => fn());
+}
+function explorer() { return EXPLORERS[_explorer]; }
+function useExplorer() {
+  const [, force] = useState(0);
+  useEffect(() => {
+    const fn = () => force(x => x + 1);
+    _explorerListeners.add(fn);
+    return () => { _explorerListeners.delete(fn); };
+  }, []);
+  return _explorer;
 }
 
 // Canonical homepage for each tool we recommend. Source of truth for outbound
@@ -1119,13 +1151,14 @@ function runEngine(utxos = [], txs = [], txCount = 0) {
 /* ─────────────────────────────────────────────
    API + DEMO DATA
 ───────────────────────────────────────────── */
-const API = "https://blockstream.info/api";
 async function fetchAddress(addr) {
-  // Relay path is /btc/address/…; direct path is blockstream's /address/….
-  // If the relay is on but unreachable, the fetch below rejects and analyze()
-  // fails honestly — we never silently fall back to a direct query, which would
-  // leak the very IP the user turned the relay on to hide.
-  const base = relayOn() ? `${RELAY_URL}/btc` : API;
+  // Uses the user-selected explorer (blockstream / mempool — same esplora API),
+  // directly or via the relay's mirror path for it. If the relay is on but
+  // unreachable, the fetch below rejects and analyze() fails honestly — we
+  // never silently fall back to a direct query, which would leak the very IP
+  // the user has the relay on to hide.
+  const exp = explorer();
+  const base = relayOn() ? `${RELAY_URL}${exp.relayPath}` : exp.api;
   const safe = encodeURIComponent(addr);
   const [info, utxos, txs] = await Promise.all([
     fetch(`${base}/address/${safe}`).then(r => { if (!r.ok) throw new Error("Not found"); return r.json(); }),
@@ -2104,18 +2137,36 @@ function ShareCard({ score, grade, checks, address, isLightning = false, onClose
 ───────────────────────────────────────────── */
 function RelayToggle() {
   const on = useRelay();
+  const expId = useExplorer();
+  const exp = EXPLORERS[expId];
   return (
-    <div style={{ maxWidth: 480, margin: "0 auto 12px", animation: "fadeUp .5s ease .22s both", display: "flex", alignItems: "flex-start", gap: 11, background: on ? T.cyanLo : T.surface, border: `1px solid ${on ? T.cyan + "66" : T.border}`, borderRadius: 10, padding: "10px 14px", transition: "all .2s" }}>
-      <button role="switch" aria-checked={on} aria-label="Route lookups through the AnonScore privacy relay to hide your IP from the block explorer"
-        onClick={() => setRelay(!on)}
-        style={{ flexShrink: 0, width: 40, height: 23, borderRadius: 999, border: "none", cursor: "pointer", background: on ? T.cyan : T.border, position: "relative", transition: "background .2s", marginTop: 1 }}>
-        <span style={{ position: "absolute", top: 2.5, left: on ? 19 : 2.5, width: 18, height: 18, borderRadius: "50%", background: on ? T.bg : T.textDim, transition: "left .2s" }} />
-      </button>
-      <div style={{ fontFamily: T.sans, fontSize: 12, color: T.textMid, lineHeight: 1.5, textAlign: "left" }}>
-        <strong style={{ color: on ? T.cyan : T.text }}>{on ? "Privacy relay on" : "Hide my IP from the explorer"}</strong>
-        {on
-          ? " — this lookup routes through AnonScore's open-source, no-log relay, so the explorer sees our server's IP, not yours. It still sees the address itself (that's the tradeoff)."
-          : " — route this lookup through AnonScore's no-log relay so the block explorer can't tie the address to your IP. Open source; the address still reaches the explorer, just not your IP."}
+    <div style={{ maxWidth: 480, margin: "0 auto 12px", animation: "fadeUp .5s ease .22s both", background: on ? T.cyanLo : T.surface, border: `1px solid ${on ? T.cyan + "66" : T.border}`, borderRadius: 10, padding: "10px 14px", transition: "all .2s" }}>
+      <div style={{ display: "flex", alignItems: "flex-start", gap: 11 }}>
+        <button role="switch" aria-checked={on} aria-label="Route lookups through the AnonScore privacy relay to hide your IP from the block explorer"
+          onClick={() => setRelay(!on)}
+          style={{ flexShrink: 0, width: 40, height: 23, borderRadius: 999, border: "none", cursor: "pointer", background: on ? T.cyan : T.border, position: "relative", transition: "background .2s", marginTop: 1 }}>
+          <span style={{ position: "absolute", top: 2.5, left: on ? 19 : 2.5, width: 18, height: 18, borderRadius: "50%", background: on ? T.bg : T.textDim, transition: "left .2s" }} />
+        </button>
+        <div style={{ fontFamily: T.sans, fontSize: 12, color: T.textMid, lineHeight: 1.5, textAlign: "left" }}>
+          <strong style={{ color: on ? T.cyan : T.text }}>{on ? "Privacy relay on" : "Privacy relay off"}</strong>
+          {on
+            ? <> — lookups route through AnonScore's open-source, no-log relay, so your IP stays hidden. The block explorer ({exp.label}) sees the address to provide the chain data.</>
+            : <> — lookups go straight from your browser to the block explorer ({exp.label}), which then sees your IP next to the address. Turn the relay on to hide that link.</>}
+          {" "}
+          <a href="https://github.com/netasset/anonscore/blob/main/workers/relay/worker.js" target="_blank" rel="noopener noreferrer"
+            style={{ color: T.cyan, textDecoration: "none", fontFamily: T.mono, fontSize: 11, whiteSpace: "nowrap" }}>verify: relay source ↗</a>
+        </div>
+      </div>
+      {/* Explorer picker — both speak the same esplora API, direct or relayed */}
+      <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 9, paddingLeft: 51 }}>
+        <span style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim, letterSpacing: 1 }}>EXPLORER</span>
+        {Object.entries(EXPLORERS).map(([id, e]) => (
+          <button key={id} onClick={() => setExplorer(id)} aria-pressed={expId === id}
+            aria-label={`Use ${e.label} as the block explorer`}
+            style={{ background: expId === id ? T.cyanLo : "transparent", border: `1px solid ${expId === id ? T.cyan + "77" : T.border}`, borderRadius: 999, padding: "3px 10px", fontFamily: T.mono, fontSize: 10, color: expId === id ? T.cyan : T.textMid, cursor: "pointer", transition: "all .15s" }}>
+            {e.label}
+          </button>
+        ))}
       </div>
     </div>
   );
@@ -2128,7 +2179,7 @@ function RelayToggle() {
 // tool should hold itself to: don't ask for trust — hand over the evidence.
 const REPO = "https://github.com/netasset/anonscore";
 const GUARANTEES = [
-  { icon: "⬡", label: "No server, no backend", desc: "By default your address goes directly from your browser to Blockstream's public API — it never touches our infrastructure. (Turn on the optional privacy relay and it routes through our stateless no-log Worker instead, to hide your IP from the explorer.)",
+  { icon: "⬡", label: "No server, no backend", desc: "Your lookup reads a public block explorer (blockstream.info or mempool.space — your choice). By default it routes through our stateless, verifiably no-log relay so the explorer can't see your IP; flip the relay off and it goes straight from your browser, touching no AnonScore infrastructure at all.",
     proof: "read the fetch code", href: `${REPO}/blob/main/anonscore.jsx` },
   { icon: "◌", label: "Nothing stored or logged", desc: "We have no database, no analytics, no session tracking — there is no server that could remember you. Your scan history lives only in your own browser's local storage (clearable in the UI) and is never transmitted.",
     proof: "see the privacy stance", href: `${REPO}#privacy-stance-what-makes-this-site-different` },
@@ -2179,6 +2230,36 @@ function TrustBox() {
         </div>
       )}
     </div>
+  );
+}
+
+/* ── GUARANTEE RAIL — the six guarantees as a quick-glance column in the
+   hero's right margin, beside the relay switch. Each row links straight to
+   its proof (same GUARANTEES data as the trust box). Renders only on wide
+   viewports (≥1100px) where the margin actually exists; mobile/tablet users
+   get the full trust box further down the page instead. ── */
+function GuaranteeRail() {
+  const [wide, setWide] = useState(() => typeof window !== "undefined" && window.innerWidth >= 1100);
+  useEffect(() => {
+    const onR = () => setWide(window.innerWidth >= 1100);
+    window.addEventListener("resize", onR);
+    return () => window.removeEventListener("resize", onR);
+  }, []);
+  if (!wide) return null;
+  return (
+    <aside aria-label="Privacy guarantees — each links to its proof" style={{ position: "absolute", right: 22, top: 420, width: 205, zIndex: 1, animation: "fadeUp .5s ease .3s both" }}>
+      <div style={{ fontFamily: T.mono, fontSize: 8, color: T.textDim, letterSpacing: 2, marginBottom: 8 }}>GUARANTEES · VERIFY ↓</div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        {GUARANTEES.map((g, i) => (
+          <a key={i} href={g.href} target="_blank" rel="noopener noreferrer"
+            style={{ display: "flex", alignItems: "flex-start", gap: 6, fontFamily: T.mono, fontSize: 10, color: T.textMid, textDecoration: "none", lineHeight: 1.45, padding: "4px 6px", marginLeft: -6, borderRadius: 6, transition: "color .15s, background .15s" }}
+            onMouseOver={e => { e.currentTarget.style.color = T.cyan; e.currentTarget.style.background = T.cyanLo; }}
+            onMouseOut={e => { e.currentTarget.style.color = T.textMid; e.currentTarget.style.background = "transparent"; }}>
+            <span style={{ color: T.green, flexShrink: 0 }}>✓</span>{g.label}
+          </a>
+        ))}
+      </div>
+    </aside>
   );
 }
 
@@ -2699,6 +2780,7 @@ function Landing({ onAnalyze, isMobile, onCases }) {
         <div className="aurora" style={{ top: "-10%", right: "-12%", width: 460, height: 460, background: "radial-gradient(circle,#F7931A16 0%,transparent 70%)", animationDelay: "-8s" }} />
         <div className="aurora" style={{ bottom: "-24%", left: "32%", width: 400, height: 400, background: "radial-gradient(circle,#22D3EE12 0%,transparent 70%)", animationDelay: "-15s" }} />
         <div className="scan-ov" />
+        <GuaranteeRail />
 
         <section style={{ position: "relative", padding: isMobile ? "34px 20px 40px" : "50px 48px 56px", maxWidth: 860, margin: "0 auto", width: "100%", textAlign: "center" }}>
           {/* Eyebrow */}
@@ -5694,7 +5776,7 @@ function App() {
         setScanDataReady(false);
         setIsScanningLightning(false);
         setPage("landing");
-        toast.show("Node scan couldn't complete", { icon: "⚠️", color: T.red, msg: "Couldn't reach the Lightning API — check your connection and try again." });
+        toast.show("Node scan couldn't complete", { icon: "⚠️", color: T.red, msg: relayOn() ? "Couldn't reach the API via the privacy relay — try again, or switch the relay off to query the API directly (it will then see your IP)." : "Couldn't reach the Lightning API — check your connection and try again." });
       }
       return;
     }
@@ -5738,7 +5820,7 @@ function App() {
       await new Promise(r => setTimeout(r, 700));
       setScanDataReady(false);
       setPage("landing");
-      toast.show("Scan couldn't complete", { icon: "⚠️", color: T.red, msg: "Couldn't reach the blockchain API — check your connection and try again." });
+      toast.show("Scan couldn't complete", { icon: "⚠️", color: T.red, msg: relayOn() ? "Couldn't reach the explorer via the privacy relay — try again, or switch the relay off to query the explorer directly (it will then see your IP)." : "Couldn't reach the blockchain API — check your connection and try again." });
     }
   }, [toast]);
 
