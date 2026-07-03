@@ -9,8 +9,10 @@ claim is verifiable — that's the point of a privacy relay.
 
 ## What it does / doesn't do
 
-- **Does:** forward five specific GET endpoints (BTC address summary / UTXOs /
-  txs, LN node / channels) to blockstream.info / mempool.space, server-side.
+- **Does:** forward the specific GET endpoints AnonScore reads (BTC address
+  summary / UTXOs / txs — via blockstream.info at `/btc/…` or mempool.space at
+  `/btcm/…`, matching the site's explorer picker — plus LN node / channels),
+  server-side.
 - **Doesn't:** log anything, hold any state, forward your IP or headers upstream,
   or proxy anything outside its strict allowlist (SSRF-safe — see `worker.js`).
 

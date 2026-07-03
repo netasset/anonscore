@@ -278,8 +278,8 @@ const STRINGS = {
     "spectrum.low": "0 · Fully traceable",
     "spectrum.avg": "avg wallet: 38",
     "spectrum.high": "100 · Invisible",
-    "trust.btc": "₿ Bitcoin addresses are public by design. Your browser reads the chain directly from a public explorer (blockstream.info) — AnonScore never sees or stores your address, but that explorer sees your IP alongside it. Browse over Tor to hide even that link.",
-    "trust.ln": "⚡ Lightning node pubkeys are public on the gossip network. Your browser queries mempool.space directly — AnonScore never sees or stores your pubkey, but that API sees your IP alongside it. Browse over Tor to hide even that link.",
+    "trust.btc": "₿ Bitcoin addresses are public by design. AnonScore never sees or stores your address — the lookup reads a public block explorer, and the relay setting below controls whether that explorer can see your IP.",
+    "trust.ln": "⚡ Lightning node pubkeys are public on the gossip network. AnonScore never sees or stores your pubkey — the lookup reads mempool.space's public API, and the relay setting below controls whether it can see your IP.",
     "cta.analyze": "Analyze →",
     "cta.audit": "⚡ Audit →",
     "sample.divider": "or try a sample",
@@ -319,8 +319,8 @@ const STRINGS = {
     "spectrum.low": "0 · Totalmente rastreable",
     "spectrum.avg": "billetera promedio: 38",
     "spectrum.high": "100 · Invisible",
-    "trust.btc": "₿ Las direcciones de Bitcoin son públicas por diseño. Tu navegador lee la cadena directamente desde un explorador público (blockstream.info) — AnonScore nunca ve ni guarda tu dirección, pero ese explorador ve tu IP junto a ella. Navega con Tor para ocultar incluso ese vínculo.",
-    "trust.ln": "⚡ Las claves públicas de nodos Lightning son públicas en la red de gossip. Tu navegador consulta mempool.space directamente — AnonScore nunca ve ni guarda tu clave, pero esa API ve tu IP junto a ella. Navega con Tor para ocultar incluso ese vínculo.",
+    "trust.btc": "₿ Las direcciones de Bitcoin son públicas por diseño. AnonScore nunca ve ni guarda tu dirección — la consulta lee un explorador de bloques público, y el relé configurable abajo controla si ese explorador puede ver tu IP.",
+    "trust.ln": "⚡ Las claves públicas de nodos Lightning son públicas en la red de gossip. AnonScore nunca ve ni guarda tu clave — la consulta lee la API pública de mempool.space, y el relé configurable abajo controla si puede ver tu IP.",
     "cta.analyze": "Analizar →",
     "cta.audit": "⚡ Auditar →",
     "sample.divider": "o prueba un ejemplo",
@@ -389,9 +389,10 @@ function useLang() {
 const RELAY_URL = "https://anonscore-relay.netassetpremium.workers.dev";
 let _relay = (() => {
   try {
-    return localStorage.getItem("anonscore_relay") === "1";
+    const s = localStorage.getItem("anonscore_relay");
+    return s === null ? true : s === "1";
   } catch {
-    return false;
+    return true;
   }
 })();
 const _relayListeners = new Set();
@@ -415,6 +416,49 @@ function useRelay() {
     };
   }, []);
   return _relay;
+}
+const EXPLORERS = {
+  blockstream: {
+    label: "blockstream.info",
+    api: "https://blockstream.info/api",
+    relayPath: "/btc"
+  },
+  mempool: {
+    label: "mempool.space",
+    api: "https://mempool.space/api",
+    relayPath: "/btcm"
+  }
+};
+let _explorer = (() => {
+  try {
+    const s = localStorage.getItem("anonscore_explorer");
+    return EXPLORERS[s] ? s : "blockstream";
+  } catch {
+    return "blockstream";
+  }
+})();
+const _explorerListeners = new Set();
+function setExplorer(id) {
+  if (!EXPLORERS[id]) return;
+  _explorer = id;
+  try {
+    localStorage.setItem("anonscore_explorer", id);
+  } catch {}
+  _explorerListeners.forEach(fn => fn());
+}
+function explorer() {
+  return EXPLORERS[_explorer];
+}
+function useExplorer() {
+  const [, force] = useState(0);
+  useEffect(() => {
+    const fn = () => force(x => x + 1);
+    _explorerListeners.add(fn);
+    return () => {
+      _explorerListeners.delete(fn);
+    };
+  }, []);
+  return _explorer;
 }
 const TOOL_URL = {
   "Wasabi Wallet": "https://wasabiwallet.io",
@@ -1780,9 +1824,9 @@ function runEngine(utxos = [], txs = [], txCount = 0) {
     recommendations: recs.slice(0, 6)
   };
 }
-const API = "https://blockstream.info/api";
 async function fetchAddress(addr) {
-  const base = relayOn() ? `${RELAY_URL}/btc` : API;
+  const exp = explorer();
+  const base = relayOn() ? `${RELAY_URL}${exp.relayPath}` : exp.api;
   const safe = encodeURIComponent(addr);
   const [info, utxos, txs] = await Promise.all([fetch(`${base}/address/${safe}`).then(r => {
     if (!r.ok) throw new Error("Not found");
@@ -3764,19 +3808,24 @@ function ShareCard({
 }
 function RelayToggle() {
   const on = useRelay();
+  const expId = useExplorer();
+  const exp = EXPLORERS[expId];
   return React.createElement("div", {
     style: {
       maxWidth: 480,
       margin: "0 auto 12px",
       animation: "fadeUp .5s ease .22s both",
-      display: "flex",
-      alignItems: "flex-start",
-      gap: 11,
       background: on ? T.cyanLo : T.surface,
       border: `1px solid ${on ? T.cyan + "66" : T.border}`,
       borderRadius: 10,
       padding: "10px 14px",
       transition: "all .2s"
+    }
+  }, React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "flex-start",
+      gap: 11
     }
   }, React.createElement("button", {
     role: "switch",
@@ -3818,13 +3867,55 @@ function RelayToggle() {
     style: {
       color: on ? T.cyan : T.text
     }
-  }, on ? "Privacy relay on" : "Hide my IP from the explorer"), on ? " — this lookup routes through AnonScore's open-source, no-log relay, so the explorer sees our server's IP, not yours. It still sees the address itself (that's the tradeoff)." : " — route this lookup through AnonScore's no-log relay so the block explorer can't tie the address to your IP. Open source; the address still reaches the explorer, just not your IP."));
+  }, on ? "Privacy relay on" : "Privacy relay off"), on ? React.createElement(React.Fragment, null, " \u2014 lookups route through AnonScore's open-source, no-log relay, so your IP stays hidden. The block explorer (", exp.label, ") sees the address to provide the chain data.") : React.createElement(React.Fragment, null, " \u2014 lookups go straight from your browser to the block explorer (", exp.label, "), which then sees your IP next to the address. Turn the relay on to hide that link."), " ", React.createElement("a", {
+    href: "https://github.com/netasset/anonscore/blob/main/workers/relay/worker.js",
+    target: "_blank",
+    rel: "noopener noreferrer",
+    style: {
+      color: T.cyan,
+      textDecoration: "none",
+      fontFamily: T.mono,
+      fontSize: 11,
+      whiteSpace: "nowrap"
+    }
+  }, "verify: relay source \u2197"))), React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: 6,
+      marginTop: 9,
+      paddingLeft: 51
+    }
+  }, React.createElement("span", {
+    style: {
+      fontFamily: T.mono,
+      fontSize: 9,
+      color: T.textDim,
+      letterSpacing: 1
+    }
+  }, "EXPLORER"), Object.entries(EXPLORERS).map(([id, e]) => React.createElement("button", {
+    key: id,
+    onClick: () => setExplorer(id),
+    "aria-pressed": expId === id,
+    "aria-label": `Use ${e.label} as the block explorer`,
+    style: {
+      background: expId === id ? T.cyanLo : "transparent",
+      border: `1px solid ${expId === id ? T.cyan + "77" : T.border}`,
+      borderRadius: 999,
+      padding: "3px 10px",
+      fontFamily: T.mono,
+      fontSize: 10,
+      color: expId === id ? T.cyan : T.textMid,
+      cursor: "pointer",
+      transition: "all .15s"
+    }
+  }, e.label))));
 }
 const REPO = "https://github.com/netasset/anonscore";
 const GUARANTEES = [{
   icon: "⬡",
   label: "No server, no backend",
-  desc: "By default your address goes directly from your browser to Blockstream's public API — it never touches our infrastructure. (Turn on the optional privacy relay and it routes through our stateless no-log Worker instead, to hide your IP from the explorer.)",
+  desc: "Your lookup reads a public block explorer (blockstream.info or mempool.space — your choice). By default it routes through our stateless, verifiably no-log relay so the explorer can't see your IP; flip the relay off and it goes straight from your browser, touching no AnonScore infrastructure at all.",
   proof: "read the fetch code",
   href: `${REPO}/blob/main/anonscore.jsx`
 }, {
@@ -3983,6 +4074,72 @@ function TrustBox() {
       fontFamily: T.mono
     }
   }, "Don't take our word for it \u2014 every claim above links to its proof. Audit the full source on GitHub \u2197"))));
+}
+function GuaranteeRail() {
+  const [wide, setWide] = useState(() => typeof window !== "undefined" && window.innerWidth >= 1100);
+  useEffect(() => {
+    const onR = () => setWide(window.innerWidth >= 1100);
+    window.addEventListener("resize", onR);
+    return () => window.removeEventListener("resize", onR);
+  }, []);
+  if (!wide) return null;
+  return React.createElement("aside", {
+    "aria-label": "Privacy guarantees \u2014 each links to its proof",
+    style: {
+      position: "absolute",
+      right: 22,
+      top: 420,
+      width: 205,
+      zIndex: 1,
+      animation: "fadeUp .5s ease .3s both"
+    }
+  }, React.createElement("div", {
+    style: {
+      fontFamily: T.mono,
+      fontSize: 8,
+      color: T.textDim,
+      letterSpacing: 2,
+      marginBottom: 8
+    }
+  }, "GUARANTEES \xB7 VERIFY \u2193"), React.createElement("div", {
+    style: {
+      display: "flex",
+      flexDirection: "column",
+      gap: 6
+    }
+  }, GUARANTEES.map((g, i) => React.createElement("a", {
+    key: i,
+    href: g.href,
+    target: "_blank",
+    rel: "noopener noreferrer",
+    style: {
+      display: "flex",
+      alignItems: "flex-start",
+      gap: 6,
+      fontFamily: T.mono,
+      fontSize: 10,
+      color: T.textMid,
+      textDecoration: "none",
+      lineHeight: 1.45,
+      padding: "4px 6px",
+      marginLeft: -6,
+      borderRadius: 6,
+      transition: "color .15s, background .15s"
+    },
+    onMouseOver: e => {
+      e.currentTarget.style.color = T.cyan;
+      e.currentTarget.style.background = T.cyanLo;
+    },
+    onMouseOut: e => {
+      e.currentTarget.style.color = T.textMid;
+      e.currentTarget.style.background = "transparent";
+    }
+  }, React.createElement("span", {
+    style: {
+      color: T.green,
+      flexShrink: 0
+    }
+  }, "\u2713"), g.label))));
 }
 const CATEGORY_META = {
   exchange: {
@@ -5389,7 +5546,7 @@ function Landing({
     }
   }), React.createElement("div", {
     className: "scan-ov"
-  }), React.createElement("section", {
+  }), React.createElement(GuaranteeRail, null), React.createElement("section", {
     style: {
       position: "relative",
       padding: isMobile ? "34px 20px 40px" : "50px 48px 56px",
@@ -13134,7 +13291,7 @@ function App() {
         toast.show("Node scan couldn't complete", {
           icon: "⚠️",
           color: T.red,
-          msg: "Couldn't reach the Lightning API — check your connection and try again."
+          msg: relayOn() ? "Couldn't reach the API via the privacy relay — try again, or switch the relay off to query the API directly (it will then see your IP)." : "Couldn't reach the Lightning API — check your connection and try again."
         });
       }
       return;
@@ -13193,7 +13350,7 @@ function App() {
       toast.show("Scan couldn't complete", {
         icon: "⚠️",
         color: T.red,
-        msg: "Couldn't reach the blockchain API — check your connection and try again."
+        msg: relayOn() ? "Couldn't reach the explorer via the privacy relay — try again, or switch the relay off to query the explorer directly (it will then see your IP)." : "Couldn't reach the blockchain API — check your connection and try again."
       });
     }
   }, [toast]);

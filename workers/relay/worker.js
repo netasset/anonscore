@@ -36,18 +36,19 @@
  */
 
 const UPSTREAM = {
-  btc: "https://blockstream.info/api",
+  btc: "https://blockstream.info/api",       // BTC via Blockstream esplora
+  btcm: "https://mempool.space/api",         // BTC via mempool.space (esplora-compatible)
   ln: "https://mempool.space/api/v1/lightning",
 };
 
 // The ONLY path shapes AnonScore requests. Address/pubkey charsets are bounded
 // and length-capped so this can't be coerced into fetching anything else.
 const ALLOW = [
-  /^\/btc\/address\/[a-zA-Z0-9]{10,120}$/,          // address summary
-  /^\/btc\/address\/[a-zA-Z0-9]{10,120}\/utxo$/,    // UTXO set
-  /^\/btc\/address\/[a-zA-Z0-9]{10,120}\/txs$/,     // recent transactions
-  /^\/ln\/nodes\/[0-9a-fA-F]{66}$/,                 // LN node
-  /^\/ln\/nodes\/[0-9a-fA-F]{66}\/channels$/,       // LN node channels
+  /^\/btcm?\/address\/[a-zA-Z0-9]{10,120}$/,          // address summary
+  /^\/btcm?\/address\/[a-zA-Z0-9]{10,120}\/utxo$/,    // UTXO set
+  /^\/btcm?\/address\/[a-zA-Z0-9]{10,120}\/txs$/,     // recent transactions
+  /^\/ln\/nodes\/[0-9a-fA-F]{66}$/,                   // LN node
+  /^\/ln\/nodes\/[0-9a-fA-F]{66}\/channels$/,         // LN node channels
 ];
 
 const CORS = {
