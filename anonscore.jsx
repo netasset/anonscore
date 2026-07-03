@@ -63,10 +63,15 @@ input:focus-visible,button:focus-visible{outline-offset:2px}
 .accent-glow{animation:accentGlow 4.5s ease-in-out infinite}
 .scan-ov{position:absolute;inset:0;pointer-events:none;overflow:hidden;z-index:0}
 .scan-ov::before{content:"";position:absolute;left:0;right:0;height:38%;background:linear-gradient(180deg,transparent,#22D3EE10 55%,transparent);animation:scanSweep 8s linear infinite}
+/* ── Site-wide ambient backdrop (fixed, z:-1, behind every page) ── */
+@keyframes ambDrift{0%,100%{transform:translate3d(-2%,-1%,0) scale(1)}50%{transform:translate3d(3%,2.5%,0) scale(1.12)}}
+.amb{position:absolute;border-radius:50%;pointer-events:none;will-change:transform;animation:ambDrift 46s ease-in-out infinite}
+.bg-noise{position:absolute;inset:0;pointer-events:none;opacity:.03;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");background-size:180px 180px}
+.hairline-x{border-top:1px solid transparent;border-bottom:1px solid transparent;border-image:linear-gradient(90deg,transparent,#22D3EE3d 28%,#F7931A3d 72%,transparent) 1}
 @media (prefers-reduced-motion: reduce){
   *,*::before,*::after{animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important}
   .reveal{opacity:1!important;transform:none!important}
-  .aurora,.accent-glow,.scan-ov::before{animation:none!important}
+  .aurora,.accent-glow,.scan-ov::before,.amb{animation:none!important}
 }
 `;
 
@@ -2200,7 +2205,7 @@ function CaseFiles({ onOpenCase, onBack, isMobile }) {
   const visible = filter === "all" ? CASE_FILES : CASE_FILES.filter(c => c.category === filter);
 
   return (
-    <div role="main" aria-label={PAGE_ROLE_LABEL} style={{ minHeight: "100vh", background: T.bg, display: "flex", flexDirection: "column" }}>
+    <div role="main" aria-label={PAGE_ROLE_LABEL} style={{ minHeight: "100vh", background: "transparent", display: "flex", flexDirection: "column" }}>
       {/* Nav */}
       <nav style={{ display: "flex", alignItems: "center", gap: 10, padding: isMobile ? "12px 16px" : "12px 32px", borderBottom: `1px solid ${T.border}`, background: T.bg, position: "sticky", top: 0, zIndex: 100 }}>
         <button onClick={onBack} style={{ background: "transparent", border: `1.5px solid ${T.border}`, borderRadius: 8, padding: "7px 12px", color: T.textMid, fontFamily: T.sans, fontSize: 13, cursor: "pointer", transition: "border .15s" }}
@@ -2293,7 +2298,7 @@ function CaseDetail({ caseFile, onBack, onAnalyze, isMobile }) {
   const threadText = caseFile.thread.join("\n\n---\n\n");
 
   return (
-    <div role="main" aria-label={PAGE_ROLE_LABEL} style={{ minHeight: "100vh", background: T.bg, display: "flex", flexDirection: "column" }}>
+    <div role="main" aria-label={PAGE_ROLE_LABEL} style={{ minHeight: "100vh", background: "transparent", display: "flex", flexDirection: "column" }}>
       {/* Nav */}
       <nav style={{ display: "flex", alignItems: "center", gap: 10, padding: isMobile ? "12px 16px" : "12px 32px", borderBottom: `1px solid ${T.border}`, background: T.bg, position: "sticky", top: 0, zIndex: 100 }}>
         <button onClick={onBack} style={{ background: "transparent", border: `1.5px solid ${T.border}`, borderRadius: 8, padding: "7px 12px", color: T.textMid, fontFamily: T.sans, fontSize: 13, cursor: "pointer" }}
@@ -2626,7 +2631,7 @@ function Landing({ onAnalyze, isMobile, onCases }) {
           </a>
         </div>
       </nav>
-      <div role="main" aria-label="AnonScore — Bitcoin & Lightning privacy audit" style={{ minHeight: "100vh", display: "flex", flexDirection: "column", background: T.bg }}>
+      <div role="main" aria-label="AnonScore — Bitcoin & Lightning privacy audit" style={{ minHeight: "100vh", display: "flex", flexDirection: "column", background: "transparent" }}>
       {/* Nav */}
       <nav style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: isMobile ? "14px 20px" : "14px 48px", borderBottom: `1px solid ${T.border}`, background: T.bg, position: "sticky", top: 0, zIndex: 100 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -2858,7 +2863,7 @@ function Landing({ onAnalyze, isMobile, onCases }) {
       </div>{/* end hero wrapper */}
 
       {/* ── HOW IT WORKS — compact strip ── */}
-      <div className="reveal" style={{ borderTop: `1px solid ${T.border}`, borderBottom: `1px solid ${T.border}`, background: T.surface, padding: isMobile ? "28px 20px" : "32px 48px" }}>
+      <div className="reveal hairline-x" style={{ background: T.surface, padding: isMobile ? "28px 20px" : "32px 48px" }}>
         <div style={{ maxWidth: 860, margin: "0 auto" }}>
           <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(3, 1fr)", gap: isMobile ? 20 : 0 }}>
             {[
@@ -3111,7 +3116,7 @@ function Scanning({ address, isLightning, dataReady }) {
   }, []);
 
   return (
-    <div role="main" aria-live="polite" aria-label={isLightning ? "Auditing Lightning node" : "Analyzing wallet"} style={{ minHeight: "100vh", background: T.bg, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 32, gap: 24, position: "relative", overflow: "hidden" }}>
+    <div role="main" aria-live="polite" aria-label={isLightning ? "Auditing Lightning node" : "Analyzing wallet"} style={{ minHeight: "100vh", background: "transparent", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 32, gap: 24, position: "relative", overflow: "hidden" }}>
       <div className="scan-ov" aria-hidden="true" />
       <h1 className="sr-only">{isLightning ? "Auditing Lightning node" : "Analyzing Bitcoin wallet"}</h1>
       {/* Decorative animated visual — bolt for Lightning, mesh for Bitcoin */}
@@ -3581,7 +3586,7 @@ function WalletDirectory({ onBack, isMobile }) {
   }, []);
 
   return (
-    <div role="main" aria-label="Privacy-First Wallet Directory" style={{ minHeight: "100vh", background: T.bg, display: "flex", flexDirection: "column" }}>
+    <div role="main" aria-label="Privacy-First Wallet Directory" style={{ minHeight: "100vh", background: "transparent", display: "flex", flexDirection: "column" }}>
       <h1 className="sr-only">Privacy-First Bitcoin & Lightning Wallet Directory</h1>
 
       {/* Nav */}
@@ -3751,7 +3756,7 @@ function CoachWaitlist({ onBack, isMobile }) {
   }, []);
 
   return (
-    <div role="main" aria-label="Privacy Coach — early access waitlist" style={{ minHeight: "100vh", background: T.bg, display: "flex", flexDirection: "column" }}>
+    <div role="main" aria-label="Privacy Coach — early access waitlist" style={{ minHeight: "100vh", background: "transparent", display: "flex", flexDirection: "column" }}>
       <h1 className="sr-only">Privacy Coach — paid AI tier (early access waitlist)</h1>
 
       {/* Nav */}
@@ -4523,7 +4528,7 @@ function Dashboard({ address, addrInfo, utxos, txs, isMobile, onBack, onRescan, 
 
   // Empty address — show a clear message instead of a misleading score
   if (isEmpty) return (
-    <div role="main" aria-label="Empty address" style={{ minHeight: "100vh", background: T.bg, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 32, gap: 20 }}>
+    <div role="main" aria-label="Empty address" style={{ minHeight: "100vh", background: "transparent", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 32, gap: 20 }}>
       <h1 className="sr-only">This address has no on-chain history</h1>
       <div style={{ fontFamily: T.mono, fontSize: 10, color: T.textDim, letterSpacing: 2 }}>NO ON-CHAIN HISTORY</div>
       <div style={{ fontFamily: T.serif, fontSize: 28, color: T.text, textAlign: "center", fontWeight: 400 }}>This address has never been used.</div>
@@ -4576,7 +4581,7 @@ function Dashboard({ address, addrInfo, utxos, txs, isMobile, onBack, onRescan, 
   };
 
   return (
-    <div role="main" aria-label={`Privacy audit for ${address === "DEMO" || address === "DEMO_A" ? "demo wallet" : address}`} style={{ minHeight: "100vh", background: T.bg, display: "flex", flexDirection: "column", paddingBottom: isMobile ? 64 : 0 }}>
+    <div role="main" aria-label={`Privacy audit for ${address === "DEMO" || address === "DEMO_A" ? "demo wallet" : address}`} style={{ minHeight: "100vh", background: "transparent", display: "flex", flexDirection: "column", paddingBottom: isMobile ? 64 : 0 }}>
       <h1 className="sr-only">Privacy score {score} of 100, grade {grade} — {riskLabel}</h1>
       {/* Nav */}
       <nav style={{ display: "flex", alignItems: "center", gap: 10, padding: isMobile ? "12px 16px" : "12px 32px", borderBottom: `1px solid ${T.border}`, background: T.bg, position: "sticky", top: 0, zIndex: 100 }}>
@@ -5183,7 +5188,7 @@ function LightningDashboard({ nodeId, nodeData, channels, isMobile, onBack, onRe
   const handleRescan = () => onRescan && onRescan(nodeId, false, "ln_pubkey");
 
   return (
-    <div role="main" aria-label={`Lightning privacy audit for ${nodeData?.alias || nodeId.slice(0, 16)}`} style={{ minHeight: "100vh", background: T.bg, display: "flex", flexDirection: "column" }}>
+    <div role="main" aria-label={`Lightning privacy audit for ${nodeData?.alias || nodeId.slice(0, 16)}`} style={{ minHeight: "100vh", background: "transparent", display: "flex", flexDirection: "column" }}>
       <h1 className="sr-only">Lightning privacy score {score} of 100, grade {grade}</h1>
 
       {/* ── Share modal — unified with BTC ── */}
@@ -5555,6 +5560,32 @@ function ScrollProgress() {
   );
 }
 
+/* ─────────────────────────────────────────────
+   AMBIENT BACKDROP — one fixed atmosphere layer behind every page.
+   Pure CSS: no fetched assets, transform-only motion (no blur filters —
+   the orb softness comes from gradient falloff, which is GPU-cheap),
+   film-grain noise to kill gradient banding on dark displays, and the
+   whole thing goes still under prefers-reduced-motion. Page roots are
+   background:transparent so this shows through; opaque section strips
+   (T.surface) deliberately mask it, giving the page depth rhythm.
+───────────────────────────────────────────── */
+function AmbientBackground() {
+  return (
+    <div aria-hidden="true" style={{ position: "fixed", inset: 0, zIndex: -1, pointerEvents: "none", overflow: "hidden", background: T.bg }}>
+      {/* Deep-space tint: indigo nebula up top, subtle vignette below */}
+      <div style={{ position: "absolute", inset: 0, background: "radial-gradient(120% 70% at 50% -12%, #1b214066 0%, transparent 60%), radial-gradient(90% 90% at 50% 115%, #0d101f88 0%, transparent 55%)" }} />
+      {/* Slow-drifting glow orbs — brand cyan + Bitcoin orange, whisper-quiet alphas */}
+      <div className="amb" style={{ top: "2%", left: "-18%", width: "56vmax", height: "56vmax", background: "radial-gradient(circle,#22D3EE0a 0%,transparent 62%)" }} />
+      <div className="amb" style={{ top: "32%", right: "-22%", width: "60vmax", height: "60vmax", background: "radial-gradient(circle,#F7931A08 0%,transparent 60%)", animationDelay: "-18s", animationDuration: "54s" }} />
+      <div className="amb" style={{ bottom: "-26%", left: "20%", width: "52vmax", height: "52vmax", background: "radial-gradient(circle,#22D3EE07 0%,transparent 65%)", animationDelay: "-33s", animationDuration: "62s" }} />
+      {/* Node grid, masked so it dissolves toward the edges */}
+      <div className="dot-grid" style={{ position: "absolute", inset: 0, opacity: .5, WebkitMaskImage: "radial-gradient(90% 60% at 50% 28%, #000 0%, transparent 100%)", maskImage: "radial-gradient(90% 60% at 50% 28%, #000 0%, transparent 100%)" }} />
+      {/* Film grain — the difference between "flat dark page" and "premium dark page" */}
+      <div className="bg-noise" />
+    </div>
+  );
+}
+
 function App() {
   const [page, setPage] = useState("landing");
   const [activeCaseFile, setActiveCaseFile] = useState(null);
@@ -5714,6 +5745,7 @@ function App() {
   return (
     <>
       <style>{CSS}</style>
+      <AmbientBackground />
       <ScrollProgress />
       <Toast toasts={toast.toasts} />
 

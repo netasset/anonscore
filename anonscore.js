@@ -66,10 +66,15 @@ input:focus-visible,button:focus-visible{outline-offset:2px}
 .accent-glow{animation:accentGlow 4.5s ease-in-out infinite}
 .scan-ov{position:absolute;inset:0;pointer-events:none;overflow:hidden;z-index:0}
 .scan-ov::before{content:"";position:absolute;left:0;right:0;height:38%;background:linear-gradient(180deg,transparent,#22D3EE10 55%,transparent);animation:scanSweep 8s linear infinite}
+/* ── Site-wide ambient backdrop (fixed, z:-1, behind every page) ── */
+@keyframes ambDrift{0%,100%{transform:translate3d(-2%,-1%,0) scale(1)}50%{transform:translate3d(3%,2.5%,0) scale(1.12)}}
+.amb{position:absolute;border-radius:50%;pointer-events:none;will-change:transform;animation:ambDrift 46s ease-in-out infinite}
+.bg-noise{position:absolute;inset:0;pointer-events:none;opacity:.03;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");background-size:180px 180px}
+.hairline-x{border-top:1px solid transparent;border-bottom:1px solid transparent;border-image:linear-gradient(90deg,transparent,#22D3EE3d 28%,#F7931A3d 72%,transparent) 1}
 @media (prefers-reduced-motion: reduce){
   *,*::before,*::after{animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important}
   .reveal{opacity:1!important;transform:none!important}
-  .aurora,.accent-glow,.scan-ov::before{animation:none!important}
+  .aurora,.accent-glow,.scan-ov::before,.amb{animation:none!important}
 }
 `;
 const T = {
@@ -4029,7 +4034,7 @@ function CaseFiles({
     "aria-label": PAGE_ROLE_LABEL,
     style: {
       minHeight: "100vh",
-      background: T.bg,
+      background: "transparent",
       display: "flex",
       flexDirection: "column"
     }
@@ -4293,7 +4298,7 @@ function CaseDetail({
     "aria-label": PAGE_ROLE_LABEL,
     style: {
       minHeight: "100vh",
-      background: T.bg,
+      background: "transparent",
       display: "flex",
       flexDirection: "column"
     }
@@ -5125,7 +5130,7 @@ function Landing({
       minHeight: "100vh",
       display: "flex",
       flexDirection: "column",
-      background: T.bg
+      background: "transparent"
     }
   }, React.createElement("nav", {
     style: {
@@ -5867,10 +5872,8 @@ function Landing({
       textDecoration: "none"
     }
   }, "Open source \u2197"))))), React.createElement("div", {
-    className: "reveal",
+    className: "reveal hairline-x",
     style: {
-      borderTop: `1px solid ${T.border}`,
-      borderBottom: `1px solid ${T.border}`,
       background: T.surface,
       padding: isMobile ? "28px 20px" : "32px 48px"
     }
@@ -6561,7 +6564,7 @@ function Scanning({
     "aria-label": isLightning ? "Auditing Lightning node" : "Analyzing wallet",
     style: {
       minHeight: "100vh",
-      background: T.bg,
+      background: "transparent",
       display: "flex",
       flexDirection: "column",
       alignItems: "center",
@@ -7604,7 +7607,7 @@ function WalletDirectory({
     "aria-label": "Privacy-First Wallet Directory",
     style: {
       minHeight: "100vh",
-      background: T.bg,
+      background: "transparent",
       display: "flex",
       flexDirection: "column"
     }
@@ -8068,7 +8071,7 @@ function CoachWaitlist({
     "aria-label": "Privacy Coach \u2014 early access waitlist",
     style: {
       minHeight: "100vh",
-      background: T.bg,
+      background: "transparent",
       display: "flex",
       flexDirection: "column"
     }
@@ -9865,7 +9868,7 @@ function Dashboard({
     "aria-label": "Empty address",
     style: {
       minHeight: "100vh",
-      background: T.bg,
+      background: "transparent",
       display: "flex",
       flexDirection: "column",
       alignItems: "center",
@@ -9945,7 +9948,7 @@ function Dashboard({
     "aria-label": `Privacy audit for ${address === "DEMO" || address === "DEMO_A" ? "demo wallet" : address}`,
     style: {
       minHeight: "100vh",
-      background: T.bg,
+      background: "transparent",
       display: "flex",
       flexDirection: "column",
       paddingBottom: isMobile ? 64 : 0
@@ -11855,7 +11858,7 @@ function LightningDashboard({
     "aria-label": `Lightning privacy audit for ${nodeData?.alias || nodeId.slice(0, 16)}`,
     style: {
       minHeight: "100vh",
-      background: T.bg,
+      background: "transparent",
       display: "flex",
       flexDirection: "column"
     }
@@ -12940,6 +12943,67 @@ function ScrollProgress() {
     }
   }));
 }
+function AmbientBackground() {
+  return React.createElement("div", {
+    "aria-hidden": "true",
+    style: {
+      position: "fixed",
+      inset: 0,
+      zIndex: -1,
+      pointerEvents: "none",
+      overflow: "hidden",
+      background: T.bg
+    }
+  }, React.createElement("div", {
+    style: {
+      position: "absolute",
+      inset: 0,
+      background: "radial-gradient(120% 70% at 50% -12%, #1b214066 0%, transparent 60%), radial-gradient(90% 90% at 50% 115%, #0d101f88 0%, transparent 55%)"
+    }
+  }), React.createElement("div", {
+    className: "amb",
+    style: {
+      top: "2%",
+      left: "-18%",
+      width: "56vmax",
+      height: "56vmax",
+      background: "radial-gradient(circle,#22D3EE0a 0%,transparent 62%)"
+    }
+  }), React.createElement("div", {
+    className: "amb",
+    style: {
+      top: "32%",
+      right: "-22%",
+      width: "60vmax",
+      height: "60vmax",
+      background: "radial-gradient(circle,#F7931A08 0%,transparent 60%)",
+      animationDelay: "-18s",
+      animationDuration: "54s"
+    }
+  }), React.createElement("div", {
+    className: "amb",
+    style: {
+      bottom: "-26%",
+      left: "20%",
+      width: "52vmax",
+      height: "52vmax",
+      background: "radial-gradient(circle,#22D3EE07 0%,transparent 65%)",
+      animationDelay: "-33s",
+      animationDuration: "62s"
+    }
+  }), React.createElement("div", {
+    className: "dot-grid",
+    style: {
+      position: "absolute",
+      inset: 0,
+      opacity: .5,
+      WebkitMaskImage: "radial-gradient(90% 60% at 50% 28%, #000 0%, transparent 100%)",
+      maskImage: "radial-gradient(90% 60% at 50% 28%, #000 0%, transparent 100%)"
+    }
+  }), React.createElement("div", {
+    className: "bg-noise"
+  }));
+}
 function App() {
   const [page, setPage] = useState("landing");
   const [activeCaseFile, setActiveCaseFile] = useState(null);
@@ -13133,7 +13197,7 @@ function App() {
       });
     }
   }, [toast]);
-  return React.createElement(React.Fragment, null, React.createElement("style", null, CSS), React.createElement(ScrollProgress, null), React.createElement(Toast, {
+  return React.createElement(React.Fragment, null, React.createElement("style", null, CSS), React.createElement(AmbientBackground, null), React.createElement(ScrollProgress, null), React.createElement(Toast, {
     toasts: toast.toasts
   }), pendingScan && page === "landing" && React.createElement(ConfirmScanModal, {
     pendingScan: pendingScan,
