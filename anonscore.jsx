@@ -718,6 +718,7 @@ const addToHistory = (entry) => {
 const removeFromHistory = (addr) => {
   try { localStorage.setItem(HISTORY_KEY, JSON.stringify(getHistory().filter(e => e.addr !== addr))); } catch {}
 };
+const clearAllHistory = () => { try { localStorage.removeItem(HISTORY_KEY); } catch {} };
 
 const FIXES_KEY = "anonscore_fixes_v1";
 const getDoneFixes  = (addr) => { try { return new Set(JSON.parse(localStorage.getItem(FIXES_KEY + ":" + addr) || "[]")); } catch { return new Set(); } };
@@ -2517,6 +2518,7 @@ function Landing({ onAnalyze, isMobile, onCases }) {
   const [error, setError] = useState("");
   const [history, setHistory] = useState(() => getHistory());
   const deleteHistory = (addr) => { removeFromHistory(addr); setHistory(getHistory()); };
+  const wipeHistory = () => { clearAllHistory(); setHistory([]); };
   const [showFunding, setShowFunding] = useState(false);
   const [tipCopied, setTipCopied] = useState("");
   const copyTip = (label, value) => {
@@ -2736,7 +2738,13 @@ function Landing({ onAnalyze, isMobile, onCases }) {
           {history.length > 0 && (
             <div style={{ maxWidth: 480, margin: "0 auto 12px", animation: "fadeUp .5s ease .21s both" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-                <div style={{ fontFamily: T.mono, fontSize: 8, color: T.textDim, letterSpacing: 1.5 }}>{t("recent.title")}</div>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <div style={{ fontFamily: T.mono, fontSize: 8, color: T.textDim, letterSpacing: 1.5 }}>{t("recent.title")}</div>
+                  <button onClick={wipeHistory} aria-label="Clear all scan history from this browser"
+                    style={{ background: "none", border: "none", fontFamily: T.mono, fontSize: 8, letterSpacing: 1, color: T.textDim, cursor: "pointer", padding: 0, textDecoration: "underline", textUnderlineOffset: 2 }}
+                    onMouseOver={e => e.currentTarget.style.color = T.red}
+                    onMouseOut={e => e.currentTarget.style.color = T.textDim}>CLEAR ALL</button>
+                </div>
                 {history.length >= 2 && <Sparkline history={history.map(h => h.score)} width={64} height={22} />}
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
@@ -2763,6 +2771,9 @@ function Landing({ onAnalyze, isMobile, onCases }) {
                     </div>
                   );
                 })}
+              </div>
+              <div style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim, marginTop: 5, textAlign: "left", lineHeight: 1.5 }}>
+                Saved only in this browser's local storage — never sent anywhere. We have no server that could see it.
               </div>
             </div>
           )}
@@ -4036,7 +4047,11 @@ function AiConsentGate({ score, grade, checks, recommendations, walletMeta, onAc
             </div>
           ))}
           <div style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim, marginTop: 10, lineHeight: 1.5 }}>
-            This is the complete list. Nothing else leaves your browser.
+            This is the complete list. Nothing else leaves your browser.{" "}
+            <a href="https://github.com/netasset/anonscore/blob/main/anonscore.jsx" target="_blank" rel="noopener noreferrer"
+              style={{ color: T.cyan, textDecoration: "none" }}>
+              verify: the open-source code that builds this exact payload (search "buildAiContext") ↗
+            </a>
           </div>
         </div>
 
