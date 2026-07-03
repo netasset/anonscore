@@ -1842,6 +1842,7 @@ async function fetchAddress(addr) {
   };
 }
 const now = () => Math.floor(Date.now() / 1000);
+const atUtcHour = (days, hour) => Math.floor(now() / 86400) * 86400 - 86400 * days + 3600 * hour;
 const DEMO_A = {
   addrInfo: {
     chain_stats: {
@@ -2057,7 +2058,7 @@ const DEMO = {
     fee: 1420,
     size: 224,
     status: {
-      block_time: now() - 86400 * 14
+      block_time: atUtcHour(14, 20)
     }
   }, {
     txid: "7b91cc3a",
@@ -2081,7 +2082,7 @@ const DEMO = {
     fee: 3200,
     size: 450,
     status: {
-      block_time: now() - 86400 * 60
+      block_time: atUtcHour(60, 16)
     }
   }, {
     txid: "f004d188",
@@ -2103,7 +2104,7 @@ const DEMO = {
     fee: 980,
     size: 340,
     status: {
-      block_time: now() - 86400 * 180
+      block_time: atUtcHour(180, 23)
     }
   }, {
     txid: "2d5e4f7c",
@@ -2119,7 +2120,7 @@ const DEMO = {
     fee: 780,
     size: 224,
     status: {
-      block_time: now() - 86400 * 365
+      block_time: atUtcHour(365, 14)
     }
   }, {
     txid: "9c11a2b0",
@@ -2135,7 +2136,7 @@ const DEMO = {
     fee: 650,
     size: 224,
     status: {
-      block_time: now() - 86400 * 3
+      block_time: atUtcHour(3, 1)
     }
   }, {
     txid: "44cc3b77",
@@ -2151,7 +2152,7 @@ const DEMO = {
     fee: 320,
     size: 150,
     status: {
-      block_time: now() - 86400 * 2
+      block_time: atUtcHour(2, 3)
     }
   }, {
     txid: "bb44e901",
@@ -2165,7 +2166,7 @@ const DEMO = {
     fee: 1100,
     size: 200,
     status: {
-      block_time: now() - 86400 * 200
+      block_time: atUtcHour(200, 18)
     }
   }]
 };
@@ -9491,6 +9492,155 @@ function AiAssistant({
     }
   }, "\u2192"))));
 }
+function ActivityClock({
+  txs,
+  isMobile
+}) {
+  const stamps = (txs || []).map(t => t.status?.block_time).filter(Boolean);
+  const total = stamps.length;
+  const counts = Array(24).fill(0);
+  stamps.forEach(ts => counts[Math.floor(ts % 86400 / 3600)]++);
+  const K = 7;
+  let qStart = 0,
+    qSum = Infinity;
+  for (let s = 0; s < 24; s++) {
+    let sum = 0;
+    for (let j = 0; j < K; j++) sum += counts[(s + j) % 24];
+    if (sum < qSum) {
+      qSum = sum;
+      qStart = s;
+    }
+  }
+  const qEnd = (qStart + K) % 24;
+  const hasData = total >= 6;
+  const strong = hasData && qSum / total <= 0.2;
+  const sleepMidUtc = (qStart + K / 2) % 24;
+  let off = Math.round(3.5 - sleepMidUtc);
+  off = (off + 11 + 24) % 24 - 11;
+  const tz = `UTC${off >= 0 ? "+" : ""}${off}`;
+  const hh = h => `${String(h).padStart(2, "0")}:00`;
+  const max = Math.max(...counts, 1);
+  const BW = 10,
+    GAP = 5,
+    X0 = 8,
+    BASE = 64,
+    HMAX = 46;
+  const width = X0 * 2 + 24 * (BW + GAP) - GAP;
+  const inQuiet = h => {
+    const d = (h - qStart + 24) % 24;
+    return d < K;
+  };
+  return React.createElement("div", {
+    style: {
+      background: T.card,
+      border: `1px solid ${T.border}`,
+      borderRadius: 16,
+      padding: isMobile ? "16px 18px" : "18px 22px"
+    }
+  }, React.createElement("div", {
+    style: {
+      fontFamily: T.mono,
+      fontSize: 9,
+      color: T.cyan,
+      letterSpacing: 2,
+      marginBottom: 8
+    }
+  }, "ACTIVITY CLOCK"), React.createElement("div", {
+    style: {
+      fontFamily: T.serif,
+      fontSize: isMobile ? 17 : 19,
+      color: T.text,
+      fontWeight: 400,
+      marginBottom: 6
+    }
+  }, "When you transact is a fingerprint too"), !hasData ? React.createElement("div", {
+    style: {
+      fontSize: 12.5,
+      color: T.textMid,
+      lineHeight: 1.6
+    }
+  }, "Not enough timestamped history here to read a daily rhythm \u2014 that's one less pattern the chain gives away.") : React.createElement(React.Fragment, null, React.createElement("svg", {
+    viewBox: `0 0 ${width} 92`,
+    role: "img",
+    "aria-label": `Transactions by UTC hour of day. Quietest window ${hh(qStart)} to ${hh(qEnd)} UTC.`,
+    style: {
+      display: "block",
+      width: "100%",
+      maxWidth: 480,
+      height: "auto",
+      marginTop: 6,
+      overflow: "visible"
+    }
+  }, counts.map((c, h) => {
+    const x = X0 + h * (BW + GAP);
+    const bh = c === 0 ? 2 : Math.max(4, c / max * HMAX);
+    return React.createElement("rect", {
+      key: h,
+      x: x,
+      y: BASE - bh,
+      width: BW,
+      height: bh,
+      rx: "2",
+      fill: c === 0 ? T.border : T.cyan,
+      fillOpacity: c === 0 ? 0.6 : 0.9
+    }, React.createElement("title", null, `${hh(h)}–${hh((h + 1) % 24)} UTC — ${c} tx${c !== 1 ? "s" : ""}`));
+  }), React.createElement("line", {
+    x1: X0,
+    y1: BASE + 1,
+    x2: width - X0,
+    y2: BASE + 1,
+    stroke: T.border,
+    strokeWidth: "1"
+  }), [0, 6, 12, 18].map(h => React.createElement("text", {
+    key: h,
+    x: X0 + h * (BW + GAP) + BW / 2,
+    y: BASE + 12,
+    textAnchor: "middle",
+    fontFamily: T.mono,
+    fontSize: "8",
+    fill: T.textDim
+  }, hh(h))), React.createElement("text", {
+    x: width - X0,
+    y: BASE + 12,
+    textAnchor: "end",
+    fontFamily: T.mono,
+    fontSize: "8",
+    fill: T.textDim
+  }, "UTC"), (qStart + K <= 24 ? [[qStart, qStart + K]] : [[qStart, 24], [0, (qStart + K) % 24]]).map(([a, b], i) => React.createElement("line", {
+    key: i,
+    x1: X0 + a * (BW + GAP),
+    y1: BASE + 18,
+    x2: X0 + b * (BW + GAP) - GAP,
+    y2: BASE + 18,
+    stroke: T.textDim,
+    strokeWidth: "1.5",
+    strokeLinecap: "round"
+  })), React.createElement("text", {
+    x: X0 + (qStart + K / 2) % 24 * (BW + GAP),
+    y: BASE + 28,
+    textAnchor: "middle",
+    fontFamily: T.mono,
+    fontSize: "8",
+    fill: T.textDim
+  }, "quietest ", K, "h")), React.createElement("div", {
+    style: {
+      fontSize: 12.5,
+      color: T.textMid,
+      lineHeight: 1.6,
+      marginTop: 10,
+      borderTop: `1px solid ${T.borderLo}`,
+      paddingTop: 10
+    }
+  }, strong ? React.createElement(React.Fragment, null, "Your quiet hours run ", React.createElement("strong", {
+    style: {
+      color: T.text
+    }
+  }, hh(qStart), "\u2013", hh(qEnd), " UTC"), ". If that's when you sleep, an analyst would place you around ", React.createElement("strong", {
+    style: {
+      color: T.text
+    }
+  }, tz, " (\xB12)"), " \u2014 block timestamps are public, and time-of-day is one of the oldest deanonymization signals. Based on the ", total, " most recent transactions", total < 12 ? " (small sample — rough read)" : "", ".") : React.createElement(React.Fragment, null, "No strong daily rhythm across the ", total, " most recent transactions \u2014 good: your timing gives an analyst less to work with. (Wallets with automated or randomized broadcast times blur this signal on purpose.)"))));
+}
 function ExposureFlow({
   txs,
   isMobile,
@@ -9721,7 +9871,10 @@ function ExposureFlow({
     onMouseOut: e => {
       e.currentTarget.style.background = "transparent";
     }
-  }, "See how to fix these \u2192")), list.map((tx, ti) => {
+  }, "See how to fix these \u2192")), React.createElement(ActivityClock, {
+    txs: txs,
+    isMobile: isMobile
+  }), list.map((tx, ti) => {
     const vin = tx.vin || [],
       vout = tx.vout || [];
     const inputAddrs = new Set(vin.map(v => v.prevout?.scriptpubkey_address).filter(Boolean));
