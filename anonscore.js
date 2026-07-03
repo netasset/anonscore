@@ -5651,7 +5651,7 @@ function Landing({
       textAlign: "left",
       lineHeight: 1.5
     }
-  }, "Saved only in this browser's local storage \u2014 never sent anywhere. We have no server that could see it.")), React.createElement("div", {
+  }, "Saved only in this browser's local storage \u2014 never sent anywhere; we have no server that could see it. Gone when you hit CLEAR ALL or clear this site's data in your browser. (Note: clearing browsing ", React.createElement("em", null, "history"), " alone doesn't remove site data.)")), React.createElement("div", {
     style: {
       display: "flex",
       flexDirection: "column",
