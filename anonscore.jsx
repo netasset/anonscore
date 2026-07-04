@@ -865,47 +865,120 @@ function HeuristicIcon({ k, size = 22, color = "currentColor" }) {
    Deterministic per case id, so each looks distinct. Breaks up the
    long narrative with a thematically-apt visual ("what an analyst sees").
 ───────────────────────────────────────────── */
+/* CASE HERO — editorial on-chain "fingerprint" art for each case file.
+   Same thin line-art language everywhere, but each known case gets a
+   composition that tells ITS story (the id is the variant key); unknown ids
+   fall back to a seeded generic flow graph. Pure inline SVG, aria-hidden,
+   ring animation is killed by the global reduced-motion rule. */
 function CaseHero({ seed = "0", color = "#22D3EE", height = 120 }) {
   const W = 800, H = height;
-  // Deterministic pseudo-random from the seed string.
   let s = 0; for (let i = 0; i < seed.length; i++) s = (s * 31 + seed.charCodeAt(i)) >>> 0;
   const rnd = () => { s = (s * 1103515245 + 12345) & 0x7fffffff; return s / 0x7fffffff; };
-  const inputs  = 4 + Math.floor(rnd() * 4);   // 4–7 inputs
-  const outputs = 3 + Math.floor(rnd() * 4);   // 3–6 outputs
-  const cx = W * 0.5, cy = H / 2;
-  const yIn  = n => (H * (n + 1)) / (inputs + 1);
-  const yOut = n => (H * (n + 1)) / (outputs + 1);
+  const node = (x, y, r = 6) => <>
+    <circle cx={x} cy={y} r={r + 5} fill="none" stroke={color} strokeWidth="1.5" strokeOpacity="0.5" style={{ animation: "scanRing 2.4s ease-out infinite", transformOrigin: `${x}px ${y}px` }} />
+    <circle cx={x} cy={y} r={r} fill={color} fillOpacity="0.9" style={{ filter: `drop-shadow(0 0 6px ${color})` }} />
+  </>;
+  const glow = (x, y) => <>
+    <defs><radialGradient id={`ch-g-${seed}`} cx="50%" cy="50%" r="50%"><stop offset="0%" stopColor={color} stopOpacity="0.35" /><stop offset="100%" stopColor={color} stopOpacity="0" /></radialGradient></defs>
+    <rect x={x - 120} y={y - 60} width="240" height="120" fill={`url(#ch-g-${seed})`} />
+  </>;
+
+  let scene = null;
+  if (seed === "001") {
+    // Bitfinex seizure: 2,072 hops of history swept into ONE point on ONE day.
+    const cx = W * 0.62, cy = H / 2, n = 16;
+    scene = <>
+      {glow(cx, cy)}
+      {Array.from({ length: n }).map((_, i) => {
+        const y0 = (H * (i + 1)) / (n + 1);
+        return <path key={i} d={`M20 ${y0.toFixed(1)} C ${W * 0.35} ${y0.toFixed(1)}, ${cx - 70} ${cy}, ${cx} ${cy}`} fill="none" stroke={color} strokeWidth="1" strokeOpacity="0.22" />;
+      })}
+      <line x1={cx} y1="6" x2={cx} y2={H - 6} stroke={color} strokeWidth="1" strokeOpacity="0.35" strokeDasharray="3 5" />
+      {node(cx, cy, 7)}
+    </>;
+  } else if (seed === "002") {
+    // Binance cold wallet: a vault — few huge inflows, perfectly uniform round outputs.
+    const cx = W * 0.34, cy = H / 2;
+    scene = <>
+      {glow(cx, cy)}
+      {[0.3, 0.5, 0.7].map((f, i) => <path key={i} d={`M20 ${(H * f).toFixed(1)} C ${cx - 120} ${(H * f).toFixed(1)}, ${cx - 80} ${cy}, ${cx - 26} ${cy}`} fill="none" stroke={color} strokeWidth="2" strokeOpacity="0.3" />)}
+      {[20, 14].map((r, i) => <circle key={i} cx={cx} cy={cy} r={r} fill="none" stroke={color} strokeWidth="1.5" strokeOpacity={0.45 - i * 0.1} />)}
+      {node(cx, cy, 6)}
+      {Array.from({ length: 6 }).map((_, i) => {
+        const y0 = (H * (i + 1)) / 7;
+        return <g key={"o" + i}>
+          <line x1={cx + 26} y1={y0} x2={W - 60} y2={y0} stroke={color} strokeWidth="1" strokeOpacity="0.25" />
+          <rect x={W - 58} y={y0 - 3} width="6" height="6" fill={color} fillOpacity="0.5" />
+        </g>;
+      })}
+    </>;
+  } else if (seed === "003") {
+    // Silk Road Individual X: seven flat years, then the sudden fork.
+    const cy = H / 2, fx = W * 0.7;
+    scene = <>
+      {glow(fx, cy)}
+      <line x1="20" y1={cy} x2={fx} y2={cy} stroke={color} strokeWidth="1.5" strokeOpacity="0.4" />
+      {Array.from({ length: 9 }).map((_, i) => <line key={i} x1={40 + i * 62} y1={cy - 4} x2={40 + i * 62} y2={cy + 4} stroke={color} strokeWidth="1" strokeOpacity="0.35" />)}
+      <path d={`M${fx} ${cy} C ${fx + 60} ${cy}, ${fx + 40} ${H * 0.22}, ${W - 30} ${H * 0.22}`} fill="none" stroke={color} strokeWidth="1.5" strokeOpacity="0.45" />
+      <path d={`M${fx} ${cy} C ${fx + 60} ${cy}, ${fx + 40} ${H * 0.78}, ${W - 30} ${H * 0.78}`} fill="none" stroke={color} strokeWidth="1.5" strokeOpacity="0.45" />
+      {node(fx, cy, 6)}
+    </>;
+  } else if (seed === "004") {
+    // James Zhong: the trail vanishes under the floorboards — until the search warrant.
+    const cy = H / 2, bx = W * 0.28, ex = W * 0.72;
+    scene = <>
+      {glow(ex + 60, cy)}
+      <line x1={bx - 6} y1={cy - 14} x2={ex + 6} y2={cy - 14} stroke={color} strokeWidth="1.5" strokeOpacity="0.5" />
+      {Array.from({ length: 22 }).map((_, i) => <line key={i} x1={bx + i * 16} y1={cy - 14} x2={bx + i * 16 - 8} y2={cy - 26} stroke={color} strokeWidth="1" strokeOpacity="0.3" />)}
+      <path d={`M20 ${H * 0.25} C ${bx - 40} ${H * 0.25}, ${bx - 30} ${cy + 12} , ${bx + 10} ${cy + 14}`} fill="none" stroke={color} strokeWidth="1.2" strokeOpacity="0.4" />
+      <line x1={bx + 10} y1={cy + 14} x2={ex - 10} y2={cy + 14} stroke={color} strokeWidth="1.2" strokeOpacity="0.18" strokeDasharray="4 4" />
+      <path d={`M${ex - 10} ${cy + 14} C ${ex + 30} ${cy + 12}, ${ex + 20} ${H * 0.3}, ${ex + 60} ${H * 0.3}`} fill="none" stroke={color} strokeWidth="1.2" strokeOpacity="0.4" />
+      {node(ex + 60, H * 0.3, 5)}
+    </>;
+  } else if (seed === "005") {
+    // Satoshi cluster: coinbase rays minted outward — and nothing ever leaves.
+    const cx = W * 0.5, cy = H / 2, n = 13;
+    scene = <>
+      {glow(cx, cy)}
+      {Array.from({ length: n }).map((_, i) => {
+        const a = (Math.PI * 2 * i) / n, r1 = 22, r2 = Math.min(W, 260) / 2 - 14;
+        const x1 = cx + Math.cos(a) * r1, y1 = cy + Math.sin(a) * r1 * (H / 260);
+        const x2 = cx + Math.cos(a) * r2, y2 = cy + Math.sin(a) * r2 * (H / 260);
+        return <g key={i}>
+          <line x1={x1} y1={y1} x2={x2} y2={y2} stroke={color} strokeWidth="1" strokeOpacity="0.3" />
+          <circle cx={x2} cy={y2} r="2.5" fill={color} fillOpacity="0.55" />
+        </g>;
+      })}
+      {node(cx, cy, 7)}
+    </>;
+  } else if (seed === "006") {
+    // Mt. Gox hacker: everything in, nothing out — outputs are stubs that die.
+    const cx = W * 0.55, cy = H / 2;
+    const hex = Array.from({ length: 6 }).map((_, i) => { const a = Math.PI / 3 * i - Math.PI / 6; return `${(cx + Math.cos(a) * 26).toFixed(1)},${(cy + Math.sin(a) * 26).toFixed(1)}`; }).join(" ");
+    scene = <>
+      {glow(cx, cy)}
+      {[0.25, 0.5, 0.75].map((f, i) => <path key={i} d={`M20 ${(H * f).toFixed(1)} C ${W * 0.3} ${(H * f).toFixed(1)}, ${cx - 70} ${cy}, ${cx - 24} ${cy}`} fill="none" stroke={color} strokeWidth="1.2" strokeOpacity="0.3" />)}
+      <polygon points={hex} fill="none" stroke={color} strokeWidth="1.5" strokeOpacity="0.5" />
+      {node(cx, cy, 6)}
+      {[0.35, 0.5, 0.65].map((f, i) => <line key={"s" + i} x1={cx + 28} y1={H * f} x2={cx + 88} y2={H * f} stroke={color} strokeWidth="1" strokeOpacity="0.18" strokeDasharray="3 6" />)}
+    </>;
+  } else {
+    // Generic seeded flow graph for any future case.
+    const inputs = 4 + Math.floor(rnd() * 4), outputs = 3 + Math.floor(rnd() * 4);
+    const cx = W * 0.5, cy = H / 2;
+    const yIn = n => (H * (n + 1)) / (inputs + 1), yOut = n => (H * (n + 1)) / (outputs + 1);
+    scene = <>
+      {glow(cx, cy)}
+      {Array.from({ length: inputs }).map((_, i) => <path key={"i" + i} d={`M40 ${yIn(i).toFixed(1)} C ${W * 0.3} ${yIn(i).toFixed(1)}, ${cx - 60} ${cy}, ${cx} ${cy}`} fill="none" stroke={color} strokeWidth="1" strokeOpacity="0.28" />)}
+      {Array.from({ length: outputs }).map((_, i) => <path key={"o" + i} d={`M${cx} ${cy} C ${cx + 60} ${cy}, ${W * 0.7} ${yOut(i).toFixed(1)}, ${W - 40} ${yOut(i).toFixed(1)}`} fill="none" stroke={color} strokeWidth="1" strokeOpacity="0.28" />)}
+      {Array.from({ length: inputs }).map((_, i) => <circle key={"ni" + i} cx="40" cy={yIn(i).toFixed(1)} r="3" fill={color} fillOpacity="0.55" />)}
+      {Array.from({ length: outputs }).map((_, i) => <circle key={"no" + i} cx={W - 40} cy={yOut(i).toFixed(1)} r="3" fill={color} fillOpacity="0.55" />)}
+      {node(cx, cy, 6)}
+    </>;
+  }
   return (
     <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} preserveAspectRatio="none" aria-hidden="true" style={{ display: "block" }}>
-      <defs>
-        <radialGradient id={`ch-glow-${s}`} cx="50%" cy="50%" r="50%">
-          <stop offset="0%" stopColor={color} stopOpacity="0.35" />
-          <stop offset="100%" stopColor={color} stopOpacity="0" />
-        </radialGradient>
-      </defs>
-      <rect x={cx - 120} y={cy - 60} width="240" height="120" fill={`url(#ch-glow-${s})`} />
-      {/* input → cluster */}
-      {Array.from({ length: inputs }).map((_, i) => (
-        <path key={"i" + i} d={`M40 ${yIn(i).toFixed(1)} C ${W*0.3} ${yIn(i).toFixed(1)}, ${cx-60} ${cy}, ${cx} ${cy}`}
-          fill="none" stroke={color} strokeWidth="1" strokeOpacity="0.28" />
-      ))}
-      {/* cluster → outputs */}
-      {Array.from({ length: outputs }).map((_, i) => (
-        <path key={"o" + i} d={`M${cx} ${cy} C ${cx+60} ${cy}, ${W*0.7} ${yOut(i).toFixed(1)}, ${W-40} ${yOut(i).toFixed(1)}`}
-          fill="none" stroke={color} strokeWidth="1" strokeOpacity="0.28" />
-      ))}
-      {/* input nodes */}
-      {Array.from({ length: inputs }).map((_, i) => (
-        <circle key={"ni" + i} cx="40" cy={yIn(i).toFixed(1)} r="3" fill={color} fillOpacity="0.55" />
-      ))}
-      {/* output nodes */}
-      {Array.from({ length: outputs }).map((_, i) => (
-        <circle key={"no" + i} cx={W - 40} cy={yOut(i).toFixed(1)} r="3" fill={color} fillOpacity="0.55" />
-      ))}
-      {/* central cluster — the wallet */}
-      <circle cx={cx} cy={cy} r="11" fill="none" stroke={color} strokeWidth="1.5" strokeOpacity="0.5"
-        style={{ animation: "scanRing 2.4s ease-out infinite", transformOrigin: `${cx}px ${cy}px` }} />
-      <circle cx={cx} cy={cy} r="6" fill={color} fillOpacity="0.9" style={{ filter: `drop-shadow(0 0 6px ${color})` }} />
+      {scene}
     </svg>
   );
 }
