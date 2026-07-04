@@ -3934,7 +3934,7 @@ const GUARANTEES = [{
 }, {
   icon: "⬢",
   label: "Zero third-party requests",
-  desc: "Every script, font, and icon is self-hosted — no CDNs, no trackers. A strict Content-Security-Policy makes your browser physically block requests to anywhere except the public explorers and our two opt-in workers. It's enforced by your browser, not by our promise.",
+  desc: "Every script, font, and icon is self-hosted — no CDNs, no trackers. A strict Content-Security-Policy makes your browser physically block requests to anywhere except the public explorers, our no-log relay (on by default, one click off), and the AI worker (opt-in). It's enforced by your browser, not by our promise.",
   proof: "read the CSP header",
   href: `${REPO}/blob/main/_headers`
 }, {
@@ -9494,8 +9494,10 @@ function AiAssistant({
 }
 function ActivityClock({
   txs,
-  isMobile
+  isMobile,
+  entity
 }) {
+  const third = !!entity;
   const stamps = (txs || []).map(t => t.status?.block_time).filter(Boolean);
   const total = stamps.length;
   const counts = Array(24).fill(0);
@@ -9631,20 +9633,21 @@ function ActivityClock({
       borderTop: `1px solid ${T.borderLo}`,
       paddingTop: 10
     }
-  }, strong ? React.createElement(React.Fragment, null, "Your quiet hours run ", React.createElement("strong", {
+  }, strong ? React.createElement(React.Fragment, null, third ? "This wallet's quiet hours" : "Your quiet hours", " run ", React.createElement("strong", {
     style: {
       color: T.text
     }
-  }, hh(qStart), "\u2013", hh(qEnd), " UTC"), ". If that's when you sleep, an analyst would place you around ", React.createElement("strong", {
+  }, hh(qStart), "\u2013", hh(qEnd), " UTC"), ". If that's ", third ? "when its owner sleeps, an analyst would place them" : "when you sleep, an analyst would place you", " around ", React.createElement("strong", {
     style: {
       color: T.text
     }
-  }, tz, " (\xB12)"), " \u2014 block timestamps are public, and time-of-day is one of the oldest deanonymization signals. Based on the ", total, " most recent transactions", total < 12 ? " (small sample — rough read)" : "", ".") : React.createElement(React.Fragment, null, "No strong daily rhythm across the ", total, " most recent transactions \u2014 good: your timing gives an analyst less to work with. (Wallets with automated or randomized broadcast times blur this signal on purpose.)"))));
+  }, tz, " (\xB12)"), " \u2014 block timestamps are public, and time-of-day is one of the oldest deanonymization signals. Based on the ", total, " most recent transactions", total < 12 ? " (small sample — rough read)" : "", ".") : React.createElement(React.Fragment, null, "No strong daily rhythm across the ", total, " most recent transactions \u2014 ", third ? "this wallet's timing gives" : "good: your timing gives", " an analyst less to work with. (Wallets with automated or randomized broadcast times blur this signal on purpose.)"))));
 }
 function ExposureFlow({
   txs,
   isMobile,
-  onFix
+  onFix,
+  entity
 }) {
   const list = (txs || []).slice(0, 8);
   const isRound = v => v >= 100000 && (v % 1000000 === 0 || v % 500000 === 0);
@@ -9873,7 +9876,8 @@ function ExposureFlow({
     }
   }, "See how to fix these \u2192")), React.createElement(ActivityClock, {
     txs: txs,
-    isMobile: isMobile
+    isMobile: isMobile,
+    entity: entity
   }), list.map((tx, ti) => {
     const vin = tx.vin || [],
       vout = tx.vout || [];
@@ -11625,7 +11629,8 @@ function Dashboard({
   }))), tab === "Flow" && React.createElement(ExposureFlow, {
     txs: txs,
     isMobile: isMobile,
-    onFix: () => setTab("Fix It")
+    onFix: () => setTab("Fix It"),
+    entity: CASE_FILES.find(c => c.address === address)?.entity
   }), tab === "Methodology" && React.createElement("div", {
     style: {
       display: "flex",

@@ -61,18 +61,21 @@ self.addEventListener("fetch", (e) => {
   // to network when there's no cache hit, and to the SPA shell when offline.
   e.respondWith(
     caches.match(req).then((hit) => {
-      const network = fetch(req).then((res) => {
+      const network = fetch(req).then(async (res) => {
         if (res && res.ok && res.type === "basic") {
           const clone = res.clone();
-          caches.open(CACHE).then((c) => c.put(req, clone));
+          await caches.open(CACHE).then((c) => c.put(req, clone));
         }
         return res;
       }).catch(() =>
         // Network failure + nothing cached → for navigation requests, fall back to /index.html (SPA shell).
         req.mode === "navigate" ? caches.match("/index.html") : Response.error()
       );
-      // Serve cache immediately if we have it; the background revalidation above
-      // still runs and refreshes the cache for next time. Otherwise wait on network.
+      // Keep the worker alive until the background revalidation finishes —
+      // without this, responding from cache lets the browser kill the worker
+      // before the fresh copy lands, making revalidation unreliable.
+      e.waitUntil(network.then(() => {}, () => {}));
+      // Serve cache immediately if we have it; otherwise wait on the network.
       return hit || network;
     })
   );

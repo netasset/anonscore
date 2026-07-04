@@ -25,14 +25,14 @@ Single static site. No backend, no database, no analytics.
 
 | File | Role |
 |---|---|
-| `anonscore.jsx` | **Source of truth.** ~5,500 lines of React with inline styles. Edit this. |
+| `anonscore.jsx` | **Source of truth.** ~6,000 lines of React with inline styles. Edit this. |
 | `anonscore.js` | **Auto-generated** from `anonscore.jsx` (classic React runtime, no in-browser Babel). |
 | `index.html` | Static shell: pre-rendered hero (instant paint), defer-loaded scripts, manifest + favicon + JSON-LD. |
-| `sw.js` | Service worker. Precaches everything for offline. Cache key auto-stamped by build. |
+| `sw.js` | Service worker. Precaches for offline, serves stale-while-revalidate so returning visitors always converge on fresh code. No per-build cache key. |
 | `manifest.webmanifest` | PWA manifest — makes the site installable. |
 | `vendor/` | Self-hosted React, ReactDOM, canvas-confetti, dom-to-image-more, and Google Fonts. **Zero third-party requests at runtime.** |
 | `_headers` | Cloudflare security headers + strict CSP (`script-src 'self'`) + cache rules. |
-| `build.mjs` | One-shot compiler: `anonscore.jsx → anonscore.js`, plus stamps the SW cache hash. |
+| `build.mjs` | One-shot compiler: `anonscore.jsx → anonscore.js`. Touches nothing else. |
 | `scripts/test.mjs` | End-to-end test suite (23 checks). Runs in CI on every PR. |
 | `scripts/fetch-fonts.mjs` | Re-fetches the self-hosted Google Fonts subset. Run only if updating font weights. |
 | `.github/workflows/` | `build.yml` auto-rebuilds `anonscore.js` on feature-branch pushes. `test.yml` runs the test suite on every PR. |
@@ -41,7 +41,7 @@ Single static site. No backend, no database, no analytics.
 
 ```bash
 npm install        # once
-npm run build      # compiles anonscore.jsx → anonscore.js + stamps sw.js
+npm run build      # compiles anonscore.jsx → anonscore.js
 npm test           # full E2E (build invariants + smoke + a11y in headless Chromium)
 ```
 
@@ -116,8 +116,8 @@ Spanish currently covers the landing + scanning surfaces. The dashboard/case-fil
 
 ## Privacy stance (what makes this site different)
 
-- **Zero third-party requests at runtime.** Every script, font, and asset is self-hosted under `/vendor/`. The only outbound calls are: the public blockchain APIs (blockstream.info, mempool.space) for the address you paste, and the AI worker if you opt in.
-- **No cookies, no localStorage tracking, no analytics.** localStorage holds exactly three things, all local to your browser and never transmitted: your language choice (`anonscore_lang`), your recent scan history (`anonscore_history_v1` — last 5 addresses, clearable from the UI), and which fix items you've dismissed for a given address (`anonscore_fixes_v1:<addr>`). Nothing else — no visitor ID, no session token, no analytics beacon.
+- **Zero third-party requests at runtime.** Every script, font, and asset is self-hosted under `/vendor/`. The only outbound calls are: the block explorer for the address you paste (blockstream.info or mempool.space — your choice, and by default routed through our open-source no-log relay so the explorer can't see your IP; one click switches to direct queries), and the AI worker if you opt in.
+- **No cookies, no localStorage tracking, no analytics.** localStorage holds exactly five things, all local to your browser and never transmitted: your language choice (`anonscore_lang`), your recent scan history (`anonscore_history_v1` — last 5 addresses, clearable from the UI), dismissed fix items per address (`anonscore_fixes_v1:<addr>`), your privacy-relay setting (`anonscore_relay`), and your block-explorer choice (`anonscore_explorer`). Nothing else — no visitor ID, no session token, no analytics beacon.
 - **Strict CSP**: `script-src 'self'`. No inline scripts. No eval.
 - **Tor compatible**: no fingerprinting, no canvas tricks, no third-party requests.
 - **Open source under MIT.** The full audit logic is in `anonscore.jsx`, plain JavaScript. Verifiable in minutes.
@@ -135,7 +135,7 @@ These same contacts are published machine-readably at [`/.well-known/security.tx
 
 **What we care about most**, given the threat model of a client-side privacy tool:
 
-- Anything that could leak a user's address off their device — the core promise is that the address you scan never reaches the AI worker or any server. The only outbound calls are the public blockchain APIs (for the address you paste) and, if you opt in, the AI worker with the payload previewed in the consent gate.
+- Anything that could leak a user's address off their device — the core promise is that the address you scan never reaches the AI worker or any server. The only outbound calls are the block explorer for the address you paste (by default via our open-source no-log relay — `workers/relay/` — so the explorer can't tie the address to your IP) and, if you opt in, the AI worker with the payload previewed in the consent gate.
 - CSP or self-hosting bypasses that would introduce a third-party runtime request.
 - XSS or injection via scanned addresses, URL params, or API responses.
 

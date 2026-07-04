@@ -2192,7 +2192,7 @@ const GUARANTEES = [
     proof: "see the privacy stance", href: `${REPO}#privacy-stance-what-makes-this-site-different` },
   { icon: "◎", label: "Scoring runs in your browser", desc: "All 10 heuristics execute locally. Your score and results are computed on your device and sent nowhere — not even to us. (The address itself does reach Blockstream's public API to fetch the chain data, as noted above.)",
     proof: "read the heuristics", href: `${REPO}/blob/main/anonscore.jsx` },
-  { icon: "⬢", label: "Zero third-party requests", desc: "Every script, font, and icon is self-hosted — no CDNs, no trackers. A strict Content-Security-Policy makes your browser physically block requests to anywhere except the public explorers and our two opt-in workers. It's enforced by your browser, not by our promise.",
+  { icon: "⬢", label: "Zero third-party requests", desc: "Every script, font, and icon is self-hosted — no CDNs, no trackers. A strict Content-Security-Policy makes your browser physically block requests to anywhere except the public explorers, our no-log relay (on by default, one click off), and the AI worker (opt-in). It's enforced by your browser, not by our promise.",
     proof: "read the CSP header", href: `${REPO}/blob/main/_headers` },
   { icon: "◇", label: "Even the relay can't remember you", desc: "The optional privacy relay is a stateless Worker: no storage bindings, no logging code, and observability is pinned off in its deploy config — so 'no logs' is a setting in the open-source repo, not a dashboard state you'd have to take on faith.",
     proof: "read the relay source", href: `${REPO}/blob/main/workers/relay/worker.js` },
@@ -4402,7 +4402,10 @@ function AiAssistant({ checks, recommendations, score, grade, onClose, starters:
    pattern is strong enough — the rough UTC offset an analyst would infer.
    Purely educational: does not touch the privacy score.
 ───────────────────────────────────────────── */
-function ActivityClock({ txs, isMobile }) {
+function ActivityClock({ txs, isMobile, entity }) {
+  // Case-file/public wallets get third-person framing — "this wallet's owner",
+  // never "you" (same rule the AI assistant follows for forensic mode).
+  const third = !!entity;
   const stamps = (txs || []).map(t => t.status?.block_time).filter(Boolean);
   const total = stamps.length;
   const counts = Array(24).fill(0);
@@ -4470,8 +4473,8 @@ function ActivityClock({ txs, isMobile }) {
           </svg>
           <div style={{ fontSize: 12.5, color: T.textMid, lineHeight: 1.6, marginTop: 10, borderTop: `1px solid ${T.borderLo}`, paddingTop: 10 }}>
             {strong
-              ? <>Your quiet hours run <strong style={{ color: T.text }}>{hh(qStart)}–{hh(qEnd)} UTC</strong>. If that's when you sleep, an analyst would place you around <strong style={{ color: T.text }}>{tz} (±2)</strong> — block timestamps are public, and time-of-day is one of the oldest deanonymization signals. Based on the {total} most recent transactions{total < 12 ? " (small sample — rough read)" : ""}.</>
-              : <>No strong daily rhythm across the {total} most recent transactions — good: your timing gives an analyst less to work with. (Wallets with automated or randomized broadcast times blur this signal on purpose.)</>}
+              ? <>{third ? "This wallet's quiet hours" : "Your quiet hours"} run <strong style={{ color: T.text }}>{hh(qStart)}–{hh(qEnd)} UTC</strong>. If that's {third ? "when its owner sleeps, an analyst would place them" : "when you sleep, an analyst would place you"} around <strong style={{ color: T.text }}>{tz} (±2)</strong> — block timestamps are public, and time-of-day is one of the oldest deanonymization signals. Based on the {total} most recent transactions{total < 12 ? " (small sample — rough read)" : ""}.</>
+              : <>No strong daily rhythm across the {total} most recent transactions — {third ? "this wallet's timing gives" : "good: your timing gives"} an analyst less to work with. (Wallets with automated or randomized broadcast times blur this signal on purpose.)</>}
           </div>
         </>
       )}
@@ -4479,7 +4482,7 @@ function ActivityClock({ txs, isMobile }) {
   );
 }
 
-function ExposureFlow({ txs, isMobile, onFix }) {
+function ExposureFlow({ txs, isMobile, onFix, entity }) {
   const list = (txs || []).slice(0, 8);
   const isRound = v => v >= 100000 && (v % 1000000 === 0 || v % 500000 === 0);
   // A dust "beacon" is a tiny *spendable* output planted to track you. An
@@ -4564,7 +4567,7 @@ function ExposureFlow({ txs, isMobile, onFix }) {
           </button>
         )}
       </div>
-      <ActivityClock txs={txs} isMobile={isMobile} />
+      <ActivityClock txs={txs} isMobile={isMobile} entity={entity} />
       {list.map((tx, ti) => {
         const vin = tx.vin || [], vout = tx.vout || [];
         const inputAddrs = new Set(vin.map(v => v.prevout?.scriptpubkey_address).filter(Boolean));
@@ -5146,7 +5149,7 @@ function Dashboard({ address, addrInfo, utxos, txs, isMobile, onBack, onRescan, 
 
         {/* ── FLOW / EXPOSURE MAP ── */}
         {tab === "Flow" && (
-          <ExposureFlow txs={txs} isMobile={isMobile} onFix={() => setTab("Fix It")} />
+          <ExposureFlow txs={txs} isMobile={isMobile} onFix={() => setTab("Fix It")} entity={CASE_FILES.find(c => c.address === address)?.entity} />
         )}
 
         {/* ── METHODOLOGY ── */}
