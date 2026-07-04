@@ -5,7 +5,7 @@ Deployed on Cloudflare Pages (static hosting; see `_headers`).
 
 ## Architecture
 
-- **`anonscore.jsx`** — the source of truth. The entire app (~5,500 lines, React,
+- **`anonscore.jsx`** — the source of truth. The entire app (~6,000 lines, React,
   inline-styled). Edit this.
 - **`anonscore.js`** — AUTO-GENERATED from `anonscore.jsx`. Do not edit by hand.
   This is what the browser actually loads. Plain JS (classic React runtime), so
@@ -44,8 +44,9 @@ sync with `anonscore.jsx`. Run the full suite with `npm test` (build invariants
   the **`test`** check passes (that's the only required check — `build` only runs
   when `anonscore.jsx` changes), then deletes the branch. Cloudflare Pages deploys
   from `main`. So: push branch → open PR → it merges + deploys itself, hands-free.
-- Don't hand-edit `anonscore.js`; CI rebuilds it, and `npm run build` also stamps
-  the `sw.js` cache hash. Commit the rebuilt `anonscore.js` so the diff is correct.
+- Don't hand-edit `anonscore.js`; CI rebuilds it. Commit the rebuilt `anonscore.js`
+  so the diff is correct. (`sw.js` is no longer touched by the build — it uses
+  stale-while-revalidate, so there's no per-build cache hash to stamp or conflict on.)
 
 ## Conventions & invariants (the test suite enforces most of these)
 
@@ -60,7 +61,7 @@ sync with `anonscore.jsx`. Run the full suite with `npm test` (build invariants
   buttons, `T.textDim`/`T.textMid` are tuned to clear WCAG AA contrast.
 - **No auto-firing UX.** Nothing should scan / navigate / pop up without the user
   asking (an auto-demo was removed in PR #17 for exactly this reason).
-- **PWA**: `sw.js` precaches everything for offline; cache key is build-stamped.
+- **PWA**: `sw.js` precaches everything for offline and serves stale-while-revalidate; the cache key is a manual version (bump only when the precache list changes).
 
 ## Page routing (query params, parsed in `App`)
 
