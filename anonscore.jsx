@@ -4639,7 +4639,7 @@ function ExposureFlow({ txs, isMobile, onFix, entity }) {
   );
 }
 
-function Dashboard({ address, addrInfo, utxos, txs, isMobile, onBack, onRescan, toast, autoShare, scanAt, defaultSimple, simpleMode: simpleModeFromApp, onSimpleModeChange, onCoach }) {
+function Dashboard({ address, addrInfo, utxos, txs, isMobile, onBack, onRescan, toast, autoShare, scanAt, defaultSimple, simpleMode: simpleModeFromApp, onSimpleModeChange, onCoach, delta }) {
   const [tab, setTab] = useState("Fix It");
   const [simpleMode, setSimpleMode] = useState(simpleModeFromApp !== undefined ? simpleModeFromApp : (defaultSimple || false));
   const setSimpleModeSync = (val) => { setSimpleMode(val); onSimpleModeChange && onSimpleModeChange(val); };
@@ -4840,6 +4840,9 @@ function Dashboard({ address, addrInfo, utxos, txs, isMobile, onBack, onRescan, 
               { label: "BALANCE", val: `₿${(totalSats/1e8).toFixed(4)}`, sub: `${addrInfo?.chain_stats?.funded_txo_count != null ? (addrInfo.chain_stats.funded_txo_count - (addrInfo.chain_stats.spent_txo_count||0)) : utxos.length} UTXOs`, color: T.blue },
               { label: "TXS", val: txCount, sub: "total", color: T.cyan },
               { label: "VS AVG", val: score > 38 ? `+${score-38}` : `${score-38}`, sub: "avg is 38", color: score > 38 ? T.green : T.red },
+              // Progress vs the user's own previous scan of this address — the
+              // feedback loop for the Fix It plan. Only shown when it moved.
+              ...(delta != null && delta !== 0 ? [{ label: "PROGRESS", val: delta > 0 ? `+${delta}` : `${delta}`, sub: "vs your last scan", color: delta > 0 ? T.green : T.red }] : []),
             ].map(s => (
               <div key={s.label}>
                 <div style={{ fontFamily: T.mono, fontSize: 8, color: T.textDim, letterSpacing: 1.5, marginBottom: 2 }}>{s.label}</div>
@@ -5778,6 +5781,7 @@ function App() {
   const [activeCaseFile, setActiveCaseFile] = useState(null);
   const [pendingScan, setPendingScan] = useState(null); // { addr, inputType } awaiting user confirmation
   const [scoreTint, setScoreTint] = useState(null);     // grade color for the ambient backdrop while a dashboard shows
+  const [scoreDelta, setScoreDelta] = useState(null);   // score change vs the user's previous scan of the same address
 
   // Inject meta/OG tags
   useEffect(() => {
@@ -5870,6 +5874,8 @@ function App() {
         }
         const data = await fetchLightningNode(addr);
         const result = runLightningEngine(data.node, data.channels);
+        const prevLn = getHistory().find(e => e.addr === addr);
+        const lnDelta = prevLn ? result.score - prevLn.score : null;
         setLnNodeData(data.node);
         setLnChannels(data.channels);
         addToHistory({ addr, score: result.score, grade: result.grade, label: scoreLabel(result.score), scanAt: Date.now(), isLightning: true, alias: data.node.alias });
@@ -5877,7 +5883,7 @@ function App() {
         setScanDataReady(true);
         await new Promise(r => setTimeout(r, 300));
         setPage("ln_dashboard");
-        toast.show("Node scan complete", { icon: "⚡", color: T.ln, msg: `Lightning privacy score: ${result.score}/100` });
+        toast.show(lnDelta > 0 ? "Node score improved" : "Node scan complete", { icon: lnDelta > 0 ? "📈" : "⚡", color: T.ln, msg: `Lightning privacy score: ${result.score}/100${lnDelta != null && lnDelta !== 0 ? ` (${lnDelta > 0 ? "+" : ""}${lnDelta} since your last scan)` : ""}` });
       } catch {
         // Honest failure — never show canned DEMO data as if it were the user's real node.
         await new Promise(r => setTimeout(r, 700));
@@ -5904,6 +5910,7 @@ function App() {
         setUtxos(demoData.utxos);
         setTxs(demoData.txs);
         setScanAt(Date.now());
+        setScoreDelta(null); // demos don't track progress
         setScoreTint(scoreColor(runEngine(demoData.utxos, demoData.txs, demoData.addrInfo?.chain_stats?.tx_count || demoData.txs.length).score));
         setScanDataReady(true);
         await new Promise(r => setTimeout(r, 300));
@@ -5914,6 +5921,11 @@ function App() {
 
       const data = await fetchAddress(addr);
       const analysis = runEngine(data.utxos, data.txs, data.addrInfo?.chain_stats?.tx_count || data.txs.length);
+      // Progress vs the previous scan of this address — read BEFORE addToHistory
+      // replaces the entry. The history (and therefore this) never leaves the browser.
+      const prevEntry = getHistory().find(e => e.addr === addr);
+      const delta = prevEntry ? analysis.score - prevEntry.score : null;
+      setScoreDelta(delta);
       setAddrInfo(data.addrInfo);
       setUtxos(data.utxos);
       setTxs(data.txs);
@@ -5924,7 +5936,7 @@ function App() {
       await new Promise(r => setTimeout(r, 300));
       setPage("dashboard");
       setAutoShare(true);
-      toast.show("Scan complete", { icon: "✅", color: T.green, msg: `Privacy score: ${analysis.score}/100` });
+      toast.show(delta > 0 ? "Score improved" : "Scan complete", { icon: delta > 0 ? "📈" : "✅", color: T.green, msg: `Privacy score: ${analysis.score}/100${delta != null && delta !== 0 ? ` (${delta > 0 ? "+" : ""}${delta} since your last scan)` : ""}` });
     } catch {
       // Honest failure — never show canned DEMO data under the user's real address.
       await new Promise(r => setTimeout(r, 700));
@@ -5956,7 +5968,7 @@ function App() {
       {page === "cases"        && <CaseFiles onOpenCase={c => { setActiveCaseFile(c); setPage("case_detail"); }} onBack={() => setPage("landing")} isMobile={isMobile} />}
       {page === "case_detail"  && activeCaseFile && <CaseDetail caseFile={activeCaseFile} onBack={() => setPage("cases")} onAnalyze={analyze} isMobile={isMobile} />}
       {page === "scanning"     && <Scanning address={address || lnNodeId} isLightning={isScanningLightning} dataReady={scanDataReady} />}
-      {page === "dashboard"    && <Dashboard address={address} addrInfo={addrInfo} utxos={utxos} txs={txs} isMobile={isMobile} onBack={() => setPage("landing")} onRescan={analyze} toast={toast} autoShare={autoShare} scanAt={scanAt} defaultSimple={defaultSimple} simpleMode={simpleMode} onSimpleModeChange={setSimpleMode} onCoach={() => setPage("coach")} />}
+      {page === "dashboard"    && <Dashboard address={address} addrInfo={addrInfo} utxos={utxos} txs={txs} isMobile={isMobile} onBack={() => setPage("landing")} onRescan={analyze} toast={toast} autoShare={autoShare} scanAt={scanAt} defaultSimple={defaultSimple} simpleMode={simpleMode} onSimpleModeChange={setSimpleMode} onCoach={() => setPage("coach")} delta={scoreDelta} />}
       {page === "ln_dashboard" && <LightningDashboard nodeId={lnNodeId} nodeData={lnNodeData} channels={lnChannels} isMobile={isMobile} onBack={() => setPage("landing")} onRescan={analyze} toast={toast} />}
       {page === "coach"        && <CoachWaitlist onBack={() => setPage("landing")} isMobile={isMobile} />}
       {page === "wallets"      && <WalletDirectory onBack={() => setPage("landing")} isMobile={isMobile} />}

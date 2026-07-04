@@ -10085,7 +10085,8 @@ function Dashboard({
   defaultSimple,
   simpleMode: simpleModeFromApp,
   onSimpleModeChange,
-  onCoach
+  onCoach,
+  delta
 }) {
   const [tab, setTab] = useState("Fix It");
   const [simpleMode, setSimpleMode] = useState(simpleModeFromApp !== undefined ? simpleModeFromApp : defaultSimple || false);
@@ -10606,7 +10607,12 @@ function Dashboard({
     val: score > 38 ? `+${score - 38}` : `${score - 38}`,
     sub: "avg is 38",
     color: score > 38 ? T.green : T.red
-  }].map(s => React.createElement("div", {
+  }, ...(delta != null && delta !== 0 ? [{
+    label: "PROGRESS",
+    val: delta > 0 ? `+${delta}` : `${delta}`,
+    sub: "vs your last scan",
+    color: delta > 0 ? T.green : T.red
+  }] : [])].map(s => React.createElement("div", {
     key: s.label
   }, React.createElement("div", {
     style: {
@@ -13341,6 +13347,7 @@ function App() {
   const [activeCaseFile, setActiveCaseFile] = useState(null);
   const [pendingScan, setPendingScan] = useState(null);
   const [scoreTint, setScoreTint] = useState(null);
+  const [scoreDelta, setScoreDelta] = useState(null);
   useEffect(() => {
     try {
       document.documentElement.lang = _lang;
@@ -13441,6 +13448,8 @@ function App() {
         }
         const data = await fetchLightningNode(addr);
         const result = runLightningEngine(data.node, data.channels);
+        const prevLn = getHistory().find(e => e.addr === addr);
+        const lnDelta = prevLn ? result.score - prevLn.score : null;
         setLnNodeData(data.node);
         setLnChannels(data.channels);
         addToHistory({
@@ -13456,10 +13465,10 @@ function App() {
         setScanDataReady(true);
         await new Promise(r => setTimeout(r, 300));
         setPage("ln_dashboard");
-        toast.show("Node scan complete", {
-          icon: "⚡",
+        toast.show(lnDelta > 0 ? "Node score improved" : "Node scan complete", {
+          icon: lnDelta > 0 ? "📈" : "⚡",
           color: T.ln,
-          msg: `Lightning privacy score: ${result.score}/100`
+          msg: `Lightning privacy score: ${result.score}/100${lnDelta != null && lnDelta !== 0 ? ` (${lnDelta > 0 ? "+" : ""}${lnDelta} since your last scan)` : ""}`
         });
       } catch {
         await new Promise(r => setTimeout(r, 700));
@@ -13488,6 +13497,7 @@ function App() {
         setUtxos(demoData.utxos);
         setTxs(demoData.txs);
         setScanAt(Date.now());
+        setScoreDelta(null);
         setScoreTint(scoreColor(runEngine(demoData.utxos, demoData.txs, demoData.addrInfo?.chain_stats?.tx_count || demoData.txs.length).score));
         setScanDataReady(true);
         await new Promise(r => setTimeout(r, 300));
@@ -13501,6 +13511,9 @@ function App() {
       }
       const data = await fetchAddress(addr);
       const analysis = runEngine(data.utxos, data.txs, data.addrInfo?.chain_stats?.tx_count || data.txs.length);
+      const prevEntry = getHistory().find(e => e.addr === addr);
+      const delta = prevEntry ? analysis.score - prevEntry.score : null;
+      setScoreDelta(delta);
       setAddrInfo(data.addrInfo);
       setUtxos(data.utxos);
       setTxs(data.txs);
@@ -13518,10 +13531,10 @@ function App() {
       await new Promise(r => setTimeout(r, 300));
       setPage("dashboard");
       setAutoShare(true);
-      toast.show("Scan complete", {
-        icon: "✅",
+      toast.show(delta > 0 ? "Score improved" : "Scan complete", {
+        icon: delta > 0 ? "📈" : "✅",
         color: T.green,
-        msg: `Privacy score: ${analysis.score}/100`
+        msg: `Privacy score: ${analysis.score}/100${delta != null && delta !== 0 ? ` (${delta > 0 ? "+" : ""}${delta} since your last scan)` : ""}`
       });
     } catch {
       await new Promise(r => setTimeout(r, 700));
@@ -13592,7 +13605,8 @@ function App() {
     defaultSimple: defaultSimple,
     simpleMode: simpleMode,
     onSimpleModeChange: setSimpleMode,
-    onCoach: () => setPage("coach")
+    onCoach: () => setPage("coach"),
+    delta: scoreDelta
   }), page === "ln_dashboard" && React.createElement(LightningDashboard, {
     nodeId: lnNodeId,
     nodeData: lnNodeData,
