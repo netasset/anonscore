@@ -280,6 +280,23 @@ const STRINGS = {
     "spectrum.high": "100 · Invisible",
     "trust.btc": "₿ Bitcoin addresses are public by design. AnonScore never sees or stores your address — the lookup reads a public block explorer, and the relay setting below controls whether that explorer can see your IP.",
     "trust.ln": "⚡ Lightning node pubkeys are public on the gossip network. AnonScore never sees or stores your pubkey — the lookup reads mempool.space's public API, and the relay setting below controls whether it can see your IP.",
+    "relay.on.label": "Privacy relay on",
+    "relay.off.label": "Privacy relay off",
+    "relay.on.body": " — lookups route through AnonScore's open-source, no-log relay, so your IP stays hidden. The block explorer ({x}) sees the address to provide the chain data.",
+    "relay.off.body": " — lookups go straight from your browser to the block explorer ({x}), which then sees your IP next to the address. Turn the relay on to hide that link.",
+    "relay.verify": "verify: relay source ↗",
+    "relay.explorer": "EXPLORER",
+    "relay.aria": "Route lookups through the AnonScore privacy relay to hide your IP from the block explorer",
+    "rail.title": "GUARANTEES · VERIFY ↓",
+    "open.title": "RADICALLY OPEN · VERIFY, DON'T TRUST",
+    "recent.note": "Saved only in this browser's local storage — gone when you hit CLEAR ALL or clear this site's data in your browser. (Note: clearing browsing history alone doesn't remove site data.)",
+    "recent.clear": "CLEAR ALL",
+    "g.0.label": "No server, no backend",
+    "g.1.label": "Nothing stored or logged",
+    "g.2.label": "Scoring runs in your browser",
+    "g.3.label": "Zero third-party requests",
+    "g.4.label": "Even the relay can't remember you",
+    "g.5.label": "Open source, MIT, auditable in minutes",
     "cta.analyze": "Analyze →",
     "cta.audit": "⚡ Audit →",
     "sample.divider": "or try a sample",
@@ -321,6 +338,23 @@ const STRINGS = {
     "spectrum.high": "100 · Invisible",
     "trust.btc": "₿ Las direcciones de Bitcoin son públicas por diseño. AnonScore nunca ve ni guarda tu dirección — la consulta lee un explorador de bloques público, y el relé configurable abajo controla si ese explorador puede ver tu IP.",
     "trust.ln": "⚡ Las claves públicas de nodos Lightning son públicas en la red de gossip. AnonScore nunca ve ni guarda tu clave — la consulta lee la API pública de mempool.space, y el relé configurable abajo controla si puede ver tu IP.",
+    "relay.on.label": "Relé de privacidad activado",
+    "relay.off.label": "Relé de privacidad desactivado",
+    "relay.on.body": " — las consultas pasan por el relé de código abierto y sin registros de AnonScore, así tu IP queda oculta. El explorador de bloques ({x}) ve la dirección para obtener los datos de la cadena.",
+    "relay.off.body": " — las consultas van directas desde tu navegador al explorador de bloques ({x}), que entonces ve tu IP junto a la dirección. Activa el relé para ocultar ese vínculo.",
+    "relay.verify": "verificar: código del relé ↗",
+    "relay.explorer": "EXPLORADOR",
+    "relay.aria": "Enrutar las consultas por el relé de privacidad de AnonScore para ocultar tu IP al explorador de bloques",
+    "rail.title": "GARANTÍAS · VERIFICA ↓",
+    "open.title": "RADICALMENTE ABIERTO · VERIFICA, NO CONFÍES",
+    "recent.note": "Guardado solo en el almacenamiento local de este navegador — desaparece con BORRAR TODO o al borrar los datos de este sitio en tu navegador. (Nota: borrar solo el historial de navegación no elimina los datos del sitio.)",
+    "recent.clear": "BORRAR TODO",
+    "g.0.label": "Sin servidor, sin backend",
+    "g.1.label": "Nada guardado ni registrado",
+    "g.2.label": "El análisis corre en tu navegador",
+    "g.3.label": "Cero peticiones a terceros",
+    "g.4.label": "Ni el relé puede recordarte",
+    "g.5.label": "Código abierto, MIT, auditable en minutos",
     "cta.analyze": "Analizar →",
     "cta.audit": "⚡ Auditar →",
     "sample.divider": "o prueba un ejemplo",
@@ -3810,6 +3844,7 @@ function ShareCard({
 function RelayToggle() {
   const on = useRelay();
   const expId = useExplorer();
+  useLang();
   const exp = EXPLORERS[expId];
   return React.createElement("div", {
     style: {
@@ -3831,7 +3866,7 @@ function RelayToggle() {
   }, React.createElement("button", {
     role: "switch",
     "aria-checked": on,
-    "aria-label": "Route lookups through the AnonScore privacy relay to hide your IP from the block explorer",
+    "aria-label": t("relay.aria"),
     onClick: () => setRelay(!on),
     style: {
       flexShrink: 0,
@@ -3868,7 +3903,7 @@ function RelayToggle() {
     style: {
       color: on ? T.cyan : T.text
     }
-  }, on ? "Privacy relay on" : "Privacy relay off"), on ? React.createElement(React.Fragment, null, " \u2014 lookups route through AnonScore's open-source, no-log relay, so your IP stays hidden. The block explorer (", exp.label, ") sees the address to provide the chain data.") : React.createElement(React.Fragment, null, " \u2014 lookups go straight from your browser to the block explorer (", exp.label, "), which then sees your IP next to the address. Turn the relay on to hide that link."), " ", React.createElement("a", {
+  }, t(on ? "relay.on.label" : "relay.off.label")), t(on ? "relay.on.body" : "relay.off.body").replace("{x}", exp.label), " ", React.createElement("a", {
     href: "https://github.com/netasset/anonscore/blob/main/workers/relay/worker.js",
     target: "_blank",
     rel: "noopener noreferrer",
@@ -3879,7 +3914,7 @@ function RelayToggle() {
       fontSize: 11,
       whiteSpace: "nowrap"
     }
-  }, "verify: relay source \u2197"))), React.createElement("div", {
+  }, t("relay.verify")))), React.createElement("div", {
     style: {
       display: "flex",
       alignItems: "center",
@@ -3894,7 +3929,7 @@ function RelayToggle() {
       color: T.textDim,
       letterSpacing: 1
     }
-  }, "EXPLORER"), Object.entries(EXPLORERS).map(([id, e]) => React.createElement("button", {
+  }, t("relay.explorer")), Object.entries(EXPLORERS).map(([id, e]) => React.createElement("button", {
     key: id,
     onClick: () => setExplorer(id),
     "aria-pressed": expId === id,
@@ -4102,7 +4137,7 @@ function GuaranteeRail() {
       letterSpacing: 2,
       marginBottom: 8
     }
-  }, "GUARANTEES \xB7 VERIFY \u2193"), React.createElement("div", {
+  }, t("rail.title")), React.createElement("div", {
     style: {
       display: "flex",
       flexDirection: "column",
@@ -4140,7 +4175,7 @@ function GuaranteeRail() {
       color: T.green,
       flexShrink: 0
     }
-  }, "\u2713"), g.label))));
+  }, "\u2713"), t(`g.${i}.label`)))));
 }
 const CATEGORY_META = {
   exchange: {
@@ -5712,7 +5747,7 @@ function Landing({
     },
     onMouseOver: e => e.currentTarget.style.color = T.red,
     onMouseOut: e => e.currentTarget.style.color = T.textDim
-  }, "CLEAR ALL")), history.length >= 2 && React.createElement(Sparkline, {
+  }, t("recent.clear"))), history.length >= 2 && React.createElement(Sparkline, {
     history: history.map(h => h.score),
     width: 64,
     height: 22
@@ -5814,7 +5849,7 @@ function Landing({
       textAlign: "left",
       lineHeight: 1.5
     }
-  }, "Saved only in this browser's local storage \u2014 gone when you hit CLEAR ALL or clear this site's data in your browser. (Note: clearing browsing ", React.createElement("em", null, "history"), " alone doesn't remove site data.)")), React.createElement("div", {
+  }, t("recent.note"))), React.createElement("div", {
     style: {
       display: "flex",
       flexDirection: "column",
@@ -6119,7 +6154,7 @@ function Landing({
       letterSpacing: 2,
       marginBottom: 10
     }
-  }, "RADICALLY OPEN \xB7 VERIFY, DON'T TRUST"), React.createElement(TrustBox, null))), !isMobile && React.createElement("div", {
+  }, t("open.title")), React.createElement(TrustBox, null))), !isMobile && React.createElement("div", {
     style: {
       padding: "48px 48px 0",
       maxWidth: 860,
