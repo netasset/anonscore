@@ -2442,8 +2442,10 @@ function CaseFiles({ onOpenCase, onBack, isMobile }) {
                 onMouseMove={tiltMove}
                 onMouseEnter={e => { e.currentTarget.style.borderColor = cat.color + "66"; e.currentTarget.style.boxShadow = `0 16px 40px -18px ${cat.color}`; }}
                 onMouseLeave={e => { tiltReset(e); e.currentTarget.style.borderColor = T.border; e.currentTarget.style.boxShadow = "none"; }}>
-                {/* Top bar */}
-                <div style={{ height: 2, background: cat.color, borderRadius: 1, marginBottom: 16, opacity: 0.7 }} />
+                {/* Fingerprint thumbnail — the same editorial scene as the detail page */}
+                <div style={{ margin: "-22px -24px 16px", borderRadius: "16px 16px 0 0", overflow: "hidden", borderBottom: `1px solid ${T.borderLo}` }}>
+                  <CaseHero seed={c.id} color={cat.color} height={56} />
+                </div>
                 {/* Meta row */}
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
                   <span style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim }}>#{c.id}</span>
