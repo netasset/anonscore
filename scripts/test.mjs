@@ -77,6 +77,39 @@ else if (!/hit \|\| network/.test(swCode) || !/caches\.open\(CACHE\)\.then\(\(c\
   fail("sw.js is not stale-while-revalidate — it must serve cache AND revalidate in the background, or clients get stuck on stale code");
 else pass(`sw.js cache "${cacheKey[1]}" uses stale-while-revalidate (no per-build hash to conflict on)`);
 
+// ── Honesty guards — the site's public claims must match the code. ──
+// These encode what a manual audit previously caught by hand: stale
+// outbound-call lists, undocumented storage keys, and trust-copy that
+// drifted from the source it claims to describe. If one of these fails,
+// a user-facing claim has become falsifiable — fix the claim or the code.
+const jsxSrc  = readFileSync(join(ROOT, "anonscore.jsx"), "utf8");
+const readme  = readFileSync(join(ROOT, "README.md"), "utf8");
+const headers = readFileSync(join(ROOT, "_headers"), "utf8");
+
+// 1. The relay origin the app calls must be allowed by the CSP it ships.
+const relayUrl = (jsxSrc.match(/const RELAY_URL = "([^"]*)"/) || [])[1] || "";
+if (relayUrl && !headers.includes(new URL(relayUrl).origin))
+  fail(`RELAY_URL origin ${new URL(relayUrl).origin} is missing from _headers connect-src — relay lookups would be blocked by CSP in production`);
+else pass(relayUrl ? "CSP connect-src covers the relay origin" : "Relay unset — no CSP entry required");
+
+// 2. Every localStorage key the code writes must be documented in README's
+//    privacy stance ("localStorage holds exactly …" must stay exact).
+const lsKeys = new Set([...jsxSrc.matchAll(/localStorage\.setItem\("([a-z0-9_]+)"/g)].map(m => m[1]));
+for (const m of jsxSrc.matchAll(/const (?:HISTORY_KEY|FIXES_KEY) = "([a-z0-9_]+)"/g)) lsKeys.add(m[1]);
+const undocumented = [...lsKeys].filter(k => !readme.includes(k));
+if (undocumented.length) fail(`localStorage key(s) not documented in README privacy stance: ${undocumented.join(", ")}`);
+else pass(`All ${lsKeys.size} localStorage keys documented in README`);
+
+// 3. The guarantee-rail i18n labels must match the GUARANTEES source labels
+//    (they're duplicated by design; this keeps them from drifting apart).
+const enLabels = {};
+for (const m of jsxSrc.matchAll(/"g\.(\d)\.label": "([^"]+)"/g)) if (!(m[1] in enLabels)) enLabels[m[1]] = m[2]; // first block = EN
+const srcLabels = [...jsxSrc.matchAll(/\{ icon: "[^"]+", label: "([^"]+)", desc:/g)].map(m => m[1]);
+const gMismatch = srcLabels.map((l, i) => enLabels[i] !== l ? `#${i} ("${enLabels[i]}" vs "${l}")` : null).filter(Boolean);
+if (srcLabels.length !== 6) fail(`Expected 6 GUARANTEES entries, found ${srcLabels.length} — update this check if the list changed on purpose`);
+else if (gMismatch.length) fail(`Guarantee labels drifted between STRINGS and GUARANTEES: ${gMismatch.join("; ")}`);
+else pass("Guarantee labels in sync (GUARANTEES ↔ i18n strings)");
+
 // PWA manifest must be valid JSON with the keys browsers require for "installable".
 try {
   const m = JSON.parse(readFileSync(join(ROOT, "manifest.webmanifest"), "utf8"));
