@@ -33,7 +33,7 @@ Single static site. No backend, no database, no analytics.
 | `vendor/` | Self-hosted React, ReactDOM, canvas-confetti, dom-to-image-more, and Google Fonts. **Zero third-party requests at runtime.** |
 | `_headers` | Cloudflare security headers + strict CSP (`script-src 'self'`) + cache rules. |
 | `build.mjs` | One-shot compiler: `anonscore.jsx → anonscore.js`. Touches nothing else. |
-| `scripts/test.mjs` | End-to-end test suite (23 checks). Runs in CI on every PR. |
+| `scripts/test.mjs` | End-to-end test suite (26 checks, incl. honesty guards that fail CI if a public claim drifts from the code). Runs in CI on every PR. |
 | `scripts/fetch-fonts.mjs` | Re-fetches the self-hosted Google Fonts subset. Run only if updating font weights. |
 | `.github/workflows/` | `build.yml` auto-rebuilds `anonscore.js` on feature-branch pushes. `test.yml` runs the test suite on every PR. |
 
