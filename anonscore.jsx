@@ -1947,9 +1947,19 @@ function DemoPreview() {
 /* ─────────────────────────────────────────────
    SHARE CARD
 ───────────────────────────────────────────── */
-/* ─────────────────────────────────────────────
-   VISUAL SCORE CARD — rendered into share modal Card tab
-   Used for PNG export via dom-to-image-more
+// Lazy-load the self-hosted dom-to-image library on first PNG export (same-origin
+// script injection — no third-party request, and non-exporting visitors never pay
+// the download). Shared by the score share-card and the case-file card.
+function ensureDomToImage() {
+  if (window.domtoimage) return Promise.resolve();
+  return new Promise((res, rej) => {
+    const s = document.createElement("script");
+    s.src = "vendor/dom-to-image-more.min.js";
+    s.onload = res; s.onerror = rej;
+    document.head.appendChild(s);
+  });
+}
+
 /* ─────────────────────────────────────────────
    VISUAL SCORE CARD — rendered into share modal Card tab
    Used for PNG export via dom-to-image-more
@@ -2158,15 +2168,7 @@ function ShareCard({ score, grade, checks, address, isLightning = false, onClose
     if (!cardRef.current || downloading) return;
     setDownloading(true);
     try {
-      // Load self-hosted dom-to-image-more on demand (same-origin — no third-party request)
-      if (!window.domtoimage) {
-        await new Promise((res, rej) => {
-          const s = document.createElement("script");
-          s.src = "vendor/dom-to-image-more.min.js";
-          s.onload = res; s.onerror = rej;
-          document.head.appendChild(s);
-        });
-      }
+      await ensureDomToImage();
       // Give fonts time to load before capture
       await document.fonts.ready;
       await new Promise(r => setTimeout(r, 150));
@@ -2526,6 +2528,30 @@ function CaseDetail({ caseFile, onBack, onAnalyze, isMobile }) {
   const scanUrl = `https://anonscore.com/?scan=${encodeURIComponent(caseFile.address)}`;
   const threadText = caseFile.thread.join("\n\n---\n\n");
 
+  // Downloadable case card — 600×315 layout exported at 2× (1200×630, the
+  // standard social-card size) through the self-hosted dom-to-image pipeline.
+  const cardRef = useRef(null);
+  const [rendering, setRendering] = useState(false);
+  const downloadCard = async () => {
+    if (!cardRef.current || rendering) return;
+    setRendering(true);
+    try {
+      await ensureDomToImage();
+      await document.fonts.ready;
+      await new Promise(r => setTimeout(r, 150));
+      const blob = await window.domtoimage.toBlob(cardRef.current, { width: 600, scale: 2, bgcolor: "#0b0d14" });
+      const a = document.createElement("a");
+      const url = URL.createObjectURL(blob);
+      a.href = url;
+      a.download = `anonscore-case-${caseFile.id}-${caseFile.slug}.png`;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 4000); // free the blob once the download has started
+    } catch {
+      copy(scanUrl); // fallback: at least give them the link
+    }
+    setRendering(false);
+  };
+
   return (
     <div role="main" aria-label={PAGE_ROLE_LABEL} style={{ minHeight: "100vh", background: "transparent", display: "flex", flexDirection: "column" }}>
       {/* Nav */}
@@ -2627,9 +2653,9 @@ function CaseDetail({ caseFile, onBack, onAnalyze, isMobile }) {
         {/* Share / publish tools */}
         <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 16, overflow: "hidden", marginBottom: 24, animation: "fadeUp .4s ease .24s both" }}>
           <div style={{ display: "flex", borderBottom: `1px solid ${T.border}` }}>
-            {[["thread","𝕏 Thread"],["link","🔗 Share link"]].map(([m, label]) => (
+            {[["thread","𝕏 Thread"],["link","🔗 Share link"],["card","🖼 Card"]].map(([m, label]) => (
               <button key={m} onClick={() => setShareMode(shareMode === m ? null : m)}
-                style={{ flex: 1, padding: "12px", background: shareMode === m ? T.cyanLo : "transparent", border: "none", borderRight: m === "thread" ? `1px solid ${T.border}` : "none", color: shareMode === m ? T.cyan : T.textMid, fontFamily: T.sans, fontSize: 13, cursor: "pointer", transition: "all .15s" }}>
+                style={{ flex: 1, padding: "12px", background: shareMode === m ? T.cyanLo : "transparent", border: "none", borderRight: m !== "card" ? `1px solid ${T.border}` : "none", color: shareMode === m ? T.cyan : T.textMid, fontFamily: T.sans, fontSize: 13, cursor: "pointer", transition: "all .15s" }}>
                 {label}
               </button>
             ))}
@@ -2661,6 +2687,33 @@ function CaseDetail({ caseFile, onBack, onAnalyze, isMobile }) {
               <div style={{ fontSize: 12, color: T.textDim, marginBottom: 12, lineHeight: 1.6 }}>Anyone who opens this link will see a confirmation prompt, then can scan this address live. Perfect for posts and articles.</div>
               <button onClick={() => copy(scanUrl)} style={{ width: "100%", padding: "10px", background: copied ? T.green : T.cyan, border: "none", borderRadius: 8, color: T.bg, fontFamily: T.sans, fontWeight: 700, fontSize: 13, cursor: "pointer", transition: "background .2s" }}>
                 {copied ? "✓ Copied!" : "Copy link"}
+              </button>
+            </div>
+          )}
+          {shareMode === "card" && (
+            <div style={{ padding: "16px 20px" }}>
+              <div style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim, letterSpacing: 1.5, marginBottom: 12 }}>SOCIAL CARD — 1200×630 PNG</div>
+              <div style={{ overflowX: "auto", marginBottom: 14 }}>
+                {/* Fixed 600×315 layout so the 2× export is exactly social-card size */}
+                <div ref={cardRef} style={{ width: 600, height: 315, background: T.bg, border: `1px solid ${T.border}`, borderRadius: 12, overflow: "hidden", display: "flex", flexDirection: "column", flexShrink: 0 }}>
+                  <CaseHero seed={caseFile.id} color={cat.color} height={132} />
+                  <div style={{ flex: 1, padding: "14px 22px 16px", display: "flex", flexDirection: "column" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                      <span style={{ fontFamily: T.mono, fontSize: 9, color: cat.color, background: cat.color + "18", border: `1px solid ${cat.color}33`, borderRadius: 4, padding: "2px 8px", letterSpacing: 1 }}>CASE #{caseFile.id} · {cat.label.toUpperCase()}</span>
+                      <span style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim }}>{caseFile.btc} BTC</span>
+                    </div>
+                    <div style={{ fontFamily: T.serif, fontSize: 26, color: T.text, fontWeight: 400, lineHeight: 1.15, marginBottom: 8 }}>{caseFile.title}</div>
+                    <div style={{ fontSize: 12, color: T.textMid, lineHeight: 1.5, overflow: "hidden" }}>{caseFile.hook}</div>
+                    <div style={{ marginTop: "auto", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <span style={{ fontFamily: T.display, fontSize: 11, letterSpacing: 3, fontWeight: 700, color: T.text }}>ANON<span style={{ color: T.cyan }}>SCORE</span></span>
+                      <span style={{ fontFamily: T.mono, fontSize: 10, color: T.textDim }}>anonscore.com/?case={caseFile.slug}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <button onClick={downloadCard} disabled={rendering}
+                style={{ width: "100%", padding: "10px", background: rendering ? T.surface : T.cyan, border: "none", borderRadius: 8, color: rendering ? T.textMid : T.bg, fontFamily: T.sans, fontWeight: 700, fontSize: 13, cursor: rendering ? "wait" : "pointer", transition: "background .2s" }}>
+                {rendering ? "Rendering…" : "⬇ Download PNG (1200×630)"}
               </button>
             </div>
           )}
