@@ -3277,6 +3277,16 @@ function DemoPreview() {
     }
   }, "Source: OXT Research, 2023")));
 }
+function ensureDomToImage() {
+  if (window.domtoimage) return Promise.resolve();
+  return new Promise((res, rej) => {
+    const s = document.createElement("script");
+    s.src = "vendor/dom-to-image-more.min.js";
+    s.onload = res;
+    s.onerror = rej;
+    document.head.appendChild(s);
+  });
+}
 function VisualGaugeArc({
   score,
   size = 120,
@@ -3728,15 +3738,7 @@ function ShareCard({
     if (!cardRef.current || downloading) return;
     setDownloading(true);
     try {
-      if (!window.domtoimage) {
-        await new Promise((res, rej) => {
-          const s = document.createElement("script");
-          s.src = "vendor/dom-to-image-more.min.js";
-          s.onload = res;
-          s.onerror = rej;
-          document.head.appendChild(s);
-        });
-      }
+      await ensureDomToImage();
       await document.fonts.ready;
       await new Promise(r => setTimeout(r, 150));
       const blob = await window.domtoimage.toBlob(cardRef.current, {
@@ -4756,6 +4758,31 @@ function CaseDetail({
   };
   const scanUrl = `https://anonscore.com/?scan=${encodeURIComponent(caseFile.address)}`;
   const threadText = caseFile.thread.join("\n\n---\n\n");
+  const cardRef = useRef(null);
+  const [rendering, setRendering] = useState(false);
+  const downloadCard = async () => {
+    if (!cardRef.current || rendering) return;
+    setRendering(true);
+    try {
+      await ensureDomToImage();
+      await document.fonts.ready;
+      await new Promise(r => setTimeout(r, 150));
+      const blob = await window.domtoimage.toBlob(cardRef.current, {
+        width: 600,
+        scale: 2,
+        bgcolor: "#0b0d14"
+      });
+      const a = document.createElement("a");
+      const url = URL.createObjectURL(blob);
+      a.href = url;
+      a.download = `anonscore-case-${caseFile.id}-${caseFile.slug}.png`;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 4000);
+    } catch {
+      copy(scanUrl);
+    }
+    setRendering(false);
+  };
   return React.createElement("div", {
     role: "main",
     "aria-label": PAGE_ROLE_LABEL,
@@ -5146,7 +5173,7 @@ function CaseDetail({
       display: "flex",
       borderBottom: `1px solid ${T.border}`
     }
-  }, [["thread", "𝕏 Thread"], ["link", "🔗 Share link"]].map(([m, label]) => React.createElement("button", {
+  }, [["thread", "𝕏 Thread"], ["link", "🔗 Share link"], ["card", "🖼 Card"]].map(([m, label]) => React.createElement("button", {
     key: m,
     onClick: () => setShareMode(shareMode === m ? null : m),
     style: {
@@ -5154,7 +5181,7 @@ function CaseDetail({
       padding: "12px",
       background: shareMode === m ? T.cyanLo : "transparent",
       border: "none",
-      borderRight: m === "thread" ? `1px solid ${T.border}` : "none",
+      borderRight: m !== "card" ? `1px solid ${T.border}` : "none",
       color: shareMode === m ? T.cyan : T.textMid,
       fontFamily: T.sans,
       fontSize: 13,
@@ -5275,7 +5302,129 @@ function CaseDetail({
       cursor: "pointer",
       transition: "background .2s"
     }
-  }, copied ? "✓ Copied!" : "Copy link"))), caseFile.externalUrl && React.createElement("div", {
+  }, copied ? "✓ Copied!" : "Copy link")), shareMode === "card" && React.createElement("div", {
+    style: {
+      padding: "16px 20px"
+    }
+  }, React.createElement("div", {
+    style: {
+      fontFamily: T.mono,
+      fontSize: 9,
+      color: T.textDim,
+      letterSpacing: 1.5,
+      marginBottom: 12
+    }
+  }, "SOCIAL CARD \u2014 1200\xD7630 PNG"), React.createElement("div", {
+    style: {
+      overflowX: "auto",
+      marginBottom: 14
+    }
+  }, React.createElement("div", {
+    ref: cardRef,
+    style: {
+      width: 600,
+      height: 315,
+      background: T.bg,
+      border: `1px solid ${T.border}`,
+      borderRadius: 12,
+      overflow: "hidden",
+      display: "flex",
+      flexDirection: "column",
+      flexShrink: 0
+    }
+  }, React.createElement(CaseHero, {
+    seed: caseFile.id,
+    color: cat.color,
+    height: 132
+  }), React.createElement("div", {
+    style: {
+      flex: 1,
+      padding: "14px 22px 16px",
+      display: "flex",
+      flexDirection: "column"
+    }
+  }, React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: 8,
+      marginBottom: 8
+    }
+  }, React.createElement("span", {
+    style: {
+      fontFamily: T.mono,
+      fontSize: 9,
+      color: cat.color,
+      background: cat.color + "18",
+      border: `1px solid ${cat.color}33`,
+      borderRadius: 4,
+      padding: "2px 8px",
+      letterSpacing: 1
+    }
+  }, "CASE #", caseFile.id, " \xB7 ", cat.label.toUpperCase()), React.createElement("span", {
+    style: {
+      fontFamily: T.mono,
+      fontSize: 9,
+      color: T.textDim
+    }
+  }, caseFile.btc, " BTC")), React.createElement("div", {
+    style: {
+      fontFamily: T.serif,
+      fontSize: 26,
+      color: T.text,
+      fontWeight: 400,
+      lineHeight: 1.15,
+      marginBottom: 8
+    }
+  }, caseFile.title), React.createElement("div", {
+    style: {
+      fontSize: 12,
+      color: T.textMid,
+      lineHeight: 1.5,
+      overflow: "hidden"
+    }
+  }, caseFile.hook), React.createElement("div", {
+    style: {
+      marginTop: "auto",
+      display: "flex",
+      justifyContent: "space-between",
+      alignItems: "center"
+    }
+  }, React.createElement("span", {
+    style: {
+      fontFamily: T.display,
+      fontSize: 11,
+      letterSpacing: 3,
+      fontWeight: 700,
+      color: T.text
+    }
+  }, "ANON", React.createElement("span", {
+    style: {
+      color: T.cyan
+    }
+  }, "SCORE")), React.createElement("span", {
+    style: {
+      fontFamily: T.mono,
+      fontSize: 10,
+      color: T.textDim
+    }
+  }, "anonscore.com/?case=", caseFile.slug))))), React.createElement("button", {
+    onClick: downloadCard,
+    disabled: rendering,
+    style: {
+      width: "100%",
+      padding: "10px",
+      background: rendering ? T.surface : T.cyan,
+      border: "none",
+      borderRadius: 8,
+      color: rendering ? T.textMid : T.bg,
+      fontFamily: T.sans,
+      fontWeight: 700,
+      fontSize: 13,
+      cursor: rendering ? "wait" : "pointer",
+      transition: "background .2s"
+    }
+  }, rendering ? "Rendering…" : "⬇ Download PNG (1200×630)"))), caseFile.externalUrl && React.createElement("div", {
     style: {
       textAlign: "center",
       marginBottom: 24,
