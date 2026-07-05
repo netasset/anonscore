@@ -224,17 +224,19 @@ const STRINGS = {
     "spectrum.low": "0 · Fully traceable",
     "spectrum.avg": "avg wallet: 38",
     "spectrum.high": "100 · Invisible",
-    "trust.btc": "₿ Bitcoin addresses are public by design. AnonScore never sees or stores your address — the lookup reads a public block explorer, and the relay setting below controls whether that explorer can see your IP.",
-    "trust.ln": "⚡ Lightning node pubkeys are public on the gossip network. AnonScore never sees or stores your pubkey — the lookup reads mempool.space's public API, and the relay setting below controls whether it can see your IP.",
+    "trust.btc": "₿ Addresses are public by design — we never see or store yours. The relay decides whether the explorer can see your IP too.",
+    "trust.ln": "⚡ Node pubkeys are public on the gossip network — we never see or store yours. The relay decides whether mempool.space can see your IP too.",
     "relay.on.label": "Privacy relay on",
     "relay.off.label": "Privacy relay off",
-    "relay.on.body": " — lookups route through AnonScore's open-source, no-log relay, so your IP stays hidden. The block explorer ({x}) sees the address to provide the chain data.",
-    "relay.off.body": " — lookups go straight from your browser to the block explorer ({x}), which then sees your IP next to the address. Turn the relay on to hide that link.",
+    "relay.on.body": " — your IP stays hidden behind our open-source, no-log relay. The explorer ({x}) sees only the address.",
+    "relay.off.body": " — lookups go straight to {x}, which sees your IP next to the address. Flip the relay on to break that link.",
     "relay.verify": "verify: relay source ↗",
     "relay.explorer": "EXPLORER",
     "relay.aria": "Route lookups through the AnonScore privacy relay to hide your IP from the block explorer",
     "rail.title": "GUARANTEES · VERIFY ↓",
-    "open.title": "RADICALLY OPEN · VERIFY, DON'T TRUST",
+    "open.title": "RADICALLY OPEN",
+    "open.h2.pre": "Don't trust.",
+    "open.h2.em": "Verify.",
     "recent.note": "Saved only in this browser's local storage — gone when you hit CLEAR ALL or clear this site's data in your browser. (Note: clearing browsing history alone doesn't remove site data.)",
     "recent.clear": "CLEAR ALL",
     // Guarantee labels (rail + trust box header chips). Keep in sync with GUARANTEES[].label.
@@ -283,17 +285,19 @@ const STRINGS = {
     "spectrum.low": "0 · Totalmente rastreable",
     "spectrum.avg": "billetera promedio: 38",
     "spectrum.high": "100 · Invisible",
-    "trust.btc": "₿ Las direcciones de Bitcoin son públicas por diseño. AnonScore nunca ve ni guarda tu dirección — la consulta lee un explorador de bloques público, y el relé configurable abajo controla si ese explorador puede ver tu IP.",
-    "trust.ln": "⚡ Las claves públicas de nodos Lightning son públicas en la red de gossip. AnonScore nunca ve ni guarda tu clave — la consulta lee la API pública de mempool.space, y el relé configurable abajo controla si puede ver tu IP.",
+    "trust.btc": "₿ Las direcciones son públicas por diseño — nunca vemos ni guardamos la tuya. El relé decide si el explorador también puede ver tu IP.",
+    "trust.ln": "⚡ Las claves de nodo son públicas en la red gossip — nunca vemos ni guardamos la tuya. El relé decide si mempool.space también puede ver tu IP.",
     "relay.on.label": "Relé de privacidad activado",
     "relay.off.label": "Relé de privacidad desactivado",
-    "relay.on.body": " — las consultas pasan por el relé de código abierto y sin registros de AnonScore, así tu IP queda oculta. El explorador de bloques ({x}) ve la dirección para obtener los datos de la cadena.",
-    "relay.off.body": " — las consultas van directas desde tu navegador al explorador de bloques ({x}), que entonces ve tu IP junto a la dirección. Activa el relé para ocultar ese vínculo.",
+    "relay.on.body": " — tu IP queda oculta tras nuestro relé de código abierto y sin registros. El explorador ({x}) solo ve la dirección.",
+    "relay.off.body": " — las consultas van directas a {x}, que ve tu IP junto a la dirección. Activa el relé para romper ese vínculo.",
     "relay.verify": "verificar: código del relé ↗",
     "relay.explorer": "EXPLORADOR",
     "relay.aria": "Enrutar las consultas por el relé de privacidad de AnonScore para ocultar tu IP al explorador de bloques",
     "rail.title": "GARANTÍAS · VERIFICA ↓",
-    "open.title": "RADICALMENTE ABIERTO · VERIFICA, NO CONFÍES",
+    "open.title": "RADICALMENTE ABIERTO",
+    "open.h2.pre": "No confíes.",
+    "open.h2.em": "Verifica.",
     "recent.note": "Guardado solo en el almacenamiento local de este navegador — desaparece con BORRAR TODO o al borrar los datos de este sitio en tu navegador. (Nota: borrar solo el historial de navegación no elimina los datos del sitio.)",
     "recent.clear": "BORRAR TODO",
     "g.0.label": "Sin servidor, sin backend",
@@ -2284,13 +2288,18 @@ function ShareCard({ score, grade, checks, address, isLightning = false, onClose
 /* ─────────────────────────────────────────────
    PRIVACY RELAY TOGGLE — opt-in mitigation for the browser→explorer IP leak
 ───────────────────────────────────────────── */
-function RelayToggle() {
+function RelayToggle({ trustLine }) {
   const on = useRelay();
   const expId = useExplorer();
   useLang(); // strings below are localized
   const exp = EXPLORERS[expId];
   return (
-    <div style={{ maxWidth: 480, margin: "0 auto 12px", animation: "fadeUp .5s ease .22s both", background: on ? T.cyanLo : T.surface, border: `1px solid ${on ? T.cyan + "66" : T.border}`, borderRadius: 10, padding: "10px 14px", transition: "all .2s" }}>
+    <div style={{ maxWidth: 480, margin: "0 auto 12px", animation: "fadeUp .5s ease .2s both", background: on ? T.cyanLo : T.surface, border: `1px solid ${on ? T.cyan + "66" : T.border}`, borderRadius: 10, padding: "10px 14px", transition: "all .2s" }}>
+      {trustLine && (
+        <div style={{ fontFamily: T.sans, fontSize: 12, color: T.textMid, lineHeight: 1.5, textAlign: "left", paddingBottom: 9, marginBottom: 9, borderBottom: `1px solid ${T.borderLo}` }}>
+          {trustLine}
+        </div>
+      )}
       <div style={{ display: "flex", alignItems: "flex-start", gap: 11 }}>
         <button role="switch" aria-checked={on} aria-label={t("relay.aria")}
           onClick={() => setRelay(!on)}
@@ -2327,17 +2336,17 @@ function RelayToggle() {
 // tool should hold itself to: don't ask for trust — hand over the evidence.
 const REPO = "https://github.com/netasset/anonscore";
 const GUARANTEES = [
-  { icon: "⬡", label: "No server, no backend", desc: "Your lookup reads a public block explorer (blockstream.info or mempool.space — your choice). By default it routes through our stateless, verifiably no-log relay so the explorer can't see your IP; flip the relay off and it goes straight from your browser, touching no AnonScore infrastructure at all.",
+  { icon: "⬡", label: "No server, no backend", desc: "Lookups read a public explorer — through our no-log relay by default, or straight from your browser with the relay off. Either way nothing touches an AnonScore database. There isn't one.",
     proof: "read the fetch code", href: `${REPO}/blob/main/anonscore.jsx` },
-  { icon: "◌", label: "Nothing stored or logged", desc: "We have no database, no analytics, no session tracking — there is no server that could remember you. Your scan history lives only in your own browser's local storage (clearable in the UI) and is never transmitted.",
+  { icon: "◌", label: "Nothing stored or logged", desc: "No database, no analytics, no session tracking. Your scan history lives in your browser's local storage and never leaves it.",
     proof: "see the privacy stance", href: `${REPO}#privacy-stance-what-makes-this-site-different` },
-  { icon: "◎", label: "Scoring runs in your browser", desc: "All 11 heuristics execute locally. Your score and results are computed on your device and sent nowhere — not even to us. (The address itself does reach Blockstream's public API to fetch the chain data, as noted above.)",
+  { icon: "◎", label: "Scoring runs in your browser", desc: "All 11 heuristics execute locally. Your score and results are computed on your device and sent nowhere — not even to us.",
     proof: "read the heuristics", href: `${REPO}/blob/main/anonscore.jsx` },
-  { icon: "⬢", label: "Zero third-party requests", desc: "Every script, font, and icon is self-hosted — no CDNs, no trackers. A strict Content-Security-Policy makes your browser physically block requests to anywhere except the public explorers, our no-log relay (on by default, one click off), and the AI worker (opt-in). It's enforced by your browser, not by our promise.",
+  { icon: "⬢", label: "Zero third-party requests", desc: "Every script, font, and icon is self-hosted. A strict Content-Security-Policy makes your browser block anything else — enforced by the browser, not by our promise.",
     proof: "read the CSP header", href: `${REPO}/blob/main/_headers` },
-  { icon: "◇", label: "Even the relay can't remember you", desc: "The optional privacy relay is a stateless Worker: no storage bindings, no logging code, and observability is pinned off in its deploy config — so 'no logs' is a setting in the open-source repo, not a dashboard state you'd have to take on faith.",
+  { icon: "◇", label: "Even the relay can't remember you", desc: "A stateless Worker: no storage, no logging code, observability pinned off in its config. 'No logs' is a setting in the public repo, not a claim you have to trust.",
     proof: "read the relay source", href: `${REPO}/blob/main/workers/relay/worker.js` },
-  { icon: "▣", label: "Open source, MIT, auditable in minutes", desc: "The entire tool — site, heuristics, and relay — is one readable repo. Security issues have a private disclosure path, and even how we're paid for is disclosed in the footer.",
+  { icon: "▣", label: "Open source, MIT, auditable in minutes", desc: "One readable repo: site, heuristics, relay. Security issues get a private disclosure path. Even our funding is disclosed, in the footer.",
     proof: "browse the repo", href: REPO },
 ];
 
@@ -2400,7 +2409,7 @@ function GuaranteeRail() {
       <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
         {GUARANTEES.map((g, i) => (
           <a key={i} href={g.href} target="_blank" rel="noopener noreferrer"
-            style={{ display: "flex", alignItems: "flex-start", gap: 6, fontFamily: T.mono, fontSize: 10, color: T.textMid, textDecoration: "none", lineHeight: 1.45, padding: "4px 6px", marginLeft: -6, borderRadius: 6, transition: "color .15s, background .15s" }}
+            style={{ display: "flex", alignItems: "flex-start", gap: 6, fontFamily: T.mono, fontSize: 10, color: T.textMid, textDecoration: "none", lineHeight: 1.45, padding: "4px 6px", marginLeft: -6, borderRadius: 6, transition: "color .15s, background .15s", animation: `fadeUp .4s ease ${(0.35 + i * 0.07).toFixed(2)}s both` }}
             onMouseOver={e => { e.currentTarget.style.color = T.cyan; e.currentTarget.style.background = T.cyanLo; }}
             onMouseOut={e => { e.currentTarget.style.color = T.textMid; e.currentTarget.style.background = "transparent"; }}>
             <span style={{ color: T.green, flexShrink: 0 }}>✓</span>{t(`g.${i}.label`)}
@@ -3013,58 +3022,10 @@ function Landing({ onAnalyze, isMobile, onCases }) {
             </div>
           )}
 
-          {/* Trust callout — updates based on detected type */}
-          <div style={{ maxWidth: 480, margin: "0 auto 12px", animation: "fadeUp .5s ease .20s both", background: T.surface, border: `1px solid ${isLn ? T.ln + "44" : T.border}`, borderRadius: 10, padding: "10px 14px", fontFamily: T.sans, fontSize: 12, color: T.textMid, lineHeight: 1.5, textAlign: "left", transition: "border-color .2s" }}>
-            {isLn ? t("trust.ln") : t("trust.btc")}
-          </div>
-
-          {/* Privacy relay toggle — the mitigation for the IP↔address leak the
-              callout above discloses. Only shown once a relay is configured. */}
-          {RELAY_URL && <RelayToggle />}
-
-          {/* Recent scans history — only shown if they have prior scans */}
-          {history.length > 0 && (
-            <div style={{ maxWidth: 480, margin: "0 auto 12px", animation: "fadeUp .5s ease .21s both" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <div style={{ fontFamily: T.mono, fontSize: 8, color: T.textDim, letterSpacing: 1.5 }}>{t("recent.title")}</div>
-                  <button onClick={wipeHistory} aria-label="Clear all scan history from this browser"
-                    style={{ background: "none", border: "none", fontFamily: T.mono, fontSize: 8, letterSpacing: 1, color: T.textDim, cursor: "pointer", padding: 0, textDecoration: "underline", textUnderlineOffset: 2 }}
-                    onMouseOver={e => e.currentTarget.style.color = T.red}
-                    onMouseOut={e => e.currentTarget.style.color = T.textDim}>{t("recent.clear")}</button>
-                </div>
-                {history.length >= 2 && <Sparkline history={history.map(h => h.score)} width={64} height={22} />}
-              </div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                {history.map((h, i) => {
-                  const col = scoreColor(h.score);
-                  return (
-                    <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, background: T.surface, border: `1px solid ${T.border}`, borderRadius: 8, padding: "8px 12px", transition: "border-color .15s" }}
-                      onMouseOver={e => e.currentTarget.style.borderColor = col}
-                      onMouseOut={e => e.currentTarget.style.borderColor = T.border}>
-                      <button onClick={() => onAnalyze(h.addr, false, h.isLightning ? "ln_pubkey" : "btc")}
-                        style={{ display: "flex", alignItems: "center", gap: 10, flex: 1, background: "none", border: "none", cursor: "pointer", textAlign: "left", minWidth: 0 }}>
-                        <div style={{ width: 6, height: 6, borderRadius: "50%", background: col, flexShrink: 0 }} />
-                        <div style={{ fontFamily: T.mono, fontSize: 10, color: T.textDim, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                          {h.isLightning ? "⚡ " : "₿ "}{h.addr === "DEMO" || h.addr === "DEMO_A" || h.addr === "DEMO_LN" ? "Demo" : h.addr.slice(0, 14) + "…"}
-                        </div>
-                        <div style={{ fontFamily: T.serif, fontSize: 14, color: col, flexShrink: 0 }}>{h.grade}</div>
-                        <div style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim, flexShrink: 0 }}>{h.score}/100</div>
-                        <div style={{ fontFamily: T.mono, fontSize: 8, color: T.textDim, flexShrink: 0 }}>↺</div>
-                      </button>
-                      <button onClick={() => deleteHistory(h.addr)}
-                        style={{ background: "none", border: "none", color: T.textDim, fontSize: 12, cursor: "pointer", padding: "0 2px", flexShrink: 0, lineHeight: 1 }}
-                        onMouseOver={e => e.currentTarget.style.color = T.red}
-                        onMouseOut={e => e.currentTarget.style.color = T.textDim}>✕</button>
-                    </div>
-                  );
-                })}
-              </div>
-              <div style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim, marginTop: 5, textAlign: "left", lineHeight: 1.5 }}>
-                {t("recent.note")}
-              </div>
-            </div>
-          )}
+          {/* Privacy panel — trust line + relay switch in one compact box */}
+          {RELAY_URL
+            ? <RelayToggle trustLine={isLn ? t("trust.ln") : t("trust.btc")} />
+            : <div style={{ maxWidth: 480, margin: "0 auto 12px", animation: "fadeUp .5s ease .20s both", background: T.surface, border: `1px solid ${isLn ? T.ln + "44" : T.border}`, borderRadius: 10, padding: "10px 14px", fontFamily: T.sans, fontSize: 12, color: T.textMid, lineHeight: 1.5, textAlign: "left" }}>{isLn ? t("trust.ln") : t("trust.btc")}</div>}
 
           {/* CTAs — wrapped in a glowing "scan console" panel so the tool stands out from the dark page */}
           <div style={{ display: "flex", flexDirection: "column", gap: 10, maxWidth: 480, margin: "0 auto", animation: "fadeUp .5s ease .22s both, breathe 5s ease-in-out 1.2s infinite", background: T.card, border: `1px solid ${T.cyan}33`, borderRadius: 16, padding: isMobile ? "16px" : "20px 22px", boxShadow: `0 0 50px -14px ${T.cyan}40` }}>
@@ -3142,6 +3103,51 @@ function Landing({ onAnalyze, isMobile, onCases }) {
                 style={{ fontFamily: T.mono, fontSize: 10, color: T.cyan, textDecoration: "none" }}>Open source ↗</a>
             </div>
           </div>
+
+          {/* Recent scans history — only shown if they have prior scans */}
+          {history.length > 0 && (
+            <div style={{ maxWidth: 480, margin: "14px auto 0", animation: "fadeUp .5s ease .3s both" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <div style={{ fontFamily: T.mono, fontSize: 8, color: T.textDim, letterSpacing: 1.5 }}>{t("recent.title")}</div>
+                  <button onClick={wipeHistory} aria-label="Clear all scan history from this browser"
+                    style={{ background: "none", border: "none", fontFamily: T.mono, fontSize: 8, letterSpacing: 1, color: T.textDim, cursor: "pointer", padding: 0, textDecoration: "underline", textUnderlineOffset: 2 }}
+                    onMouseOver={e => e.currentTarget.style.color = T.red}
+                    onMouseOut={e => e.currentTarget.style.color = T.textDim}>{t("recent.clear")}</button>
+                </div>
+                {history.length >= 2 && <Sparkline history={history.map(h => h.score)} width={64} height={22} />}
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                {history.map((h, i) => {
+                  const col = scoreColor(h.score);
+                  return (
+                    <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, background: T.surface, border: `1px solid ${T.border}`, borderRadius: 8, padding: "8px 12px", transition: "border-color .15s" }}
+                      onMouseOver={e => e.currentTarget.style.borderColor = col}
+                      onMouseOut={e => e.currentTarget.style.borderColor = T.border}>
+                      <button onClick={() => onAnalyze(h.addr, false, h.isLightning ? "ln_pubkey" : "btc")}
+                        style={{ display: "flex", alignItems: "center", gap: 10, flex: 1, background: "none", border: "none", cursor: "pointer", textAlign: "left", minWidth: 0 }}>
+                        <div style={{ width: 6, height: 6, borderRadius: "50%", background: col, flexShrink: 0 }} />
+                        <div style={{ fontFamily: T.mono, fontSize: 10, color: T.textDim, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          {h.isLightning ? "⚡ " : "₿ "}{h.addr === "DEMO" || h.addr === "DEMO_A" || h.addr === "DEMO_LN" ? "Demo" : h.addr.slice(0, 14) + "…"}
+                        </div>
+                        <div style={{ fontFamily: T.serif, fontSize: 14, color: col, flexShrink: 0 }}>{h.grade}</div>
+                        <div style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim, flexShrink: 0 }}>{h.score}/100</div>
+                        <div style={{ fontFamily: T.mono, fontSize: 8, color: T.textDim, flexShrink: 0 }}>↺</div>
+                      </button>
+                      <button onClick={() => deleteHistory(h.addr)}
+                        style={{ background: "none", border: "none", color: T.textDim, fontSize: 12, cursor: "pointer", padding: "0 2px", flexShrink: 0, lineHeight: 1 }}
+                        onMouseOver={e => e.currentTarget.style.color = T.red}
+                        onMouseOut={e => e.currentTarget.style.color = T.textDim}>✕</button>
+                    </div>
+                  );
+                })}
+              </div>
+              <div style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim, marginTop: 5, textAlign: "left", lineHeight: 1.5 }}>
+                {t("recent.note")}
+              </div>
+            </div>
+          )}
+
         </section>
       </div>{/* end hero wrapper */}
 
@@ -3173,6 +3179,9 @@ function Landing({ onAnalyze, isMobile, onCases }) {
       <div className="reveal" style={{ padding: isMobile ? "28px 20px 0" : "36px 48px 0" }}>
         <div style={{ maxWidth: 860, margin: "0 auto" }}>
           <div style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim, letterSpacing: 2, marginBottom: 10 }}>{t("open.title")}</div>
+          <h2 style={{ fontFamily: T.serif, fontSize: isMobile ? 28 : 40, color: T.text, fontWeight: 400, marginBottom: 16, lineHeight: 1.15 }}>
+            {t("open.h2.pre")} <em className="accent-glow" style={{ color: T.cyan, fontStyle: "italic" }}>{t("open.h2.em")}</em>
+          </h2>
           <TrustBox />
         </div>
       </div>
