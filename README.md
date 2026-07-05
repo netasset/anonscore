@@ -10,7 +10,7 @@ Live: <https://anonscore.com>
 
 ## What it does
 
-- **10 Bitcoin heuristics**: address reuse, dust attacks, round amounts, CoinJoin usage, unsafe consolidation, UTXO count, fee fingerprinting, change address reuse, balance concentration, script-type mixing.
+- **11 Bitcoin heuristics**: address reuse, dust attacks, round amounts, CoinJoin usage, unsafe consolidation, UTXO count, fee fingerprinting, change address reuse, balance concentration, script-type mixing, change detection (script-type mismatch).
 - **8 Lightning heuristics**: KYC peers, channel diversity, Tor/IP exposure, alias privacy, capacity concentration, peer analysis, node age, fee fingerprinting.
 - **Plain-English mode**: every check rephrased for non-technical users.
 - **AI Privacy Assistant** (optional, consent-gated): personalized guidance for *your* specific issues. Your address is never sent — only your analysis results: the score, the findings (each with its plain-English explanation), and the ranked recommendations. For public/institutional wallets (Case Files, forensic mode) the payload also includes public on-chain transaction and UTXO summaries — all data anyone can already read off the chain. A preview of exactly what will be sent is shown in the consent gate before anything leaves the browser.

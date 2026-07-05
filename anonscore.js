@@ -203,6 +203,12 @@ const LANDING_CHECKS = [{
   icon: "T",
   label: "Script Type Mix",
   desc: "Mixing legacy and SegWit addresses creates analyst-exploitable patterns across your UTXO set."
+}, {
+  n: "11",
+  k: "changeid",
+  icon: "⇄",
+  label: "Change Detection",
+  desc: "When a payment's two outputs use different address types and only one matches your input, analysts know that one is your change."
 }];
 const LANDING_FACTS = [{
   stat: "$1.1B",
@@ -1590,7 +1596,7 @@ function ChecksSection({
       gap: 8,
       justifyContent: "center"
     }
-  }, [["btc", "₿ 10 Bitcoin heuristics", T.cyan, T.cyanLo, T.cyanMid], ["ln", "⚡ 8 Lightning checks", T.ln, T.lnLo, T.lnMid]].map(([m, label, col, lo, mid]) => React.createElement("button", {
+  }, [["btc", "₿ 11 Bitcoin heuristics", T.cyan, T.cyanLo, T.cyanMid], ["ln", "⚡ 8 Lightning checks", T.ln, T.lnLo, T.lnMid]].map(([m, label, col, lo, mid]) => React.createElement("button", {
     key: m,
     onClick: () => setMode(m),
     style: {
@@ -1777,6 +1783,15 @@ function runEngine(utxos = [], txs = [], txCount = 0) {
   if (largest > 0 && total > 0 && largest / total > 0.9) add("conc", "Balance Concentration", "warn", "90%+ in one UTXO — exposes full balance per spend", "Almost all your Bitcoin is in one output. Every transaction reveals nearly your full holdings.", "medium", -5);else add("conc", "Balance Concentration", "pass", "Balance spread across UTXOs", "Good — your balance is distributed.", "clean", 0);
   const scriptTypes = new Set(utxos.map(u => u.scriptpubkey_type || (u.value > 10000000 ? "v0_p2wpkh" : "p2pkh")).filter(Boolean));
   if (scriptTypes.size > 1) add("script", "Mixed Script Types", "warn", "Mixed legacy/SegWit — linkable by script type", "Using different address formats across UTXOs creates patterns analysts can exploit.", "low", -4);else add("script", "Mixed Script Types", "pass", "Consistent script type", "Your UTXOs use a consistent address format.", "clean", 0);
+  const changeIdCount = txs.filter(tx => {
+    if (tx.vout?.length !== 2) return false;
+    const inType = (tx.vin || []).map(i => i.prevout?.scriptpubkey_type).find(Boolean);
+    if (!inType) return false;
+    const [a, b] = tx.vout.map(o => o.scriptpubkey_type);
+    if (!a || !b || a === b) return false;
+    return a === inType || b === inType;
+  }).length;
+  if (changeIdCount >= 3) add("changeid", "Change Detection", "fail", `${changeIdCount} payments reveal which output is your change`, "In several of your payments, only one output matches your input's address type — analysts read that output as your change and keep following your coins.", "high", -8);else if (changeIdCount >= 1) add("changeid", "Change Detection", "warn", `${changeIdCount} payment${changeIdCount > 1 ? "s" : ""} reveal${changeIdCount > 1 ? "" : "s"} which output is the change`, "A payment's two outputs used different address types, and only one matched your input — that one is identifiable as your change.", "medium", -4);else add("changeid", "Change Detection", "pass", "Change not identifiable by script type", "Your payments don't give away which output is the change via mismatched address types.", "clean", 0);
   score = Math.max(0, Math.min(100, Math.round(score)));
   const recs = [];
   const failed = checks.filter(c => c.status !== "pass");
@@ -2066,6 +2081,25 @@ function runEngine(utxos = [], txs = [], txCount = 0) {
       note: "createrawtransaction for precise output control"
     }],
     key: "conc"
+  });
+  if (failed.find(f => f.key === "changeid")) recs.push({
+    icon: "⇄",
+    action: "Match your change to the payment type",
+    plain: "When you pay a different address type than your own, your change output sticks out — analysts can tell which coins are still yours and keep following them.",
+    detail: "Use a wallet that matches the change output's address type to the payment's (Bitcoin Core does this automatically; Sparrow lets you choose the change type per transaction). Keeping your whole wallet on one script type and preferring recipients of the same type also blurs the tell.",
+    impact: 8,
+    effort: "Easy",
+    tools: [{
+      name: "Bitcoin Core",
+      note: "Matches change type to the destination automatically"
+    }, {
+      name: "Sparrow Wallet",
+      note: "Choose the change address type per transaction"
+    }, {
+      name: "Wasabi Wallet",
+      note: "Single script type wallet-wide — no mismatch to read"
+    }],
+    key: "changeid"
   });
   recs.sort((a, b) => b.impact - a.impact);
   return {
@@ -2379,12 +2413,17 @@ const DEMO = {
     txid: "9c11a2b0",
     vin: [{
       txid: "p8",
-      vout: 0
+      vout: 0,
+      prevout: {
+        scriptpubkey_type: "v0_p2wpkh"
+      }
     }],
     vout: [{
-      value: 10000000
+      value: 10000000,
+      scriptpubkey_type: "p2pkh"
     }, {
-      value: 3421000
+      value: 3421000,
+      scriptpubkey_type: "v0_p2wpkh"
     }],
     fee: 650,
     size: 224,
@@ -2679,6 +2718,11 @@ const SIMPLE = {
       name: "Mixed Address Formats",
       warn_detail: "You're using old and new Bitcoin address formats together. Trackers can use this pattern to link your transactions.",
       pass_detail: "You're using a consistent address format."
+    },
+    changeid: {
+      name: "Your Change Gives You Away",
+      warn_detail: "When you sent Bitcoin, your 'change' came back in your usual address style while the payment went to a different style. Trackers can spot which coins are still yours that way.",
+      pass_detail: "Your change doesn't stand out from your payments."
     }
   },
   recs: {
@@ -2701,6 +2745,10 @@ const SIMPLE = {
     payjoin: {
       action: "Pay with Payjoin when you can",
       plain: "Some wallets and shops support 'Payjoin' — when you pay, they quietly add one of their own coins to the transaction. That hides which coins are really yours, with no special mixing step. Look for it in wallets like Cake Wallet."
+    },
+    changeid: {
+      action: "Keep your change looking like your payments",
+      plain: "Use a wallet that makes your leftover change match the style of the address you're paying (Bitcoin Core does this by itself). Then trackers can't tell which coins came back to you."
     },
     dust: {
       action: "Freeze your tracking coins",
@@ -3648,7 +3696,7 @@ function ShareCard({
   const cardRef = useRef(null);
   const issueCount = checks.filter(c => c.status !== "pass").length;
   const modeStr = isLightning ? "Lightning node" : "Bitcoin wallet";
-  const heuristicStr = isLightning ? "8 Lightning privacy checks" : "10 on-chain heuristics";
+  const heuristicStr = isLightning ? "8 Lightning privacy checks" : "11 on-chain heuristics";
   const avgStr = isLightning ? "" : "\n\nMost wallets score 38/100. How does yours compare?";
   const shareText = `My ${modeStr} privacy score: Grade ${grade} (${score}/100)\n${issueCount} issue${issueCount !== 1 ? "s" : ""} found.\nCheck yours free → anonscore.com`;
   const xText = `My ${modeStr} privacy score: Grade ${grade} (${score}/100) — ${issueCount} issue${issueCount !== 1 ? "s" : ""} found.${avgStr}\n\nFree tool 👇\nanonscore.com`;
@@ -4182,7 +4230,7 @@ const GUARANTEES = [{
 }, {
   icon: "◎",
   label: "Scoring runs in your browser",
-  desc: "All 10 heuristics execute locally. Your score and results are computed on your device and sent nowhere — not even to us. (The address itself does reach Blockstream's public API to fetch the chain data, as noted above.)",
+  desc: "All 11 heuristics execute locally. Your score and results are computed on your device and sent nowhere — not even to us. (The address itself does reach Blockstream's public API to fetch the chain data, as noted above.)",
   proof: "read the heuristics",
   href: `${REPO}/blob/main/anonscore.jsx`
 }, {
@@ -6312,7 +6360,7 @@ function Landing({
     n: "02",
     icon: "🔍",
     title: "We run the checks",
-    desc: "Bitcoin: 10 on-chain heuristics. Lightning: 8 node privacy checks. Same patterns surveillance firms use — runs in your browser."
+    desc: "Bitcoin: 11 on-chain heuristics. Lightning: 8 node privacy checks. Same patterns surveillance firms use — runs in your browser."
   }, {
     n: "03",
     icon: "🎯",
@@ -8814,7 +8862,7 @@ function CoachWaitlist({
       borderLeft: `1px solid ${T.border}`,
       background: T.cyanLo
     }
-  }, "COACH")), [["The full audit (10 BTC + 8 LN heuristics)", "✓ always free", "✓ always free"], ["AI assistant — messages per session", "5", "Unlimited"], ["Memory across scans", "—", "✓ passphrase-encrypted"], ["Multi-device continuity", "—", "✓"], ["Personal fix queue with progress", "Per address", "✓ across every wallet"], ["Address ever sent to the AI", "Never", "Never"]].map(([what, free, coach], i, arr) => React.createElement("div", {
+  }, "COACH")), [["The full audit (11 BTC + 8 LN heuristics)", "✓ always free", "✓ always free"], ["AI assistant — messages per session", "5", "Unlimited"], ["Memory across scans", "—", "✓ passphrase-encrypted"], ["Multi-device continuity", "—", "✓"], ["Personal fix queue with progress", "Per address", "✓ across every wallet"], ["Address ever sent to the AI", "Never", "Never"]].map(([what, free, coach], i, arr) => React.createElement("div", {
     key: what,
     style: {
       display: "grid",
@@ -11951,7 +11999,7 @@ function Dashboard({
       marginBottom: 12,
       fontWeight: 400
     }
-  }, "10 heuristics, each weighted by severity"), React.createElement("div", {
+  }, "11 heuristics, each weighted by severity"), React.createElement("div", {
     style: {
       fontSize: 14,
       color: T.textMid,
@@ -12014,6 +12062,11 @@ function Dashboard({
     deduct: "–4",
     why: "Using legacy + SegWit addresses creates cross-UTXO patterns analysts can exploit.",
     sev: "low"
+  }, {
+    check: "Change Detection",
+    deduct: "–4 to –8",
+    why: "Two-output payments where only one output matches the input's script type reveal which output is your change.",
+    sev: "medium"
   }].map((row, i) => React.createElement("div", {
     key: i,
     style: {
@@ -12150,7 +12203,7 @@ function Dashboard({
     style: {
       color: T.cyan
     }
-  }, "Open source:"), " All 10 heuristics are implemented in plain JavaScript in this tool's source. No black box. View and audit the full scoring logic at ", React.createElement("a", {
+  }, "Open source:"), " All 11 heuristics are implemented in plain JavaScript in this tool's source. No black box. View and audit the full scoring logic at ", React.createElement("a", {
     href: "https://github.com/netasset/anonscore",
     target: "_blank",
     rel: "noopener noreferrer",
@@ -13677,7 +13730,7 @@ function App() {
     document.title = "AnonScore — Free Bitcoin & Lightning Privacy Audit";
     set('meta[name="description"]', "content", "Paste a Bitcoin address or Lightning node pubkey. Get a privacy score, every issue explained, and a ranked fix plan. Free, open source, nothing stored.");
     set('meta[property="og:title"]', "content", "AnonScore — Free Bitcoin & Lightning Privacy Audit");
-    set('meta[property="og:description"]', "content", "10 Bitcoin heuristics + 8 Lightning checks. Score 0–100. Free, open source, runs in your browser. No data stored.");
+    set('meta[property="og:description"]', "content", "11 Bitcoin heuristics + 8 Lightning checks. Score 0–100. Free, open source, runs in your browser. No data stored.");
     set('meta[property="og:url"]', "content", "https://anonscore.com");
     set('meta[property="og:type"]', "content", "website");
     set('meta[property="og:image"]', "content", "https://anonscore.com/og.png");
