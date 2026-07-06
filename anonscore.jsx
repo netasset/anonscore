@@ -3072,6 +3072,8 @@ function Landing({ onAnalyze, isMobile, onCases }) {
               <div style={{ fontFamily: T.mono, fontSize: 9, letterSpacing: 1.5, color: T.textDim, marginBottom: 7, textAlign: "left" }}>
                 {isLn ? "NODE PUBKEY" : "BITCOIN ADDRESS OR LN PUBKEY"}
               </div>
+              {/* Input on its own full-width row so the field is the widest, most
+                  prominent element; Analyze becomes a full-width CTA below it. */}
               <div style={{ display: "flex", gap: 8 }}>
                 {isMobile && (
                   <button onClick={async () => {
@@ -3103,14 +3105,14 @@ function Landing({ onAnalyze, isMobile, onCases }) {
                       e.target.style.boxShadow = `inset 0 2px 14px #00000080`;
                     }} />
                 </div>
-                <button onClick={() => submit(null, !isLn)} className="sheen"
-                  style={{ background: isLn ? T.ln : T.btc, border: "none", borderRadius: 14, padding: "22px 26px",
-                    color: T.bg, fontFamily: T.sans, fontWeight: 700, fontSize: 16, cursor: "pointer", whiteSpace: "nowrap", transition: "all .15s", flexShrink: 0 }}
-                  onMouseOver={e => e.currentTarget.style.opacity = ".88"}
-                  onMouseOut={e => e.currentTarget.style.opacity = "1"}>
-                  {isLn ? t("cta.audit") : t("cta.analyze")}
-                </button>
               </div>
+              <button onClick={() => submit(null, !isLn)} className="sheen"
+                style={{ width: "100%", marginTop: 10, background: isLn ? T.ln : T.btc, border: "none", borderRadius: 14, padding: "18px 26px",
+                  color: T.bg, fontFamily: T.sans, fontWeight: 700, fontSize: 16, cursor: "pointer", whiteSpace: "nowrap", transition: "all .15s" }}
+                onMouseOver={e => e.currentTarget.style.opacity = ".88"}
+                onMouseOut={e => e.currentTarget.style.opacity = "1"}>
+                {isLn ? t("cta.audit") : t("cta.analyze")}
+              </button>
               {isLn && (
                 <div style={{ fontFamily: T.mono, fontSize: 10, color: T.textDim, marginTop: 5, textAlign: "left" }}>
                   ⚡ Node pubkeys only work if you run your own node — Umbrel, Start9, Citadel, RaspiBlitz, etc.
