@@ -6210,6 +6210,15 @@ function Landing({
     }
   }, inputType === "ln_pubkey" ? "⚡ Lightning node pubkey detected" : inputType === "ln_address" ? "⚡ Lightning address — paste your node's pubkey instead" : "₿ Bitcoin address detected")), React.createElement("div", {
     style: {
+      fontFamily: T.mono,
+      fontSize: 9,
+      letterSpacing: 1.5,
+      color: T.textDim,
+      marginBottom: 7,
+      textAlign: "left"
+    }
+  }, isLn ? "NODE PUBKEY" : "BITCOIN ADDRESS OR LN PUBKEY"), React.createElement("div", {
+    style: {
       display: "flex",
       gap: 8
     }
@@ -6224,15 +6233,51 @@ function Landing({
     style: {
       background: T.surface,
       border: `1.5px solid ${T.border}`,
-      borderRadius: 10,
-      padding: "13px 14px",
+      borderRadius: 14,
+      padding: "16px 15px",
       color: T.textMid,
-      fontSize: 16,
+      fontSize: 18,
       cursor: "pointer",
-      flexShrink: 0
+      flexShrink: 0,
+      alignSelf: "stretch"
     },
     title: "Paste"
-  }, "\uD83D\uDCCB"), React.createElement("input", {
+  }, "\uD83D\uDCCB"), React.createElement("div", {
+    style: {
+      position: "relative",
+      flex: 1,
+      minWidth: 0
+    }
+  }, React.createElement("svg", {
+    width: "20",
+    height: "20",
+    viewBox: "0 0 24 24",
+    fill: "none",
+    "aria-hidden": "true",
+    style: {
+      position: "absolute",
+      left: 18,
+      top: "50%",
+      transform: "translateY(-50%)",
+      pointerEvents: "none"
+    }
+  }, React.createElement("circle", {
+    cx: "11",
+    cy: "11",
+    r: "7",
+    stroke: inputType ? isLn ? T.ln : T.btc : T.cyan,
+    strokeWidth: "2",
+    opacity: "0.9"
+  }), React.createElement("line", {
+    x1: "16.5",
+    y1: "16.5",
+    x2: "21",
+    y2: "21",
+    stroke: inputType ? isLn ? T.ln : T.btc : T.cyan,
+    strokeWidth: "2",
+    strokeLinecap: "round",
+    opacity: "0.9"
+  })), React.createElement("input", {
     ref: inputRef,
     value: input,
     onChange: e => {
@@ -6242,44 +6287,46 @@ function Landing({
     onKeyDown: e => e.key === "Enter" && submit(null, true),
     placeholder: isLn ? "03abc… (66-char node pubkey)" : "Paste an address or pubkey…",
     style: {
-      flex: 1,
-      background: T.bg,
-      border: `1.5px solid ${error ? T.red : inputType ? isLn ? T.ln : T.btc : T.cyan + "55"}`,
-      borderRadius: 12,
-      padding: "18px 18px",
+      width: "100%",
+      boxSizing: "border-box",
+      background: "#070910",
+      border: `2px solid ${error ? T.red : inputType ? isLn ? T.ln : T.btc : T.cyan + "77"}`,
+      borderRadius: 14,
+      padding: "22px 18px 22px 50px",
       color: T.text,
       fontFamily: T.mono,
-      fontSize: 15,
+      fontSize: 17,
       letterSpacing: 0.3,
       outline: "none",
       transition: "border .18s, box-shadow .25s",
-      boxShadow: `inset 0 0 24px ${T.cyan}0c`,
+      boxShadow: `inset 0 2px 14px #00000080`,
       minWidth: 0
     },
     onFocus: e => {
       const c = isLn ? T.ln : T.cyan;
       e.target.style.borderColor = c;
-      e.target.style.boxShadow = `0 0 0 4px ${c}22, 0 0 22px ${c}55`;
+      e.target.style.boxShadow = `0 0 0 4px ${c}22, 0 0 24px ${c}55, inset 0 2px 14px #00000080`;
     },
     onBlur: e => {
-      e.target.style.borderColor = error ? T.red : inputType ? isLn ? T.ln : T.btc : T.cyan + "55";
-      e.target.style.boxShadow = `inset 0 0 24px ${T.cyan}0c`;
+      e.target.style.borderColor = error ? T.red : inputType ? isLn ? T.ln : T.btc : T.cyan + "77";
+      e.target.style.boxShadow = `inset 0 2px 14px #00000080`;
     }
-  }), React.createElement("button", {
+  })), React.createElement("button", {
     onClick: () => submit(null, !isLn),
     className: "sheen",
     style: {
       background: isLn ? T.ln : T.btc,
       border: "none",
-      borderRadius: 12,
-      padding: "18px 24px",
+      borderRadius: 14,
+      padding: "22px 26px",
       color: T.bg,
       fontFamily: T.sans,
       fontWeight: 700,
-      fontSize: 15,
+      fontSize: 16,
       cursor: "pointer",
       whiteSpace: "nowrap",
-      transition: "all .15s"
+      transition: "all .15s",
+      flexShrink: 0
     },
     onMouseOver: e => e.currentTarget.style.opacity = ".88",
     onMouseOut: e => e.currentTarget.style.opacity = "1"
