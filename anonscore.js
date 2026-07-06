@@ -6239,29 +6239,30 @@ function Landing({
       setError("");
     },
     onKeyDown: e => e.key === "Enter" && submit(null, true),
-    placeholder: isLn ? "03abc… (66-char node pubkey)" : "bc1q… or 1… or 3…  ·  or Lightning 03…",
+    placeholder: isLn ? "03abc… (66-char node pubkey)" : "Paste an address or pubkey…",
     style: {
       flex: 1,
       background: T.bg,
       border: `1.5px solid ${error ? T.red : inputType ? isLn ? T.ln : T.btc : T.cyan + "55"}`,
-      borderRadius: 10,
-      padding: "13px 16px",
+      borderRadius: 12,
+      padding: "18px 18px",
       color: T.text,
       fontFamily: T.mono,
-      fontSize: 13,
+      fontSize: 15,
+      letterSpacing: 0.3,
       outline: "none",
       transition: "border .18s, box-shadow .25s",
-      boxShadow: "0 0 0 0 transparent",
+      boxShadow: `inset 0 0 24px ${T.cyan}0c`,
       minWidth: 0
     },
     onFocus: e => {
       const c = isLn ? T.ln : T.cyan;
       e.target.style.borderColor = c;
-      e.target.style.boxShadow = `0 0 0 4px ${c}22, 0 0 18px ${c}55`;
+      e.target.style.boxShadow = `0 0 0 4px ${c}22, 0 0 22px ${c}55`;
     },
     onBlur: e => {
       e.target.style.borderColor = error ? T.red : inputType ? isLn ? T.ln : T.btc : T.cyan + "55";
-      e.target.style.boxShadow = "0 0 0 0 transparent";
+      e.target.style.boxShadow = `inset 0 0 24px ${T.cyan}0c`;
     }
   }), React.createElement("button", {
     onClick: () => submit(null, !isLn),
@@ -6269,12 +6270,12 @@ function Landing({
     style: {
       background: isLn ? T.ln : T.btc,
       border: "none",
-      borderRadius: 10,
-      padding: "13px 20px",
+      borderRadius: 12,
+      padding: "18px 24px",
       color: T.bg,
       fontFamily: T.sans,
       fontWeight: 700,
-      fontSize: 14,
+      fontSize: 15,
       cursor: "pointer",
       whiteSpace: "nowrap",
       transition: "all .15s"
