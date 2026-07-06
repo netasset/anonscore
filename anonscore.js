@@ -293,7 +293,8 @@ const STRINGS = {
     "relay.verify": "verify: relay source ↗",
     "relay.explorer": "EXPLORER",
     "relay.aria": "Route lookups through the AnonScore privacy relay to hide your IP from the block explorer",
-    "rail.title": "GUARANTEES · VERIFY ↓",
+    "rail.title": "GUARANTEES",
+    "rail.foot": "Each one links to the code that proves it.",
     "open.title": "RADICALLY OPEN",
     "open.h2.pre": "Don't trust.",
     "open.h2.em": "Verify.",
@@ -353,7 +354,8 @@ const STRINGS = {
     "relay.verify": "verificar: código del relé ↗",
     "relay.explorer": "EXPLORADOR",
     "relay.aria": "Enrutar las consultas por el relé de privacidad de AnonScore para ocultar tu IP al explorador de bloques",
-    "rail.title": "GARANTÍAS · VERIFICA ↓",
+    "rail.title": "GARANTÍAS",
+    "rail.foot": "Cada una enlaza al código que la demuestra.",
     "open.title": "RADICALMENTE ABIERTO",
     "open.h2.pre": "No confíes.",
     "open.h2.em": "Verifica.",
@@ -4398,71 +4400,85 @@ function TrustBox() {
   }, "Don't take our word for it \u2014 every claim above links to its proof. Audit the full source on GitHub \u2197"))));
 }
 function GuaranteeRail() {
-  const [wide, setWide] = useState(() => typeof window !== "undefined" && window.innerWidth >= 1100);
+  const [wide, setWide] = useState(() => typeof window !== "undefined" && window.innerWidth >= 1500);
   useEffect(() => {
-    const onR = () => setWide(window.innerWidth >= 1100);
+    const onR = () => setWide(window.innerWidth >= 1500);
     window.addEventListener("resize", onR);
     return () => window.removeEventListener("resize", onR);
   }, []);
   if (!wide) return null;
-  return React.createElement("aside", {
-    "aria-label": "Privacy guarantees \u2014 each links to its proof",
-    style: {
-      position: "absolute",
-      right: 22,
-      top: 420,
-      width: 205,
-      zIndex: 1,
-      animation: "fadeUp .5s ease .3s both"
-    }
-  }, React.createElement("div", {
-    style: {
-      fontFamily: T.mono,
-      fontSize: 8,
-      color: T.textDim,
-      letterSpacing: 2,
-      marginBottom: 8
-    }
-  }, t("rail.title")), React.createElement("div", {
-    style: {
-      display: "flex",
-      flexDirection: "column",
-      gap: 6
-    }
-  }, GUARANTEES.map((g, i) => React.createElement("a", {
-    key: i,
-    href: g.href,
-    target: "_blank",
-    rel: "noopener noreferrer",
-    style: {
-      display: "flex",
-      alignItems: "flex-start",
-      gap: 6,
-      fontFamily: T.mono,
-      fontSize: 10,
-      color: T.textMid,
-      textDecoration: "none",
-      lineHeight: 1.45,
-      padding: "4px 6px",
-      marginLeft: -6,
-      borderRadius: 6,
-      transition: "color .15s, background .15s",
-      animation: `fadeUp .4s ease ${(0.35 + i * 0.07).toFixed(2)}s both`
-    },
-    onMouseOver: e => {
-      e.currentTarget.style.color = T.cyan;
-      e.currentTarget.style.background = T.cyanLo;
-    },
-    onMouseOut: e => {
-      e.currentTarget.style.color = T.textMid;
-      e.currentTarget.style.background = "transparent";
-    }
-  }, React.createElement("span", {
-    style: {
-      color: T.green,
-      flexShrink: 0
-    }
-  }, "\u2713"), t(`g.${i}.label`)))));
+  return (React.createElement("aside", {
+      "aria-label": "Privacy guarantees \u2014 each links to its proof",
+      style: {
+        position: "absolute",
+        left: "calc(50% + 470px)",
+        top: 300,
+        width: "min(360px, calc(50vw - 494px))",
+        zIndex: 1,
+        animation: "fadeUp .5s ease .3s both"
+      }
+    }, React.createElement("div", {
+      style: {
+        fontFamily: T.mono,
+        fontSize: 10,
+        color: T.textDim,
+        letterSpacing: 2,
+        marginBottom: 14,
+        paddingBottom: 10,
+        borderBottom: `1px solid ${T.border}`
+      }
+    }, t("rail.title")), React.createElement("div", {
+      style: {
+        display: "flex",
+        flexDirection: "column",
+        gap: 3
+      }
+    }, GUARANTEES.map((g, i) => React.createElement("a", {
+      key: i,
+      href: g.href,
+      target: "_blank",
+      rel: "noopener noreferrer",
+      style: {
+        display: "flex",
+        alignItems: "flex-start",
+        gap: 10,
+        fontFamily: T.mono,
+        fontSize: 13,
+        color: T.textMid,
+        textDecoration: "none",
+        lineHeight: 1.4,
+        padding: "9px 10px",
+        marginLeft: -10,
+        borderRadius: 8,
+        transition: "color .15s, background .15s",
+        animation: `fadeUp .45s ease ${(0.35 + i * 0.08).toFixed(2)}s both`
+      },
+      onMouseOver: e => {
+        e.currentTarget.style.color = T.cyan;
+        e.currentTarget.style.background = T.cyanLo;
+      },
+      onMouseOut: e => {
+        e.currentTarget.style.color = T.textMid;
+        e.currentTarget.style.background = "transparent";
+      }
+    }, React.createElement("span", {
+      style: {
+        color: T.green,
+        flexShrink: 0,
+        fontSize: 14,
+        lineHeight: 1.3
+      }
+    }, "\u2713"), t(`g.${i}.label`)))), React.createElement("div", {
+      style: {
+        fontFamily: T.mono,
+        fontSize: 10,
+        color: T.textDim,
+        marginTop: 12,
+        paddingLeft: 10,
+        lineHeight: 1.5
+      }
+    }, t("rail.foot")))
+  );
 }
 const CATEGORY_META = {
   exchange: {
@@ -5558,6 +5574,12 @@ function Landing({
   onCases
 }) {
   useLang();
+  const [navWide, setNavWide] = useState(() => typeof window !== "undefined" && window.innerWidth >= 1040);
+  useEffect(() => {
+    const onR = () => setNavWide(window.innerWidth >= 1040);
+    window.addEventListener("resize", onR);
+    return () => window.removeEventListener("resize", onR);
+  }, []);
   const [input, setInput] = useState("");
   const [error, setError] = useState("");
   const [history, setHistory] = useState(() => getHistory());
@@ -5658,8 +5680,7 @@ function Landing({
       borderBottom: `1px solid ${T.borderLo}`,
       display: "flex",
       alignItems: "center",
-      justifyContent: "space-between",
-      gap: 10,
+      gap: 12,
       padding: isMobile ? "7px 20px" : "7px 48px"
     }
   }, React.createElement("a", {
@@ -5702,14 +5723,19 @@ function Landing({
       color: T.textDim,
       letterSpacing: 1.5
     }
-  }, "\xB7 ", t("umbrella.label"))), React.createElement("div", {
+  }, "\xB7 ", t("umbrella.label"))), !isMobile && React.createElement(React.Fragment, null, React.createElement("span", {
+    style: {
+      color: T.borderLo,
+      flexShrink: 0
+    }
+  }, "|"), React.createElement("div", {
     style: {
       display: "flex",
       alignItems: "center",
       gap: 9,
       flexShrink: 0
     }
-  }, !isMobile && React.createElement("span", {
+  }, React.createElement("span", {
     style: {
       fontFamily: T.mono,
       fontSize: 10,
@@ -5717,7 +5743,7 @@ function Landing({
       fontWeight: 700,
       letterSpacing: 0.5
     }
-  }, t("umbrella.privacy")), !isMobile && React.createElement("span", {
+  }, t("umbrella.privacy")), React.createElement("span", {
     style: {
       color: T.borderLo
     }
@@ -5753,7 +5779,7 @@ function Landing({
     },
     onMouseOver: e => e.currentTarget.style.color = T.opn,
     onMouseOut: e => e.currentTarget.style.color = T.textMid
-  }, t("umbrella.hub"), " \u2197"))), React.createElement("div", {
+  }, t("umbrella.hub"), " \u2197")))), React.createElement("div", {
     role: "main",
     "aria-label": "AnonScore \u2014 Bitcoin & Lightning privacy audit",
     style: {
@@ -5764,9 +5790,9 @@ function Landing({
     }
   }, React.createElement("nav", {
     style: {
-      display: "flex",
+      display: "grid",
+      gridTemplateColumns: "1fr auto 1fr",
       alignItems: "center",
-      justifyContent: "space-between",
       padding: isMobile ? "14px 20px" : "14px 48px",
       borderBottom: `1px solid ${T.border}`,
       background: T.bg,
@@ -5778,39 +5804,11 @@ function Landing({
     style: {
       display: "flex",
       alignItems: "center",
-      gap: 8
-    }
-  }, React.createElement("span", {
-    style: {
-      color: T.btc,
-      fontFamily: T.mono,
-      fontSize: 14,
-      lineHeight: 1,
-      textShadow: `0 0 14px ${T.btc}77`
-    }
-  }, "\u20BF"), React.createElement("span", {
-    style: {
-      fontFamily: T.display,
-      fontWeight: 700,
-      fontSize: 15,
-      letterSpacing: 4,
-      color: T.text,
-      textTransform: "uppercase"
-    }
-  }, "ANON", React.createElement("span", {
-    style: {
-      color: T.cyan,
-      textShadow: `0 0 14px ${T.cyan}55`
-    }
-  }, "SCORE"))), React.createElement("div", {
-    style: {
-      display: "flex",
       gap: 8,
-      alignItems: "center",
-      flexWrap: "wrap",
-      justifyContent: "flex-end"
+      minWidth: 0,
+      justifySelf: "start"
     }
-  }, !isMobile && React.createElement(React.Fragment, null, React.createElement("span", {
+  }, navWide && React.createElement(React.Fragment, null, React.createElement("span", {
     style: {
       fontFamily: T.mono,
       fontSize: 10,
@@ -5846,12 +5844,43 @@ function Landing({
       fontSize: 10,
       color: T.textDim
     }
-  }, t("nav.opensource")), React.createElement("span", {
+  }, t("nav.opensource")))), React.createElement("div", {
     style: {
-      color: T.borderLo,
-      margin: "0 4px"
+      display: "flex",
+      alignItems: "center",
+      gap: 8,
+      justifySelf: "center"
     }
-  }, "|")), React.createElement("a", {
+  }, React.createElement("span", {
+    style: {
+      color: T.btc,
+      fontFamily: T.mono,
+      fontSize: 15,
+      lineHeight: 1,
+      textShadow: `0 0 14px ${T.btc}77`
+    }
+  }, "\u20BF"), React.createElement("span", {
+    style: {
+      fontFamily: T.display,
+      fontWeight: 700,
+      fontSize: 16,
+      letterSpacing: 4,
+      color: T.text,
+      textTransform: "uppercase"
+    }
+  }, "ANON", React.createElement("span", {
+    style: {
+      color: T.cyan,
+      textShadow: `0 0 14px ${T.cyan}55`
+    }
+  }, "SCORE"))), React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 8,
+      alignItems: "center",
+      justifySelf: "end"
+    }
+  }, React.createElement("a", {
     href: "https://github.com/netasset/anonscore",
     target: "_blank",
     rel: "noopener noreferrer",
@@ -5871,7 +5900,7 @@ function Landing({
     },
     onMouseOver: e => e.currentTarget.style.borderColor = T.cyan,
     onMouseOut: e => e.currentTarget.style.borderColor = T.border
-  }, "GitHub \u2197"), React.createElement(Tag, {
+  }, "GitHub \u2197"), !isMobile && React.createElement(Tag, {
     label: t("nav.free"),
     color: T.green,
     size: 10

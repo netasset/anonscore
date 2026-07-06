@@ -233,7 +233,8 @@ const STRINGS = {
     "relay.verify": "verify: relay source ↗",
     "relay.explorer": "EXPLORER",
     "relay.aria": "Route lookups through the AnonScore privacy relay to hide your IP from the block explorer",
-    "rail.title": "GUARANTEES · VERIFY ↓",
+    "rail.title": "GUARANTEES",
+    "rail.foot": "Each one links to the code that proves it.",
     "open.title": "RADICALLY OPEN",
     "open.h2.pre": "Don't trust.",
     "open.h2.em": "Verify.",
@@ -294,7 +295,8 @@ const STRINGS = {
     "relay.verify": "verificar: código del relé ↗",
     "relay.explorer": "EXPLORADOR",
     "relay.aria": "Enrutar las consultas por el relé de privacidad de AnonScore para ocultar tu IP al explorador de bloques",
-    "rail.title": "GARANTÍAS · VERIFICA ↓",
+    "rail.title": "GARANTÍAS",
+    "rail.foot": "Cada una enlaza al código que la demuestra.",
     "open.title": "RADICALMENTE ABIERTO",
     "open.h2.pre": "No confíes.",
     "open.h2.em": "Verifica.",
@@ -2396,26 +2398,32 @@ function TrustBox() {
    viewports (≥1100px) where the margin actually exists; mobile/tablet users
    get the full trust box further down the page instead. ── */
 function GuaranteeRail() {
-  const [wide, setWide] = useState(() => typeof window !== "undefined" && window.innerWidth >= 1100);
+  // Only render when the viewport is wide enough that the rail can sit right
+  // beside the centered 860px content column (not stranded at the far edge).
+  const [wide, setWide] = useState(() => typeof window !== "undefined" && window.innerWidth >= 1500);
   useEffect(() => {
-    const onR = () => setWide(window.innerWidth >= 1100);
+    const onR = () => setWide(window.innerWidth >= 1500);
     window.addEventListener("resize", onR);
     return () => window.removeEventListener("resize", onR);
   }, []);
   if (!wide) return null;
   return (
-    <aside aria-label="Privacy guarantees — each links to its proof" style={{ position: "absolute", right: 22, top: 420, width: 205, zIndex: 1, animation: "fadeUp .5s ease .3s both" }}>
-      <div style={{ fontFamily: T.mono, fontSize: 8, color: T.textDim, letterSpacing: 2, marginBottom: 8 }}>{t("rail.title")}</div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+    // left = column centre (50%) + half the 860 column (430) + a 40px gutter.
+    // width scales with the leftover space so it fills it without overflowing.
+    <aside aria-label="Privacy guarantees — each links to its proof"
+      style={{ position: "absolute", left: "calc(50% + 470px)", top: 300, width: "min(360px, calc(50vw - 494px))", zIndex: 1, animation: "fadeUp .5s ease .3s both" }}>
+      <div style={{ fontFamily: T.mono, fontSize: 10, color: T.textDim, letterSpacing: 2, marginBottom: 14, paddingBottom: 10, borderBottom: `1px solid ${T.border}` }}>{t("rail.title")}</div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
         {GUARANTEES.map((g, i) => (
           <a key={i} href={g.href} target="_blank" rel="noopener noreferrer"
-            style={{ display: "flex", alignItems: "flex-start", gap: 6, fontFamily: T.mono, fontSize: 10, color: T.textMid, textDecoration: "none", lineHeight: 1.45, padding: "4px 6px", marginLeft: -6, borderRadius: 6, transition: "color .15s, background .15s", animation: `fadeUp .4s ease ${(0.35 + i * 0.07).toFixed(2)}s both` }}
+            style={{ display: "flex", alignItems: "flex-start", gap: 10, fontFamily: T.mono, fontSize: 13, color: T.textMid, textDecoration: "none", lineHeight: 1.4, padding: "9px 10px", marginLeft: -10, borderRadius: 8, transition: "color .15s, background .15s", animation: `fadeUp .45s ease ${(0.35 + i * 0.08).toFixed(2)}s both` }}
             onMouseOver={e => { e.currentTarget.style.color = T.cyan; e.currentTarget.style.background = T.cyanLo; }}
             onMouseOut={e => { e.currentTarget.style.color = T.textMid; e.currentTarget.style.background = "transparent"; }}>
-            <span style={{ color: T.green, flexShrink: 0 }}>✓</span>{t(`g.${i}.label`)}
+            <span style={{ color: T.green, flexShrink: 0, fontSize: 14, lineHeight: 1.3 }}>✓</span>{t(`g.${i}.label`)}
           </a>
         ))}
       </div>
+      <div style={{ fontFamily: T.mono, fontSize: 10, color: T.textDim, marginTop: 12, paddingLeft: 10, lineHeight: 1.5 }}>{t("rail.foot")}</div>
     </aside>
   );
 }
@@ -2810,6 +2818,14 @@ function CountUp({ value }) {
 
 function Landing({ onAnalyze, isMobile, onCases }) {
   useLang(); // re-render this subtree when language changes
+  // Nav shows the trust-signal row only when there's room for it beside the
+  // centered logo (below this, they'd crowd the brand).
+  const [navWide, setNavWide] = useState(() => typeof window !== "undefined" && window.innerWidth >= 1040);
+  useEffect(() => {
+    const onR = () => setNavWide(window.innerWidth >= 1040);
+    window.addEventListener("resize", onR);
+    return () => window.removeEventListener("resize", onR);
+  }, []);
   const [input, setInput] = useState("");
   const [error, setError] = useState("");
   const [history, setHistory] = useState(() => getHistory());
@@ -2897,41 +2913,42 @@ function Landing({ onAnalyze, isMobile, onCases }) {
   return (
     <>
       {/* ── OPNORANGE TOOLKIT STRIP (umbrella cross-links — its own nav landmark, rendered before <main> so cross-site nav isn't nested in main content) ── */}
-      <nav aria-label="OPNorange toolkit" style={{ background: T.bg, borderBottom: `1px solid ${T.borderLo}`, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: isMobile ? "7px 20px" : "7px 48px" }}>
+      <nav aria-label="OPNorange toolkit" style={{ background: T.bg, borderBottom: `1px solid ${T.borderLo}`, display: "flex", alignItems: "center", gap: 12, padding: isMobile ? "7px 20px" : "7px 48px" }}>
+        {/* One tidy family cluster on the left — mark, then the three tools */}
         <a href="https://opnorange.com" target="_blank" rel="noopener noreferrer" aria-label="OPNorange — the toolkit hub"
           style={{ display: "flex", alignItems: "center", gap: 7, textDecoration: "none", flexShrink: 0 }}>
           <span style={{ width: 7, height: 7, borderRadius: "50%", background: T.opn, boxShadow: `0 0 7px ${T.opn}`, flexShrink: 0 }} />
           <span style={{ fontFamily: T.mono, fontSize: 10, color: T.textMid, letterSpacing: 1.5, fontWeight: 700 }}>OPN<span style={{ color: T.opn }}>ORANGE</span></span>
           {!isMobile && <span style={{ fontFamily: T.mono, fontSize: 10, color: T.textDim, letterSpacing: 1.5 }}>· {t("umbrella.label")}</span>}
         </a>
-        <div style={{ display: "flex", alignItems: "center", gap: 9, flexShrink: 0 }}>
-          {!isMobile && <span style={{ fontFamily: T.mono, fontSize: 10, color: T.opn, fontWeight: 700, letterSpacing: 0.5 }}>{t("umbrella.privacy")}</span>}
-          {!isMobile && <span style={{ color: T.borderLo }}>·</span>}
-          <a href="https://dcabutler.com" target="_blank" rel="noopener noreferrer"
-            style={{ fontFamily: T.mono, fontSize: 10, color: T.textMid, textDecoration: "none", letterSpacing: 0.5, transition: "color .15s" }}
-            onMouseOver={e => e.currentTarget.style.color = T.opn}
-            onMouseOut={e => e.currentTarget.style.color = T.textMid}>
-            {t("umbrella.dca")} ↗
-          </a>
-          <span style={{ color: T.borderLo }}>·</span>
-          <a href="https://opnorange.com" target="_blank" rel="noopener noreferrer"
-            style={{ fontFamily: T.mono, fontSize: 10, color: T.textMid, textDecoration: "none", letterSpacing: 0.5, transition: "color .15s" }}
-            onMouseOver={e => e.currentTarget.style.color = T.opn}
-            onMouseOut={e => e.currentTarget.style.color = T.textMid}>
-            {t("umbrella.hub")} ↗
-          </a>
-        </div>
+        {!isMobile && <>
+          <span style={{ color: T.borderLo, flexShrink: 0 }}>|</span>
+          <div style={{ display: "flex", alignItems: "center", gap: 9, flexShrink: 0 }}>
+            {/* Current tool — highlighted, not a link (you're here) */}
+            <span style={{ fontFamily: T.mono, fontSize: 10, color: T.opn, fontWeight: 700, letterSpacing: 0.5 }}>{t("umbrella.privacy")}</span>
+            <span style={{ color: T.borderLo }}>·</span>
+            <a href="https://dcabutler.com" target="_blank" rel="noopener noreferrer"
+              style={{ fontFamily: T.mono, fontSize: 10, color: T.textMid, textDecoration: "none", letterSpacing: 0.5, transition: "color .15s" }}
+              onMouseOver={e => e.currentTarget.style.color = T.opn}
+              onMouseOut={e => e.currentTarget.style.color = T.textMid}>
+              {t("umbrella.dca")} ↗
+            </a>
+            <span style={{ color: T.borderLo }}>·</span>
+            <a href="https://opnorange.com" target="_blank" rel="noopener noreferrer"
+              style={{ fontFamily: T.mono, fontSize: 10, color: T.textMid, textDecoration: "none", letterSpacing: 0.5, transition: "color .15s" }}
+              onMouseOver={e => e.currentTarget.style.color = T.opn}
+              onMouseOut={e => e.currentTarget.style.color = T.textMid}>
+              {t("umbrella.hub")} ↗
+            </a>
+          </div>
+        </>}
       </nav>
       <div role="main" aria-label="AnonScore — Bitcoin & Lightning privacy audit" style={{ minHeight: "100vh", display: "flex", flexDirection: "column", background: "transparent" }}>
-      {/* Nav */}
-      <nav style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: isMobile ? "14px 20px" : "14px 48px", borderBottom: `1px solid ${T.border}`, background: T.bg, position: "sticky", top: 0, zIndex: 100 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <span style={{ color: T.btc, fontFamily: T.mono, fontSize: 14, lineHeight: 1, textShadow: `0 0 14px ${T.btc}77` }}>₿</span>
-          <span style={{ fontFamily: T.display, fontWeight: 700, fontSize: 15, letterSpacing: 4, color: T.text, textTransform: "uppercase" }}>ANON<span style={{ color: T.cyan, textShadow: `0 0 14px ${T.cyan}55` }}>SCORE</span></span>
-        </div>
-        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
-          {/* Trust signals in nav — seen by everyone, no scroll required */}
-          {!isMobile && <>
+      {/* Nav — trust signals left · brand centered · actions right */}
+      <nav style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", alignItems: "center", padding: isMobile ? "14px 20px" : "14px 48px", borderBottom: `1px solid ${T.border}`, background: T.bg, position: "sticky", top: 0, zIndex: 100 }}>
+        {/* Left — trust signals (proof) */}
+        <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0, justifySelf: "start" }}>
+          {navWide && <>
             <span style={{ fontFamily: T.mono, fontSize: 10, color: T.textDim }}>{t("nav.nocookies")}</span>
             <span style={{ color: T.borderLo }}>·</span>
             <span style={{ fontFamily: T.mono, fontSize: 10, color: T.textDim }}>{t("nav.nothingstored")}</span>
@@ -2939,15 +2956,22 @@ function Landing({ onAnalyze, isMobile, onCases }) {
             <span style={{ fontFamily: T.mono, fontSize: 10, color: T.textDim }}>{t("nav.tor")}</span>
             <span style={{ color: T.borderLo }}>·</span>
             <span style={{ fontFamily: T.mono, fontSize: 10, color: T.textDim }}>{t("nav.opensource")}</span>
-            <span style={{ color: T.borderLo, margin: "0 4px" }}>|</span>
           </>}
+        </div>
+        {/* Center — the brand */}
+        <div style={{ display: "flex", alignItems: "center", gap: 8, justifySelf: "center" }}>
+          <span style={{ color: T.btc, fontFamily: T.mono, fontSize: 15, lineHeight: 1, textShadow: `0 0 14px ${T.btc}77` }}>₿</span>
+          <span style={{ fontFamily: T.display, fontWeight: 700, fontSize: 16, letterSpacing: 4, color: T.text, textTransform: "uppercase" }}>ANON<span style={{ color: T.cyan, textShadow: `0 0 14px ${T.cyan}55` }}>SCORE</span></span>
+        </div>
+        {/* Right — actions */}
+        <div style={{ display: "flex", gap: 8, alignItems: "center", justifySelf: "end" }}>
           <a href="https://github.com/netasset/anonscore" target="_blank" rel="noopener noreferrer"
             style={{ display: "flex", alignItems: "center", gap: 5, padding: "5px 10px", background: T.surface, border: `1px solid ${T.border}`, borderRadius: 7, color: T.textMid, textDecoration: "none", fontSize: 11, fontFamily: T.mono, transition: "border-color .15s" }}
             onMouseOver={e => e.currentTarget.style.borderColor = T.cyan}
             onMouseOut={e => e.currentTarget.style.borderColor = T.border}>
             GitHub ↗
           </a>
-          <Tag label={t("nav.free")} color={T.green} size={10} />
+          {!isMobile && <Tag label={t("nav.free")} color={T.green} size={10} />}
           <LangSwitcher />
         </div>
       </nav>
