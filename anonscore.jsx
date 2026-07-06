@@ -127,6 +127,9 @@ const RISK_META = {
 const scoreColor = s => s >= 80 ? T.green : s >= 60 ? T.amber : s >= 40 ? T.btc : T.red;
 const scoreLabel = s => s >= 80 ? "Low Risk" : s >= 60 ? "Moderate" : s >= 40 ? "High Risk" : "Critical";
 const scoreGrade = s => s >= 90 ? "A" : s >= 75 ? "B" : s >= 60 ? "C" : s >= 45 ? "D" : "F";
+// Shared width for the centered hero column (score bar, privacy panel, scan
+// console, history) so they stay aligned. Widened from 480 for more presence.
+const HERO_COL = 620;
 
 /* ─────────────────────────────────────────────
    HOISTED CONSTANTS
@@ -2296,7 +2299,7 @@ function RelayToggle({ trustLine }) {
   useLang(); // strings below are localized
   const exp = EXPLORERS[expId];
   return (
-    <div style={{ maxWidth: 480, margin: "0 auto 12px", animation: "fadeUp .5s ease .2s both", background: on ? T.cyanLo : T.surface, border: `1px solid ${on ? T.cyan + "66" : T.border}`, borderRadius: 10, padding: "10px 14px", transition: "all .2s" }}>
+    <div style={{ maxWidth: HERO_COL, margin: "0 auto 12px", animation: "fadeUp .5s ease .2s both", background: on ? T.cyanLo : T.surface, border: `1px solid ${on ? T.cyan + "66" : T.border}`, borderRadius: 10, padding: "10px 14px", transition: "all .2s" }}>
       {trustLine && (
         <div style={{ fontFamily: T.sans, fontSize: 12, color: T.textMid, lineHeight: 1.5, textAlign: "left", paddingBottom: 9, marginBottom: 9, borderBottom: `1px solid ${T.borderLo}` }}>
           {trustLine}
@@ -3034,7 +3037,7 @@ function Landing({ onAnalyze, isMobile, onCases }) {
 
           {/* Score spectrum — slim, inline — hidden when Lightning detected */}
           {!isLn && (
-            <div style={{ maxWidth: 480, margin: "0 auto 16px", animation: "fadeUp .5s ease .16s both" }}>
+            <div style={{ maxWidth: HERO_COL, margin: "0 auto 16px", animation: "fadeUp .5s ease .16s both" }}>
               <div style={{ position: "relative", height: 6, borderRadius: 6, background: `linear-gradient(90deg, ${T.red} 0%, ${T.btc} 40%, ${T.amber} 60%, ${T.green} 100%)`, marginBottom: 6 }}>
                 <div style={{ position: "absolute", top: "50%", left: "38%", transform: "translate(-50%,-50%)", width: 12, height: 12, borderRadius: "50%", background: T.bg, border: `2px solid ${T.btc}`, boxShadow: `0 0 8px ${T.btc}`, animation: "dotPulse 2.4s ease-out infinite" }} />
               </div>
@@ -3049,10 +3052,10 @@ function Landing({ onAnalyze, isMobile, onCases }) {
           {/* Privacy panel — trust line + relay switch in one compact box */}
           {RELAY_URL
             ? <RelayToggle trustLine={isLn ? t("trust.ln") : t("trust.btc")} />
-            : <div style={{ maxWidth: 480, margin: "0 auto 12px", animation: "fadeUp .5s ease .20s both", background: T.surface, border: `1px solid ${isLn ? T.ln + "44" : T.border}`, borderRadius: 10, padding: "10px 14px", fontFamily: T.sans, fontSize: 12, color: T.textMid, lineHeight: 1.5, textAlign: "left" }}>{isLn ? t("trust.ln") : t("trust.btc")}</div>}
+            : <div style={{ maxWidth: HERO_COL, margin: "0 auto 12px", animation: "fadeUp .5s ease .20s both", background: T.surface, border: `1px solid ${isLn ? T.ln + "44" : T.border}`, borderRadius: 10, padding: "10px 14px", fontFamily: T.sans, fontSize: 12, color: T.textMid, lineHeight: 1.5, textAlign: "left" }}>{isLn ? t("trust.ln") : t("trust.btc")}</div>}
 
           {/* CTAs — wrapped in a glowing "scan console" panel so the tool stands out from the dark page */}
-          <div style={{ display: "flex", flexDirection: "column", gap: 10, maxWidth: 480, margin: "0 auto", animation: "fadeUp .5s ease .22s both, breathe 5s ease-in-out 1.2s infinite", background: T.card, border: `1px solid ${T.cyan}33`, borderRadius: 16, padding: isMobile ? "16px" : "20px 22px", boxShadow: `0 0 50px -14px ${T.cyan}40` }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10, maxWidth: HERO_COL, margin: "0 auto", animation: "fadeUp .5s ease .22s both, breathe 5s ease-in-out 1.2s infinite", background: T.card, border: `1px solid ${T.cyan}33`, borderRadius: 16, padding: isMobile ? "16px" : "20px 22px", boxShadow: `0 0 50px -14px ${T.cyan}40` }}>
             <div>
               {/* Type detection pill — appears when input is recognised */}
               {inputType && (
@@ -3130,7 +3133,7 @@ function Landing({ onAnalyze, isMobile, onCases }) {
 
           {/* Recent scans history — only shown if they have prior scans */}
           {history.length > 0 && (
-            <div style={{ maxWidth: 480, margin: "14px auto 0", animation: "fadeUp .5s ease .3s both" }}>
+            <div style={{ maxWidth: HERO_COL, margin: "14px auto 0", animation: "fadeUp .5s ease .3s both" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   <div style={{ fontFamily: T.mono, fontSize: 8, color: T.textDim, letterSpacing: 1.5 }}>{t("recent.title")}</div>
@@ -3289,7 +3292,7 @@ function Landing({ onAnalyze, isMobile, onCases }) {
           <h2 style={{ fontFamily: T.serif, fontSize: isMobile ? 28 : 40, color: T.text, marginBottom: 14, fontWeight: 400 }}>
             {t("finalcta.h2.a")}<br /><em style={{ color: T.cyan }}>{t("finalcta.h2.b")}</em>
           </h2>
-          <p style={{ fontSize: isMobile ? 14 : 16, color: T.textMid, lineHeight: 1.7, maxWidth: 480, margin: "0 auto 32px", fontWeight: 300 }}>
+          <p style={{ fontSize: isMobile ? 14 : 16, color: T.textMid, lineHeight: 1.7, maxWidth: HERO_COL, margin: "0 auto 32px", fontWeight: 300 }}>
             {t("finalcta.sub")}
           </p>
           <div style={{ display: "flex", flexDirection: isMobile ? "column" : "row", gap: 10, justifyContent: "center" }}>
