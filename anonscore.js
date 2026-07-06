@@ -6311,26 +6311,27 @@ function Landing({
       e.target.style.borderColor = error ? T.red : inputType ? isLn ? T.ln : T.btc : T.cyan + "77";
       e.target.style.boxShadow = `inset 0 2px 14px #00000080`;
     }
-  })), React.createElement("button", {
+  }))), React.createElement("button", {
     onClick: () => submit(null, !isLn),
     className: "sheen",
     style: {
+      width: "100%",
+      marginTop: 10,
       background: isLn ? T.ln : T.btc,
       border: "none",
       borderRadius: 14,
-      padding: "22px 26px",
+      padding: "18px 26px",
       color: T.bg,
       fontFamily: T.sans,
       fontWeight: 700,
       fontSize: 16,
       cursor: "pointer",
       whiteSpace: "nowrap",
-      transition: "all .15s",
-      flexShrink: 0
+      transition: "all .15s"
     },
     onMouseOver: e => e.currentTarget.style.opacity = ".88",
     onMouseOut: e => e.currentTarget.style.opacity = "1"
-  }, isLn ? t("cta.audit") : t("cta.analyze"))), isLn && React.createElement("div", {
+  }, isLn ? t("cta.audit") : t("cta.analyze")), isLn && React.createElement("div", {
     style: {
       fontFamily: T.mono,
       fontSize: 10,
