@@ -143,6 +143,7 @@ const RISK_META = {
 const scoreColor = s => s >= 80 ? T.green : s >= 60 ? T.amber : s >= 40 ? T.btc : T.red;
 const scoreLabel = s => s >= 80 ? "Low Risk" : s >= 60 ? "Moderate" : s >= 40 ? "High Risk" : "Critical";
 const scoreGrade = s => s >= 90 ? "A" : s >= 75 ? "B" : s >= 60 ? "C" : s >= 45 ? "D" : "F";
+const HERO_COL = 620;
 const LANDING_CHECKS = [{
   n: "01",
   k: "reuse",
@@ -4125,7 +4126,7 @@ function RelayToggle({
   const exp = EXPLORERS[expId];
   return React.createElement("div", {
     style: {
-      maxWidth: 480,
+      maxWidth: HERO_COL,
       margin: "0 auto 12px",
       animation: "fadeUp .5s ease .2s both",
       background: on ? T.cyanLo : T.surface,
@@ -6105,7 +6106,7 @@ function Landing({
     }
   }, t("hero.sub")), !isLn && React.createElement("div", {
     style: {
-      maxWidth: 480,
+      maxWidth: HERO_COL,
       margin: "0 auto 16px",
       animation: "fadeUp .5s ease .16s both"
     }
@@ -6158,7 +6159,7 @@ function Landing({
     trustLine: isLn ? t("trust.ln") : t("trust.btc")
   }) : React.createElement("div", {
     style: {
-      maxWidth: 480,
+      maxWidth: HERO_COL,
       margin: "0 auto 12px",
       animation: "fadeUp .5s ease .20s both",
       background: T.surface,
@@ -6176,7 +6177,7 @@ function Landing({
       display: "flex",
       flexDirection: "column",
       gap: 10,
-      maxWidth: 480,
+      maxWidth: HERO_COL,
       margin: "0 auto",
       animation: "fadeUp .5s ease .22s both, breathe 5s ease-in-out 1.2s infinite",
       background: T.card,
@@ -6389,7 +6390,7 @@ function Landing({
     }
   }, "Open source \u2197"))), history.length > 0 && React.createElement("div", {
     style: {
-      maxWidth: 480,
+      maxWidth: HERO_COL,
       margin: "14px auto 0",
       animation: "fadeUp .5s ease .3s both"
     }
@@ -6919,7 +6920,7 @@ function Landing({
       fontSize: isMobile ? 14 : 16,
       color: T.textMid,
       lineHeight: 1.7,
-      maxWidth: 480,
+      maxWidth: HERO_COL,
       margin: "0 auto 32px",
       fontWeight: 300
     }
