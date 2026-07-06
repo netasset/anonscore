@@ -3068,32 +3068,44 @@ function Landing({ onAnalyze, isMobile, onCases }) {
                   </span>
                 </div>
               )}
+              {/* Micro-label so the field reads unmistakably as the input, not prose */}
+              <div style={{ fontFamily: T.mono, fontSize: 9, letterSpacing: 1.5, color: T.textDim, marginBottom: 7, textAlign: "left" }}>
+                {isLn ? "NODE PUBKEY" : "BITCOIN ADDRESS OR LN PUBKEY"}
+              </div>
               <div style={{ display: "flex", gap: 8 }}>
                 {isMobile && (
                   <button onClick={async () => {
                     try { const t = await navigator.clipboard.readText(); setInput(t.trim()); setError(""); } catch {}
-                  }} style={{ background: T.surface, border: `1.5px solid ${T.border}`, borderRadius: 10, padding: "13px 14px", color: T.textMid, fontSize: 16, cursor: "pointer", flexShrink: 0 }} title="Paste">
+                  }} style={{ background: T.surface, border: `1.5px solid ${T.border}`, borderRadius: 14, padding: "16px 15px", color: T.textMid, fontSize: 18, cursor: "pointer", flexShrink: 0, alignSelf: "stretch" }} title="Paste">
                     📋
                   </button>
                 )}
-                <input ref={inputRef} value={input} onChange={e => { setInput(e.target.value); setError(""); }}
-                  onKeyDown={e => e.key === "Enter" && submit(null, true)}
-                  placeholder={isLn ? "03abc… (66-char node pubkey)" : "Paste an address or pubkey…"}
-                  style={{ flex: 1, background: T.bg,
-                    border: `1.5px solid ${error ? T.red : inputType ? (isLn ? T.ln : T.btc) : T.cyan + "55"}`,
-                    borderRadius: 12, padding: "18px 18px", color: T.text, fontFamily: T.mono, fontSize: 15, letterSpacing: 0.3, outline: "none", transition: "border .18s, box-shadow .25s", boxShadow: `inset 0 0 24px ${T.cyan}0c`, minWidth: 0 }}
-                  onFocus={e => {
-                    const c = isLn ? T.ln : T.cyan;
-                    e.target.style.borderColor = c;
-                    e.target.style.boxShadow = `0 0 0 4px ${c}22, 0 0 22px ${c}55`;
-                  }}
-                  onBlur={e => {
-                    e.target.style.borderColor = error ? T.red : inputType ? (isLn ? T.ln : T.btc) : T.cyan + "55";
-                    e.target.style.boxShadow = `inset 0 0 24px ${T.cyan}0c`;
-                  }} />
+                {/* Recessed input well: leading search glyph + strong border make it stand off the card */}
+                <div style={{ position: "relative", flex: 1, minWidth: 0 }}>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"
+                    style={{ position: "absolute", left: 18, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }}>
+                    <circle cx="11" cy="11" r="7" stroke={inputType ? (isLn ? T.ln : T.btc) : T.cyan} strokeWidth="2" opacity="0.9" />
+                    <line x1="16.5" y1="16.5" x2="21" y2="21" stroke={inputType ? (isLn ? T.ln : T.btc) : T.cyan} strokeWidth="2" strokeLinecap="round" opacity="0.9" />
+                  </svg>
+                  <input ref={inputRef} value={input} onChange={e => { setInput(e.target.value); setError(""); }}
+                    onKeyDown={e => e.key === "Enter" && submit(null, true)}
+                    placeholder={isLn ? "03abc… (66-char node pubkey)" : "Paste an address or pubkey…"}
+                    style={{ width: "100%", boxSizing: "border-box", background: "#070910",
+                      border: `2px solid ${error ? T.red : inputType ? (isLn ? T.ln : T.btc) : T.cyan + "77"}`,
+                      borderRadius: 14, padding: "22px 18px 22px 50px", color: T.text, fontFamily: T.mono, fontSize: 17, letterSpacing: 0.3, outline: "none", transition: "border .18s, box-shadow .25s", boxShadow: `inset 0 2px 14px #00000080`, minWidth: 0 }}
+                    onFocus={e => {
+                      const c = isLn ? T.ln : T.cyan;
+                      e.target.style.borderColor = c;
+                      e.target.style.boxShadow = `0 0 0 4px ${c}22, 0 0 24px ${c}55, inset 0 2px 14px #00000080`;
+                    }}
+                    onBlur={e => {
+                      e.target.style.borderColor = error ? T.red : inputType ? (isLn ? T.ln : T.btc) : T.cyan + "77";
+                      e.target.style.boxShadow = `inset 0 2px 14px #00000080`;
+                    }} />
+                </div>
                 <button onClick={() => submit(null, !isLn)} className="sheen"
-                  style={{ background: isLn ? T.ln : T.btc, border: "none", borderRadius: 12, padding: "18px 24px",
-                    color: T.bg, fontFamily: T.sans, fontWeight: 700, fontSize: 15, cursor: "pointer", whiteSpace: "nowrap", transition: "all .15s" }}
+                  style={{ background: isLn ? T.ln : T.btc, border: "none", borderRadius: 14, padding: "22px 26px",
+                    color: T.bg, fontFamily: T.sans, fontWeight: 700, fontSize: 16, cursor: "pointer", whiteSpace: "nowrap", transition: "all .15s", flexShrink: 0 }}
                   onMouseOver={e => e.currentTarget.style.opacity = ".88"}
                   onMouseOut={e => e.currentTarget.style.opacity = "1"}>
                   {isLn ? t("cta.audit") : t("cta.analyze")}
