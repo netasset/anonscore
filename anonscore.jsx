@@ -5015,6 +5015,7 @@ function ExposureFlow({ txs, isMobile, onFix, entity, address, onScan }) {
 
 function Dashboard({ address, addrInfo, utxos, txs, isMobile, onBack, onRescan, toast, autoShare, scanAt, defaultSimple, simpleMode: simpleModeFromApp, onSimpleModeChange, onCoach, delta }) {
   const [tab, setTab] = useState("Fix It");
+  const clusterN = useMemo(() => computeCluster(txs, address).linked.length, [txs, address]);
   const [simpleMode, setSimpleMode] = useState(simpleModeFromApp !== undefined ? simpleModeFromApp : (defaultSimple || false));
   const setSimpleModeSync = (val) => { setSimpleMode(val); onSimpleModeChange && onSimpleModeChange(val); };
   const [shareOpen, setShareOpen] = useState(false);
@@ -5225,10 +5226,20 @@ function Dashboard({ address, addrInfo, utxos, txs, isMobile, onBack, onRescan, 
               { label: "BALANCE", val: `₿${(totalSats/1e8).toFixed(4)}`, sub: `${addrInfo?.chain_stats?.funded_txo_count != null ? (addrInfo.chain_stats.funded_txo_count - (addrInfo.chain_stats.spent_txo_count||0)) : utxos.length} UTXOs`, color: T.blue },
               { label: "TXS", val: txCount, sub: "total", color: T.cyan },
               { label: "VS AVG", val: score > 38 ? `+${score-38}` : `${score-38}`, sub: "avg is 38", color: score > 38 ? T.green : T.red },
+              // The cluster the common-input heuristic builds — surfaced here so
+              // the Flow tab's headline finding is discoverable at a glance.
+              ...(clusterN > 0 ? [{ label: "CLUSTER", val: clusterN, sub: "linked addrs", color: T.red, onClick: () => setTab("Flow") }] : []),
               // Progress vs the user's own previous scan of this address — the
               // feedback loop for the Fix It plan. Only shown when it moved.
               ...(delta != null && delta !== 0 ? [{ label: "PROGRESS", val: delta > 0 ? `+${delta}` : `${delta}`, sub: "vs your last scan", color: delta > 0 ? T.green : T.red }] : []),
-            ].map(s => (
+            ].map(s => s.onClick ? (
+              <button key={s.label} onClick={s.onClick} title="See the cluster on the Flow tab"
+                style={{ background: "none", border: "none", padding: 0, textAlign: "left", cursor: "pointer", fontFamily: "inherit" }}>
+                <div style={{ fontFamily: T.mono, fontSize: 8, color: T.textDim, letterSpacing: 1.5, marginBottom: 2 }}>{s.label}</div>
+                <div style={{ fontFamily: T.serif, fontSize: 18, color: s.color, lineHeight: 1 }}>{s.val}</div>
+                <div style={{ fontSize: 10, color: T.cyan, marginTop: 1, textDecoration: "underline", textUnderlineOffset: 2 }}>{s.sub} →</div>
+              </button>
+            ) : (
               <div key={s.label}>
                 <div style={{ fontFamily: T.mono, fontSize: 8, color: T.textDim, letterSpacing: 1.5, marginBottom: 2 }}>{s.label}</div>
                 <div style={{ fontFamily: T.serif, fontSize: 18, color: s.color, lineHeight: 1 }}>{s.val}</div>

@@ -10987,6 +10987,7 @@ function Dashboard({
   delta
 }) {
   const [tab, setTab] = useState("Fix It");
+  const clusterN = useMemo(() => computeCluster(txs, address).linked.length, [txs, address]);
   const [simpleMode, setSimpleMode] = useState(simpleModeFromApp !== undefined ? simpleModeFromApp : defaultSimple || false);
   const setSimpleModeSync = val => {
     setSimpleMode(val);
@@ -11509,12 +11510,53 @@ function Dashboard({
     val: score > 38 ? `+${score - 38}` : `${score - 38}`,
     sub: "avg is 38",
     color: score > 38 ? T.green : T.red
-  }, ...(delta != null && delta !== 0 ? [{
+  }, ...(clusterN > 0 ? [{
+    label: "CLUSTER",
+    val: clusterN,
+    sub: "linked addrs",
+    color: T.red,
+    onClick: () => setTab("Flow")
+  }] : []), ...(delta != null && delta !== 0 ? [{
     label: "PROGRESS",
     val: delta > 0 ? `+${delta}` : `${delta}`,
     sub: "vs your last scan",
     color: delta > 0 ? T.green : T.red
-  }] : [])].map(s => React.createElement("div", {
+  }] : [])].map(s => s.onClick ? React.createElement("button", {
+    key: s.label,
+    onClick: s.onClick,
+    title: "See the cluster on the Flow tab",
+    style: {
+      background: "none",
+      border: "none",
+      padding: 0,
+      textAlign: "left",
+      cursor: "pointer",
+      fontFamily: "inherit"
+    }
+  }, React.createElement("div", {
+    style: {
+      fontFamily: T.mono,
+      fontSize: 8,
+      color: T.textDim,
+      letterSpacing: 1.5,
+      marginBottom: 2
+    }
+  }, s.label), React.createElement("div", {
+    style: {
+      fontFamily: T.serif,
+      fontSize: 18,
+      color: s.color,
+      lineHeight: 1
+    }
+  }, s.val), React.createElement("div", {
+    style: {
+      fontSize: 10,
+      color: T.cyan,
+      marginTop: 1,
+      textDecoration: "underline",
+      textUnderlineOffset: 2
+    }
+  }, s.sub, " \u2192")) : React.createElement("div", {
     key: s.label
   }, React.createElement("div", {
     style: {
