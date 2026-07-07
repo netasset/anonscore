@@ -48,6 +48,8 @@ input:focus-visible,button:focus-visible{outline-offset:2px}
 @keyframes breathe{0%,100%{box-shadow:0 0 50px -14px #22D3EE40}50%{box-shadow:0 0 66px -8px #22D3EE73}}
 @keyframes dotPulse{0%,100%{box-shadow:0 0 8px #F7931A,0 0 0 0 #F7931A66}70%{box-shadow:0 0 8px #F7931A,0 0 0 9px #F7931A00}}
 @keyframes barGrow{from{width:0}to{width:var(--w,100%)}}
+@keyframes clusterIn{from{opacity:0}to{opacity:1}}
+@keyframes haloPulse{0%,100%{opacity:.1}50%{opacity:.28}}
 .reveal{opacity:0;transform:translateY(26px);transition:opacity .7s cubic-bezier(.16,.84,.44,1),transform .7s cubic-bezier(.16,.84,.44,1);will-change:opacity,transform}
 .reveal.in{opacity:1;transform:none}
 .lift{transition:transform .28s cubic-bezier(.16,.84,.44,1),box-shadow .28s,border-color .28s}
@@ -1375,7 +1377,10 @@ const DEMO = {
   // pattern, not an artifact of when the page was opened.
   txs: [
     { txid:"a3f21e9b",vin:[{txid:"p1",vout:0}],vout:[{value:120000000,scriptpubkey_address:"bc1qex1"},{value:9871234,scriptpubkey_address:"bc1qex2"}],fee:1420,size:224,status:{block_time:atUtcHour(14,20)}},
-    { txid:"7b91cc3a",vin:[{txid:"p2",vout:0},{txid:"p3",vout:1},{txid:"p4",vout:0},{txid:"p5",vout:2}],vout:[{value:84700000,scriptpubkey_address:"bc1qex3"}],fee:3200,size:450,status:{block_time:atUtcHour(60,16)}},
+    // Input prevout addresses (address only — no type, so scoring is untouched)
+    // let the demo showcase the Cluster Exposure panel: this consolidation
+    // provably links three sibling addresses to the scanned one.
+    { txid:"7b91cc3a",vin:[{txid:"p2",vout:0,prevout:{scriptpubkey_address:"DEMO"}},{txid:"p3",vout:1,prevout:{scriptpubkey_address:"bc1q8f4tr0lk29mzy3w"}},{txid:"p4",vout:0,prevout:{scriptpubkey_address:"bc1qv5dm82apx7hcen4"}},{txid:"p5",vout:2,prevout:{scriptpubkey_address:"bc1qt6ky4w0jr3nqd8s"}}],vout:[{value:84700000,scriptpubkey_address:"bc1qex3"}],fee:3200,size:450,status:{block_time:atUtcHour(60,16)}},
     { txid:"f004d188",vin:[{txid:"p6",vout:0}],vout:[{value:50000000},{value:50000000},{value:50000000},{value:50000000},{value:19874123}],fee:980,size:340,status:{block_time:atUtcHour(180,23)}},
     { txid:"2d5e4f7c",vin:[{txid:"p7",vout:0}],vout:[{value:20000000},{value:8312200}],fee:780,size:224,status:{block_time:atUtcHour(365,14)}},
     { txid:"9c11a2b0",vin:[{txid:"p8",vout:0,prevout:{scriptpubkey_type:"v0_p2wpkh"}}],vout:[{value:10000000,scriptpubkey_type:"p2pkh"},{value:3421000,scriptpubkey_type:"v0_p2wpkh"}],fee:650,size:224,status:{block_time:atUtcHour(3,1)}},
@@ -4732,7 +4737,125 @@ function ActivityClock({ txs, isMobile, entity }) {
   );
 }
 
-function ExposureFlow({ txs, isMobile, onFix, entity }) {
+/* ─────────────────────────────────────────────
+   CLUSTER EXPOSURE — the common-input-ownership heuristic (CIOH), computed
+   client-side. When one transaction spends coins sitting on several
+   addresses, analysts assume a single owner signed them all — the workhorse
+   heuristic of every chain-surveillance firm. We already fetch full input
+   prevouts, so we can show the user the exact cluster an analyst would
+   build around their address. Equal-output CoinJoins are excluded: their
+   inputs deliberately do NOT imply one owner (analysts exclude them too).
+───────────────────────────────────────────── */
+function computeCluster(txs, address) {
+  const links = new Map(); // other input addr -> spend count
+  let spends = 0, cjExcluded = 0;
+  const list = txs || [];
+  list.forEach(tx => {
+    const vin = tx.vin || [], vout = tx.vout || [];
+    const inAddrs = vin.map(v => v.prevout?.scriptpubkey_address).filter(Boolean);
+    if (!inAddrs.includes(address)) return; // only spends FROM this address link anything
+    const dn = {}; vout.forEach(o => { dn[o.value] = (dn[o.value] || 0) + 1; });
+    if (vout.length >= 5 && Math.max(0, ...Object.values(dn)) >= 3) { cjExcluded++; return; }
+    spends++;
+    new Set(inAddrs).forEach(a => { if (a !== address) links.set(a, (links.get(a) || 0) + 1); });
+  });
+  const linked = [...links.entries()].map(([addr, count]) => ({ addr, count })).sort((a, b) => b.count - a.count);
+  return { linked, spends, cjExcluded, sample: list.length };
+}
+
+function ClusterMap({ txs, address, isMobile, entity, onScan }) {
+  const third = !!entity;
+  const [showAll, setShowAll] = useState(false);
+  const { linked, spends, cjExcluded, sample } = computeCluster(txs, address);
+  const isDemo = address === "DEMO" || address === "DEMO_A";
+  const trunc = a => a.length > 17 ? `${a.slice(0, 10)}…${a.slice(-5)}` : a;
+  const you = third ? "this wallet" : "your wallet";
+  // Radial graph geometry — scanned address centred, linked addresses orbiting.
+  const shown = linked.slice(0, 8);
+  const W = 520, H = 220, CX = W / 2, CY = H / 2, RX = 185, RY = 78;
+  const pos = i => {
+    const a = (i / shown.length) * Math.PI * 2 - Math.PI / 2;
+    return { x: CX + RX * Math.cos(a), y: CY + RY * Math.sin(a) };
+  };
+  const listRows = showAll ? linked : linked.slice(0, 4);
+  return (
+    <div style={{ background: T.card, border: `1px solid ${linked.length ? T.red + "33" : T.border}`, borderRadius: 16, padding: isMobile ? "16px 18px" : "20px 24px" }}>
+      <div style={{ fontFamily: T.mono, fontSize: 9, color: linked.length ? T.red : T.cyan, letterSpacing: 2, marginBottom: 8 }}>CLUSTER EXPOSURE</div>
+      <div style={{ fontFamily: T.serif, fontSize: isMobile ? 19 : 22, color: T.text, fontWeight: 400, marginBottom: 8 }}>
+        {linked.length ? `The chain ties ${linked.length} other address${linked.length !== 1 ? "es" : ""} to ${you}` : "Addresses the chain would tie to this one"}
+      </div>
+      <div style={{ fontSize: 13, color: T.textMid, lineHeight: 1.65 }}>
+        Spend from several addresses in one transaction and every analyst assumes a single owner signed them all — the <strong style={{ color: T.text }}>common-input heuristic</strong>, the workhorse of chain surveillance. This is the cluster it builds around {you}, computed in your browser from the transactions above.
+      </div>
+      {linked.length > 0 && (
+        <>
+          <svg viewBox={`0 0 ${W} ${H}`} role="img"
+            aria-label={`Cluster graph: ${linked.length} address${linked.length !== 1 ? "es" : ""} linked to the scanned address by co-spending.`}
+            style={{ display: "block", width: "100%", maxWidth: 560, height: "auto", margin: "14px auto 0", overflow: "visible" }}>
+            {shown.map((n, i) => {
+              const p = pos(i);
+              return (
+                <g key={n.addr} style={{ animation: `clusterIn .5s ease ${0.15 + i * 0.09}s both` }}>
+                  <line x1={CX} y1={CY} x2={p.x} y2={p.y} stroke={T.red} strokeOpacity="0.4" strokeWidth="1.2" strokeDasharray="4 4" />
+                  <circle cx={p.x} cy={p.y} r="11" fill={T.red} opacity="0.14" />
+                  <circle cx={p.x} cy={p.y} r="6" fill={T.bg} stroke={T.red} strokeWidth="1.6">
+                    <title>{n.addr} — co-spent with the scanned address in {n.count} transaction{n.count !== 1 ? "s" : ""}</title>
+                  </circle>
+                  <text x={p.x} y={p.y + (p.y >= CY ? 22 : -14)} textAnchor="middle" fontFamily={T.mono} fontSize="8.5" fill={T.textMid}>{trunc(n.addr)}</text>
+                </g>
+              );
+            })}
+            {linked.length > shown.length && (
+              <text x={CX} y={H - 4} textAnchor="middle" fontFamily={T.mono} fontSize="9" fill={T.textDim}>+{linked.length - shown.length} more not drawn</text>
+            )}
+            <circle cx={CX} cy={CY} r="30" fill={T.cyan} style={{ animation: "haloPulse 4s ease-in-out infinite" }} />
+            <circle cx={CX} cy={CY} r="21" fill={T.bg} stroke={T.cyan} strokeWidth="2" />
+            <text x={CX} y={CY + 3.5} textAnchor="middle" fontFamily={T.mono} fontSize="9" fill={T.cyan} letterSpacing="1">{third ? "WALLET" : "YOU"}</text>
+          </svg>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 14 }}>
+            {listRows.map(n => {
+              const scannable = !!onScan && !isDemo && isValidBitcoinAddress(n.addr);
+              return (
+                <div key={n.addr} style={{ display: "flex", alignItems: "center", gap: 10, background: T.surface, border: `1px solid ${T.borderLo}`, borderRadius: 10, padding: "8px 12px" }}>
+                  <span style={{ width: 7, height: 7, borderRadius: "50%", background: T.red, flexShrink: 0 }} />
+                  <span style={{ fontFamily: T.mono, fontSize: 12, color: T.text, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>{trunc(n.addr)}</span>
+                  <span style={{ fontFamily: T.mono, fontSize: 10, color: T.textDim, flexShrink: 0 }}>co-spent ×{n.count}</span>
+                  {scannable && (
+                    <button onClick={() => onScan(n.addr)}
+                      style={{ marginLeft: "auto", flexShrink: 0, background: "transparent", border: `1px solid ${T.cyan}55`, borderRadius: 8, padding: "5px 12px", color: T.cyan, fontFamily: T.sans, fontSize: 12, fontWeight: 600, cursor: "pointer", transition: "all .15s" }}
+                      onMouseOver={e => { e.currentTarget.style.background = T.cyan + "14"; }}
+                      onMouseOut={e => { e.currentTarget.style.background = "transparent"; }}>
+                      Audit →
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+            {linked.length > 4 && (
+              <button onClick={() => setShowAll(s => !s)}
+                style={{ background: "none", border: "none", fontFamily: T.mono, fontSize: 11, color: T.cyan, cursor: "pointer", padding: "4px 0", textAlign: "left" }}>
+                {showAll ? "▲ show fewer" : `▼ show all ${linked.length} linked addresses`}
+              </button>
+            )}
+          </div>
+        </>
+      )}
+      {linked.length === 0 && (
+        <div style={{ marginTop: 12, background: T.green + "12", border: `1px solid ${T.green}45`, borderRadius: 10, padding: "10px 14px", fontSize: 13, color: T.textMid, lineHeight: 1.6 }}>
+          <span style={{ color: T.green, fontFamily: T.mono }}>✓</span>{" "}
+          {spends === 0
+            ? `None of the ${sample} most recent transactions spend from this address together with others — the heuristic has nothing to work with here.`
+            : `No co-spend links across ${spends} spend${spends !== 1 ? "s" : ""} — each one used only this address, so the workhorse heuristic comes up empty.`}
+        </div>
+      )}
+      <div style={{ fontSize: 11.5, color: T.textDim, lineHeight: 1.6, marginTop: 12, borderTop: `1px solid ${T.borderLo}`, paddingTop: 10 }}>
+        A heuristic, not proof — PayJoin and exchange batching break the one-owner assumption{cjExcluded > 0 ? `, and ${cjExcluded} CoinJoin-style spend${cjExcluded !== 1 ? "s were" : " was"} excluded here for exactly that reason` : ""}. Read from the {sample} most recent transactions.
+      </div>
+    </div>
+  );
+}
+
+function ExposureFlow({ txs, isMobile, onFix, entity, address, onScan }) {
   const list = (txs || []).slice(0, 8);
   const isRound = v => v >= 100000 && (v % 1000000 === 0 || v % 500000 === 0);
   // A dust "beacon" is a tiny *spendable* output planted to track you. An
@@ -4817,6 +4940,7 @@ function ExposureFlow({ txs, isMobile, onFix, entity }) {
           </button>
         )}
       </div>
+      <ClusterMap txs={txs} address={address} isMobile={isMobile} entity={entity} onScan={onScan} />
       <ActivityClock txs={txs} isMobile={isMobile} entity={entity} />
       {list.map((tx, ti) => {
         const vin = tx.vin || [], vout = tx.vout || [];
@@ -5413,7 +5537,7 @@ function Dashboard({ address, addrInfo, utxos, txs, isMobile, onBack, onRescan, 
 
         {/* ── FLOW / EXPOSURE MAP ── */}
         {tab === "Flow" && (
-          <ExposureFlow txs={txs} isMobile={isMobile} onFix={() => setTab("Fix It")} entity={CASE_FILES.find(c => c.address === address)?.entity} />
+          <ExposureFlow txs={txs} isMobile={isMobile} onFix={() => setTab("Fix It")} entity={CASE_FILES.find(c => c.address === address)?.entity} address={address} onScan={onRescan} />
         )}
 
         {/* ── METHODOLOGY ── */}
