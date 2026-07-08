@@ -27,7 +27,7 @@ const pass = (msg) => console.log("  ✓ " + msg);
 // ───────────────────────────────────────────
 // 1. Build invariants — fail fast if files are malformed
 // ───────────────────────────────────────────
-console.log("[1/5] Build invariants");
+console.log("[1/7] Build invariants");
 const jsxBytes = statSync(join(ROOT, "anonscore.jsx")).size;
 if (jsxBytes < 100_000) fail(`anonscore.jsx is suspiciously small (${jsxBytes} bytes — the May disaster left it at ~130 bytes)`);
 else pass(`anonscore.jsx is ${jsxBytes} bytes`);
@@ -124,9 +124,99 @@ try {
 }
 
 // ───────────────────────────────────────────
-// 2. Spin up local server serving the actual production files
+// 2. Relay worker unit tests — the SSRF allowlist and the no-tracking
+//    guarantees of workers/relay/worker.js are security-critical and were
+//    previously enforced only by eyeballs. The worker is a plain ES module,
+//    so we import it and drive it with stubbed upstream fetch.
 // ───────────────────────────────────────────
-console.log("[2/5] Local server");
+console.log("[2/7] Relay worker unit tests");
+{
+  const relay = (await import(join(ROOT, "workers/relay/worker.js"))).default;
+  const realFetch = globalThis.fetch;
+  let upstreamCalls = [];
+  let upstreamResponse = () => new Response(JSON.stringify({ ok: 1 }), {
+    status: 200,
+    headers: { "Content-Type": "application/json", "Set-Cookie": "spy=1; HttpOnly", "X-Track": "yes" },
+  });
+  globalThis.fetch = async (target, opts) => { upstreamCalls.push({ target, opts }); return upstreamResponse(); };
+  const hit = (path, init) => relay.fetch(new Request("https://relay.test" + path, init));
+  const addr = "bc1qm34lsc65zpw79lxes69zkqmk6ee3ewf0j77s3h";
+  const pub = "ab".repeat(33);
+
+  try {
+    // Allowed paths map to the right upstream and pass the body through.
+    upstreamCalls = [];
+    const okBtc = await hit(`/btc/address/${addr}`);
+    const okBtcm = await hit(`/btcm/address/${addr}/utxo`);
+    const okLn = await hit(`/ln/nodes/${pub}`);
+    if (okBtc.status !== 200 || okBtcm.status !== 200 || okLn.status !== 200)
+      fail("relay: allowed endpoints did not pass through");
+    else if (!upstreamCalls[0].target.startsWith("https://blockstream.info/api/address/") ||
+             !upstreamCalls[1].target.startsWith("https://mempool.space/api/address/") ||
+             !upstreamCalls[2].target.startsWith("https://mempool.space/api/v1/lightning/nodes/"))
+      fail("relay: upstream mapping wrong: " + upstreamCalls.map(c => c.target).join(" , "));
+    else pass("relay: allowed endpoints map to the right upstreams (btc→blockstream, btcm→mempool, ln→mempool)");
+
+    // SSRF: everything off the allowlist is 404 and NEVER touches the network.
+    upstreamCalls = [];
+    const blocked = [
+      "/", "/btc", "/btc/blocks", "/btc/address/short", `/btc/address/${"a".repeat(121)}`,
+      `/btc/address/${addr}/txs/chain`, "/evil/address/" + addr, "/ln/nodes/nothex",
+      `/btc/address/${encodeURIComponent("../")}${addr}`, "/btc/tx/abc123",
+    ];
+    const statuses = await Promise.all(blocked.map(p => hit(p).then(r => r.status)));
+    if (statuses.some(s => s !== 404)) fail(`relay: non-allowlisted path not 404 (got ${statuses.join(",")})`);
+    else if (upstreamCalls.length !== 0) fail(`relay: blocked path still reached upstream (${upstreamCalls.length} calls) — SSRF!`);
+    else pass(`relay: SSRF allowlist blocks ${blocked.length}/${blocked.length} hostile paths with zero upstream calls`);
+
+    // Methods: POST rejected, OPTIONS answers CORS preflight.
+    const post = await hit(`/btc/address/${addr}`, { method: "POST" });
+    const opts = await hit(`/btc/address/${addr}`, { method: "OPTIONS" });
+    if (post.status !== 405) fail(`relay: POST not rejected (got ${post.status})`);
+    else if (opts.status !== 200 || !opts.headers.get("Access-Control-Allow-Origin")) fail("relay: OPTIONS preflight broken");
+    else pass("relay: POST rejected (405), OPTIONS preflight answered");
+
+    // Privacy: the upstream request carries ONLY Accept + User-Agent — no
+    // caller IP, cookies, or fingerprint headers are ever forwarded.
+    upstreamCalls = [];
+    await hit(`/btc/address/${addr}`, { headers: { "Cookie": "session=1", "X-Forwarded-For": "1.2.3.4", "User-Agent": "victim-browser" } });
+    const fwd = upstreamCalls[0]?.opts?.headers || {};
+    const fwdKeys = Object.keys(fwd).map(k => k.toLowerCase()).sort();
+    if (fwdKeys.join(",") !== "accept,user-agent") fail(`relay: unexpected headers forwarded upstream: ${fwdKeys.join(",")}`);
+    else if (fwd["User-Agent"] !== "anonscore-relay") fail("relay: caller User-Agent leaked upstream");
+    else pass("relay: only Accept + a fixed User-Agent go upstream — no IP, cookies, or fingerprint");
+
+    // Tracking headers from the upstream must be stripped on the way back,
+    // and responses must never be cached.
+    const back = await hit(`/btc/address/${addr}`);
+    if (back.headers.get("Set-Cookie") || back.headers.get("X-Track")) fail("relay: upstream tracking headers leaked to the caller");
+    else if (back.headers.get("Cache-Control") !== "no-store") fail("relay: response is cacheable — must be no-store");
+    else pass("relay: upstream tracking headers stripped, response no-store");
+
+    // Query smuggling: only ?status=open on /channels survives; everything else is dropped.
+    upstreamCalls = [];
+    await hit(`/ln/nodes/${pub}/channels?status=open`);
+    await hit(`/ln/nodes/${pub}/channels?status=closed&evil=1`);
+    await hit(`/btc/address/${addr}?spy=1`);
+    const targets = upstreamCalls.map(c => c.target);
+    if (!targets[0].endsWith("?status=open")) fail("relay: legitimate ?status=open was dropped");
+    else if (targets[1].includes("?") || targets[2].includes("?")) fail("relay: query smuggled upstream: " + targets.slice(1).join(" , "));
+    else pass("relay: query smuggling prevented (only ?status=open on /channels survives)");
+
+    // Upstream failure → honest 502, no fallback.
+    upstreamResponse = () => { throw new Error("down"); };
+    const down = await hit(`/btc/address/${addr}`);
+    if (down.status !== 502) fail(`relay: upstream failure not surfaced as 502 (got ${down.status})`);
+    else pass("relay: upstream failure surfaces as an honest 502");
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+}
+
+// ───────────────────────────────────────────
+// 3. Spin up local server serving the actual production files
+// ───────────────────────────────────────────
+console.log("[3/7] Local server");
 const server = createServer((req, res) => {
   let url = req.url.split("?")[0]; if (url === "/") url = "/index.html";
   let p = join(ROOT, url);
@@ -148,7 +238,7 @@ pass(`Server on :${PORT}`);
 // ───────────────────────────────────────────
 // 3. Browser-based checks (smoke + a11y + network)
 // ───────────────────────────────────────────
-console.log("[3/5] Smoke test (real browser)");
+console.log("[4/7] Smoke test (real browser)");
 const browser = await chromium.launch({ headless: true });
 const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
 const page = await ctx.newPage();
@@ -243,8 +333,90 @@ else if (!swInfo.registered) fail("Service worker did not register");
 else if (swInfo.entries < 5) fail(`Service worker registered but precached only ${swInfo.entries} entries (expected ≥5)`);
 else pass(`Service worker registered, ${swInfo.entries} entries cached in ${swInfo.caches[0]}`);
 
+// ───────────────────────────────────────────
+// 4. Engine unit tests — run against the BUILT bundle via the read-only
+//    window.__ANONSCORE_TEST__ hook ("verify, don't trust", applied to
+//    ourselves). These pin the pure scoring/analysis functions so a logic
+//    regression can't ship silently behind a green smoke test.
+// ───────────────────────────────────────────
+console.log("[5/7] Engine unit tests (built bundle)");
+const unit = await page.evaluate(() => {
+  const E = window.__ANONSCORE_TEST__;
+  if (!E) return { missing: true };
+  const r = [];
+  const t = (name, cond) => r.push({ name, ok: !!cond });
+  const pv = a => ({ prevout: { scriptpubkey_address: a } });
+  const me = "bc1qm34lsc65zpw79lxes69zkqmk6ee3ewf0j77s3h";
+  const sib1 = "bc1qsibling1aaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+  const sib2 = "bc1qsibling2bbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+
+  // — Cluster: common-input ownership —
+  {
+    const consolidation = { txid: "t1", vin: [pv(me), pv(sib1), pv(sib2)], vout: [{ value: 9e7 }] };
+    const c1 = E.computeCluster([consolidation], me);
+    t("cluster: 3-input spend links the 2 sibling addresses", c1.linked.length === 2 && c1.spends === 1);
+    // Equal-output CoinJoin must NOT imply one owner
+    const cj = { txid: "t2", vin: [pv(me), pv(sib1)], vout: [{ value: 5e6 }, { value: 5e6 }, { value: 5e6 }, { value: 1e6 }, { value: 2e6 }] };
+    const c2 = E.computeCluster([cj], me);
+    t("cluster: equal-output CoinJoin is excluded", c2.linked.length === 0 && c2.cjExcluded === 1);
+    // Receive-only history links nothing
+    const recv = { txid: "t3", vin: [pv(sib1)], vout: [{ value: 1e6, scriptpubkey_address: me }] };
+    const c3 = E.computeCluster([recv], me);
+    t("cluster: receive-only history links nothing", c3.linked.length === 0 && c3.spends === 0);
+  }
+
+  // — Address poisoning: lookalike matching —
+  {
+    const bait = "bc1qm34lx9k2v7d0trplq5u8snw6hjazy4j77s3h"; // head+tail match `me`, middle differs
+    t("poisoning: true bait detected", E.isLookalikeAddress(me, bait) === true);
+    t("poisoning: identical address is not bait", E.isLookalikeAddress(me, me) === false);
+    t("poisoning: different head rejected", E.isLookalikeAddress(me, "bc1qzzzzsc65zpw79lxes69zkqmk6ee3ewf0j77s3h") === false);
+    t("poisoning: cross-type bc1q/bc1p rejected", E.isLookalikeAddress(me, "bc1p" + me.slice(4)) === false);
+    t("poisoning: legacy 1… lookalike detected", E.isLookalikeAddress("1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa", "1A1zPxxxxxxxxxxxxxxxxxxxxxx7DivfNa") === true);
+    const pz = E.computePoisoning([
+      { txid: "p1", vin: [], vout: [{ value: 546, scriptpubkey_address: bait }] },
+      { txid: "p2", vin: [pv(sib1)], vout: [{ value: 1e6, scriptpubkey_address: me }] },
+    ], me);
+    t("poisoning: sweep finds planted bait exactly once", pz.lookalikes.length === 1 && pz.lookalikes[0].addr === bait);
+  }
+
+  // — Activity clock: timezone inference —
+  {
+    // 12 txs all at 18:xx UTC → strong daily rhythm; quiet window must exclude 18.
+    const txs = Array.from({ length: 12 }, (_, i) => ({ status: { block_time: i * 86400 + 18 * 3600 + 120 } }));
+    const ac = E.computeActivityClock(txs);
+    const inQuiet = h => ((h - ac.qStart + 24) % 24) < ac.K;
+    t("clock: strong single-hour rhythm detected", ac.hasData && ac.strong && ac.counts[18] === 12);
+    t("clock: quiet window excludes the active hour", !inQuiet(18));
+    t("clock: timezone estimate is well-formed", /^UTC[+-]?\d+$/.test(ac.tz));
+  }
+
+  // — Engine invariants —
+  {
+    const empty = E.runEngine([], [], 0);
+    t("engine: empty wallet is the honest isEmpty state (null score, — grade)", empty.isEmpty === true && empty.score === null && empty.grade === "—");
+    const now = Math.floor(Date.now() / 1000);
+    const coin = v => ({ txid: "u", vout: 0, value: v, scriptpubkey_type: "v0_p2wpkh", status: { confirmed: true, block_time: now - 86400 * 30 } });
+    const clean = E.runEngine([coin(5e7), coin(3e7)], [], 2);
+    const dusted = E.runEngine([coin(5e7), coin(3e7), coin(500), coin(510), coin(520)], [], 5);
+    t("engine: dust beacons lower the score", dusted.score < clean.score);
+    t("engine: grade boundaries (A/F)", E.scoreGrade(95) === "A" && E.scoreGrade(30) === "F");
+    t("engine: validators (genesis addr, junk, LN pubkey)",
+      E.isValidBitcoinAddress("1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa") === true &&
+      E.isValidBitcoinAddress("not-an-address") === false &&
+      E.detectInputType("02".padEnd(66, "ab")) === "ln_pubkey");
+  }
+  return { results: r };
+});
+if (unit.missing) fail("window.__ANONSCORE_TEST__ hook missing from the built bundle");
+else {
+  const bad = unit.results.filter(u => !u.ok);
+  bad.forEach(u => fail("engine unit: " + u.name));
+  if (!bad.length) pass(`engine unit tests: ${unit.results.length}/${unit.results.length} passed (cluster, poisoning, clock, engine)`);
+}
+
 // Run a demo scan end-to-end
-console.log("[4/5] Demo scan flow");
+console.log("[6/7] Demo scan flow");
 // Re-navigate to a clean landing (earlier blocks switched language / visited
 // the directory page), then trigger the demo from the sample chip.
 await page.goto(`http://127.0.0.1:${PORT}/`, { waitUntil: "load" });
@@ -290,7 +462,7 @@ if (!jsCode.includes("vendor/dom-to-image-more.min.js")) fail("anonscore.js does
 else pass("PNG export wired to self-hosted dom-to-image (no broken SRI)");
 
 // Same-origin network check (proves no third-party CDN crept back in)
-console.log("[5/5] Same-origin network check");
+console.log("[7/7] Same-origin network check");
 const thirdParty = [...new Set(requests.map(r => new URL(r.url).origin))]
   .filter(o => !o.includes("127.0.0.1"));
 if (thirdParty.length) fail(`Third-party origins detected: ${thirdParty.join(", ")}`);
