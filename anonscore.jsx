@@ -4763,6 +4763,37 @@ function computeCluster(txs, address) {
   return { linked, spends, cjExcluded, sample: list.length };
 }
 
+/* ─────────────────────────────────────────────
+   ADDRESS-POISONING DETECTOR — scammers vanity-generate an address matching
+   the first & last characters of yours, plant it in your history with a tiny
+   transfer, and wait for you to copy the wrong one. Matching 4 chars after
+   the prefix AND the last 4 (bech32 charset = 32 symbols) has a ~32⁻⁸ random
+   collision rate — essentially zero false positives, loud alarm on real bait.
+   Deliberately NOT scored: being targeted doesn't make a wallet more
+   traceable. It's a safety alert with its own job.
+───────────────────────────────────────────── */
+function isLookalikeAddress(a, b) {
+  if (!a || !b || a === b) return false;
+  const pfx = s => (s.startsWith("bc1q") || s.startsWith("bc1p")) ? 4 : (s[0] === "1" || s[0] === "3") ? 1 : 0;
+  const pa = pfx(a), pb = pfx(b);
+  if (!pa || !pb || a.slice(0, pa) !== b.slice(0, pb)) return false; // same address type only
+  if (a.length < pa + 8 || b.length < pb + 8) return false;
+  return a.slice(pa, pa + 4) === b.slice(pb, pb + 4) && a.slice(-4) === b.slice(-4);
+}
+
+function computePoisoning(txs, address) {
+  const hits = new Map(); // lookalike addr -> first tx it appeared in
+  (txs || []).forEach(tx => {
+    const seen = new Set();
+    (tx.vout || []).forEach(o => { if (o.scriptpubkey_address) seen.add(o.scriptpubkey_address); });
+    (tx.vin || []).forEach(v => { if (v.prevout?.scriptpubkey_address) seen.add(v.prevout.scriptpubkey_address); });
+    seen.forEach(a => {
+      if (!hits.has(a) && isLookalikeAddress(address, a)) hits.set(a, { addr: a, txid: tx.txid });
+    });
+  });
+  return { lookalikes: [...hits.values()], sample: (txs || []).length };
+}
+
 function ClusterMap({ txs, address, isMobile, entity, onScan }) {
   const third = !!entity;
   const [showAll, setShowAll] = useState(false);
@@ -5016,6 +5047,8 @@ function ExposureFlow({ txs, isMobile, onFix, entity, address, onScan }) {
 function Dashboard({ address, addrInfo, utxos, txs, isMobile, onBack, onRescan, toast, autoShare, scanAt, defaultSimple, simpleMode: simpleModeFromApp, onSimpleModeChange, onCoach, delta }) {
   const [tab, setTab] = useState("Fix It");
   const clusterN = useMemo(() => computeCluster(txs, address).linked.length, [txs, address]);
+  const poison = useMemo(() => computePoisoning(txs, address), [txs, address]);
+  const caseEntity = CASE_FILES.find(c => c.address === address)?.entity;
   const [simpleMode, setSimpleMode] = useState(simpleModeFromApp !== undefined ? simpleModeFromApp : (defaultSimple || false));
   const setSimpleModeSync = (val) => { setSimpleMode(val); onSimpleModeChange && onSimpleModeChange(val); };
   const [shareOpen, setShareOpen] = useState(false);
@@ -5255,6 +5288,33 @@ function Dashboard({ address, addrInfo, utxos, txs, isMobile, onBack, onRescan, 
             <div style={{ fontSize: 10, color: T.textDim, marginTop: 1 }}>potential gain</div>
           </div>
         </div>
+
+        {/* Address-poisoning alert — a safety check, not a privacy metric, so it
+            never moves the score. Loud on purpose: this is planted scam bait. */}
+        {poison.lookalikes.length > 0 && (
+          <div role="alert" style={{ display: "flex", gap: 12, alignItems: "flex-start", background: T.red + "14", border: `1.5px solid ${T.red}66`, borderRadius: 14, padding: "14px 18px", marginBottom: 14, animation: "slideDown .3s ease" }}>
+            <span aria-hidden="true" style={{ fontSize: 20, lineHeight: 1 }}>🎣</span>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontFamily: T.mono, fontSize: 10, color: T.red, letterSpacing: 1.5, marginBottom: 4 }}>ADDRESS-POISONING BAIT DETECTED</div>
+              <div style={{ fontSize: 13, color: T.text, lineHeight: 1.6 }}>
+                {poison.lookalikes.length} address{poison.lookalikes.length !== 1 ? "es" : ""} in this history mimic{poison.lookalikes.length === 1 ? "s" : ""} this one — same first and last characters, different address. Scammers plant these hoping {caseEntity ? "the owner copies" : "you'll copy"} the wrong one from transaction history. <strong>Never copy an address out of history — verify every character before sending.</strong>
+              </div>
+              <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 4 }}>
+                <div style={{ fontFamily: T.mono, fontSize: 11, color: T.textMid, wordBreak: "break-all" }}>
+                  <span style={{ color: T.textDim }}>real&nbsp;&nbsp;</span>{address}
+                </div>
+                {poison.lookalikes.slice(0, 3).map(l => (
+                  <div key={l.addr} style={{ fontFamily: T.mono, fontSize: 11, color: T.red, wordBreak: "break-all" }}>
+                    <span style={{ color: T.textDim }}>bait&nbsp;&nbsp;</span>{l.addr}
+                  </div>
+                ))}
+                {poison.lookalikes.length > 3 && (
+                  <div style={{ fontFamily: T.mono, fontSize: 10, color: T.textDim }}>+{poison.lookalikes.length - 3} more</div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Tabs + Simple Mode toggle — desktop only; mobile uses bottom bar */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 14 }}>
@@ -5587,7 +5647,7 @@ function Dashboard({ address, addrInfo, utxos, txs, isMobile, onBack, onRescan, 
             <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 16, padding: 24 }}>
               <div style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim, letterSpacing: 2, marginBottom: 12 }}>NON-SCORING INSIGHTS</div>
               <div style={{ fontSize: 12.5, color: T.textMid, lineHeight: 1.65 }}>
-                Two panels inform without moving the score: the <strong style={{ color: T.text }}>Exposure Map</strong> (what each output leaks, per transaction) and the <strong style={{ color: T.text }}>Activity Clock</strong> (transactions binned by UTC hour; the quietest window suggests sleep, and a strong pattern lets an analyst estimate a timezone). They're shown because analysts read them — scoring them would double-count checks already in the table above.
+                Four insights inform without moving the score. The <strong style={{ color: T.text }}>Exposure Map</strong> (what each output leaks, per transaction), <strong style={{ color: T.text }}>Cluster Exposure</strong> (the common-input heuristic's view of which addresses share one owner), and the <strong style={{ color: T.text }}>Activity Clock</strong> (transactions binned by UTC hour; a strong quiet window lets an analyst estimate a timezone) are shown because analysts read them — scoring them would double-count checks already in the table above. The <strong style={{ color: T.text }}>address-poisoning alert</strong> flags lookalike addresses planted in the history as copy-paste bait; it's a safety check, not a privacy metric — being targeted doesn't make a wallet more traceable, so it never moves the score.
               </div>
             </div>
             <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 16, padding: 24 }}>
@@ -6379,5 +6439,14 @@ function App() {
     </>
   );
 }
+
+// Verify, don't trust — the pure engine functions, exposed read-only so anyone
+// can test the scoring logic straight from their browser console (and so CI can
+// unit-test the built bundle directly). No state, no user data: pure functions.
+window.__ANONSCORE_TEST__ = Object.freeze({
+  runEngine, runLightningEngine, classifyUtxo, scoreGrade,
+  computeCluster, computePoisoning, isLookalikeAddress, computeActivityClock,
+  isValidBitcoinAddress, isValidLightningPubkey, detectInputType,
+});
 
 ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(App));

@@ -10282,6 +10282,37 @@ function computeCluster(txs, address) {
     sample: list.length
   };
 }
+function isLookalikeAddress(a, b) {
+  if (!a || !b || a === b) return false;
+  const pfx = s => s.startsWith("bc1q") || s.startsWith("bc1p") ? 4 : s[0] === "1" || s[0] === "3" ? 1 : 0;
+  const pa = pfx(a),
+    pb = pfx(b);
+  if (!pa || !pb || a.slice(0, pa) !== b.slice(0, pb)) return false;
+  if (a.length < pa + 8 || b.length < pb + 8) return false;
+  return a.slice(pa, pa + 4) === b.slice(pb, pb + 4) && a.slice(-4) === b.slice(-4);
+}
+function computePoisoning(txs, address) {
+  const hits = new Map();
+  (txs || []).forEach(tx => {
+    const seen = new Set();
+    (tx.vout || []).forEach(o => {
+      if (o.scriptpubkey_address) seen.add(o.scriptpubkey_address);
+    });
+    (tx.vin || []).forEach(v => {
+      if (v.prevout?.scriptpubkey_address) seen.add(v.prevout.scriptpubkey_address);
+    });
+    seen.forEach(a => {
+      if (!hits.has(a) && isLookalikeAddress(address, a)) hits.set(a, {
+        addr: a,
+        txid: tx.txid
+      });
+    });
+  });
+  return {
+    lookalikes: [...hits.values()],
+    sample: (txs || []).length
+  };
+}
 function ClusterMap({
   txs,
   address,
@@ -10988,6 +11019,8 @@ function Dashboard({
 }) {
   const [tab, setTab] = useState("Fix It");
   const clusterN = useMemo(() => computeCluster(txs, address).linked.length, [txs, address]);
+  const poison = useMemo(() => computePoisoning(txs, address), [txs, address]);
+  const caseEntity = CASE_FILES.find(c => c.address === address)?.entity;
   const [simpleMode, setSimpleMode] = useState(simpleModeFromApp !== undefined ? simpleModeFromApp : defaultSimple || false);
   const setSimpleModeSync = val => {
     setSimpleMode(val);
@@ -11606,7 +11639,80 @@ function Dashboard({
       color: T.textDim,
       marginTop: 1
     }
-  }, "potential gain"))), React.createElement("div", {
+  }, "potential gain"))), poison.lookalikes.length > 0 && React.createElement("div", {
+    role: "alert",
+    style: {
+      display: "flex",
+      gap: 12,
+      alignItems: "flex-start",
+      background: T.red + "14",
+      border: `1.5px solid ${T.red}66`,
+      borderRadius: 14,
+      padding: "14px 18px",
+      marginBottom: 14,
+      animation: "slideDown .3s ease"
+    }
+  }, React.createElement("span", {
+    "aria-hidden": "true",
+    style: {
+      fontSize: 20,
+      lineHeight: 1
+    }
+  }, "\uD83C\uDFA3"), React.createElement("div", {
+    style: {
+      minWidth: 0
+    }
+  }, React.createElement("div", {
+    style: {
+      fontFamily: T.mono,
+      fontSize: 10,
+      color: T.red,
+      letterSpacing: 1.5,
+      marginBottom: 4
+    }
+  }, "ADDRESS-POISONING BAIT DETECTED"), React.createElement("div", {
+    style: {
+      fontSize: 13,
+      color: T.text,
+      lineHeight: 1.6
+    }
+  }, poison.lookalikes.length, " address", poison.lookalikes.length !== 1 ? "es" : "", " in this history mimic", poison.lookalikes.length === 1 ? "s" : "", " this one \u2014 same first and last characters, different address. Scammers plant these hoping ", caseEntity ? "the owner copies" : "you'll copy", " the wrong one from transaction history. ", React.createElement("strong", null, "Never copy an address out of history \u2014 verify every character before sending.")), React.createElement("div", {
+    style: {
+      marginTop: 8,
+      display: "flex",
+      flexDirection: "column",
+      gap: 4
+    }
+  }, React.createElement("div", {
+    style: {
+      fontFamily: T.mono,
+      fontSize: 11,
+      color: T.textMid,
+      wordBreak: "break-all"
+    }
+  }, React.createElement("span", {
+    style: {
+      color: T.textDim
+    }
+  }, "real\xA0\xA0"), address), poison.lookalikes.slice(0, 3).map(l => React.createElement("div", {
+    key: l.addr,
+    style: {
+      fontFamily: T.mono,
+      fontSize: 11,
+      color: T.red,
+      wordBreak: "break-all"
+    }
+  }, React.createElement("span", {
+    style: {
+      color: T.textDim
+    }
+  }, "bait\xA0\xA0"), l.addr)), poison.lookalikes.length > 3 && React.createElement("div", {
+    style: {
+      fontFamily: T.mono,
+      fontSize: 10,
+      color: T.textDim
+    }
+  }, "+", poison.lookalikes.length - 3, " more")))), React.createElement("div", {
     style: {
       display: "flex",
       alignItems: "center",
@@ -12732,15 +12838,23 @@ function Dashboard({
       color: T.textMid,
       lineHeight: 1.65
     }
-  }, "Two panels inform without moving the score: the ", React.createElement("strong", {
+  }, "Four insights inform without moving the score. The ", React.createElement("strong", {
     style: {
       color: T.text
     }
-  }, "Exposure Map"), " (what each output leaks, per transaction) and the ", React.createElement("strong", {
+  }, "Exposure Map"), " (what each output leaks, per transaction), ", React.createElement("strong", {
     style: {
       color: T.text
     }
-  }, "Activity Clock"), " (transactions binned by UTC hour; the quietest window suggests sleep, and a strong pattern lets an analyst estimate a timezone). They're shown because analysts read them \u2014 scoring them would double-count checks already in the table above.")), React.createElement("div", {
+  }, "Cluster Exposure"), " (the common-input heuristic's view of which addresses share one owner), and the ", React.createElement("strong", {
+    style: {
+      color: T.text
+    }
+  }, "Activity Clock"), " (transactions binned by UTC hour; a strong quiet window lets an analyst estimate a timezone) are shown because analysts read them \u2014 scoring them would double-count checks already in the table above. The ", React.createElement("strong", {
+    style: {
+      color: T.text
+    }
+  }, "address-poisoning alert"), " flags lookalike addresses planted in the history as copy-paste bait; it's a safety check, not a privacy metric \u2014 being targeted doesn't make a wallet more traceable, so it never moves the score.")), React.createElement("div", {
     style: {
       background: T.card,
       border: `1px solid ${T.border}`,
@@ -14603,4 +14717,17 @@ function App() {
     isMobile: isMobile
   })));
 }
+window.__ANONSCORE_TEST__ = Object.freeze({
+  runEngine,
+  runLightningEngine,
+  classifyUtxo,
+  scoreGrade,
+  computeCluster,
+  computePoisoning,
+  isLookalikeAddress,
+  computeActivityClock,
+  isValidBitcoinAddress,
+  isValidLightningPubkey,
+  detectInputType
+});
 ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(App));
