@@ -35,7 +35,7 @@ Single static site. No backend, no database, no analytics.
 | `vendor/` | Self-hosted React, ReactDOM, canvas-confetti, dom-to-image-more, and Google Fonts. **Zero third-party requests at runtime.** |
 | `_headers` | Cloudflare security headers + strict CSP (`script-src 'self'`) + cache rules. |
 | `build.mjs` | One-shot compiler: `anonscore.jsx → anonscore.js`. Touches nothing else. |
-| `scripts/test.mjs` | End-to-end test suite (28 checks: build invariants, honesty guards that fail CI if a public claim drifts from the code, engine unit tests against the built bundle, browser smoke + a11y). Runs in CI on every PR. |
+| `scripts/test.mjs` | End-to-end test suite (35 checks: build invariants, honesty guards that fail CI if a public claim drifts from the code, relay-worker SSRF and no-tracking unit tests, engine unit tests against the built bundle, browser smoke + a11y). Runs in CI on every PR. |
 | `scripts/fetch-fonts.mjs` | Re-fetches the self-hosted Google Fonts subset. Run only if updating font weights. |
 | `.github/workflows/` | `build.yml` auto-rebuilds `anonscore.js` on feature-branch pushes. `test.yml` runs the test suite on every PR. |
 
@@ -151,7 +151,7 @@ There's no bug-bounty budget (this is a free, open-source project), but real rep
 
 Two paths:
 
-**Bug or small fix**: open a PR against `main`. CI runs the 28-check test suite automatically; it will reject regressions in scoring logic, accessibility, third-party requests, or feature flow.
+**Bug or small fix**: open a PR against `main`. CI runs the 35-check test suite automatically; it will reject regressions in scoring logic, accessibility, third-party requests, or feature flow.
 
 **Larger change**: open an issue first to discuss. The repo guide (`CLAUDE.md`) covers the architecture, build pipeline, and conventions.
 
