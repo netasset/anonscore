@@ -5044,8 +5044,33 @@ function ExposureFlow({ txs, isMobile, onFix, entity, address, onScan }) {
   );
 }
 
+/* ─────────────────────────────────────────────
+   THREAT MODEL LENS — "who are you hiding from?" Privacy advice ranked for
+   everyone at once is ranked for no one: the fix that matters most against a
+   chain-surveillance firm (break the graph) isn't the one that matters most
+   against a nosy acquaintance (stop showing your balance). Each weight maps a
+   Fix It recommendation key → how decisive that fix is against the adversary
+   (3 = front line, 0 = still worth doing, lower priority here). Selection is
+   session-only — nothing is stored.
+───────────────────────────────────────────── */
+const THREAT_MODELS = [
+  { id: "snoop", label: "Nosy individuals", icon: "👀",
+    sees: "Anyone who knows this address — an ex, a landlord, someone who paid you once — can read its balance and full history on a free explorer. The defense is showing them less: fresh addresses, a spread-out balance, day-to-day spending off-chain.",
+    w: { reuse: 3, conc: 3, lightning: 3, change: 2, utxo: 1, node: 1 } },
+  { id: "exchange", label: "KYC exchanges", icon: "🏦",
+    sees: "An exchange knows your identity and watches where withdrawals go — and many report to chain-analysis partners. The defense is cutting the thread at the withdrawal: odd amounts, no reuse, and breaking the trail before coins reach your main stack.",
+    w: { round: 3, reuse: 3, cj: 3, cons: 2, payjoin: 2, node: 1 } },
+  { id: "analyst", label: "Surveillance firms", icon: "🛰️",
+    sees: "Chain-analysis firms cluster the entire graph — co-spends, change patterns, dust responses, wallet fingerprints — and sell the map to exchanges and governments. The defense is starving their heuristics: mixing, Payjoin, and strict coin control.",
+    w: { cj: 3, payjoin: 3, cons: 3, dust: 3, changeid: 3, change: 2, fee: 2, reuse: 2, conc: 1, round: 1 } },
+  { id: "attacker", label: "A targeted attacker", icon: "🎯",
+    sees: "Someone after you specifically — a thief, a stalker, a hostile state — combines everything above with your visible balance and timing patterns. The defense is everything here, starting with never showing your net worth on every spend.",
+    w: { conc: 3, reuse: 3, node: 3, cj: 2, lightning: 2, dust: 2, cons: 2, change: 1, changeid: 1, fee: 1, round: 1 } },
+];
+
 function Dashboard({ address, addrInfo, utxos, txs, isMobile, onBack, onRescan, toast, autoShare, scanAt, defaultSimple, simpleMode: simpleModeFromApp, onSimpleModeChange, onCoach, delta }) {
   const [tab, setTab] = useState("Fix It");
+  const [threat, setThreat] = useState(null); // null = ranked for everyone; session-only, never stored
   const clusterN = useMemo(() => computeCluster(txs, address).linked.length, [txs, address]);
   const poison = useMemo(() => computePoisoning(txs, address), [txs, address]);
   const caseEntity = CASE_FILES.find(c => c.address === address)?.entity;
@@ -5332,10 +5357,35 @@ function Dashboard({ address, addrInfo, utxos, txs, isMobile, onBack, onRescan, 
         </div>
 
         {/* ── FIX IT — default tab ── */}
-        {tab === "Fix It" && (
+        {tab === "Fix It" && (() => {
+          const tm = THREAT_MODELS.find(m => m.id === threat) || null;
+          const weight = r => tm ? (tm.w[r.key] || 0) : 0;
+          const shownRecs = tm
+            ? [...recommendations].sort((a, b) => weight(b) - weight(a) || b.impact - a.impact)
+            : recommendations;
+          return (
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {/* Threat-model lens — re-ranks the same plan for a chosen adversary */}
+            <div style={{ background: T.card, border: `1px solid ${tm ? T.cyan + "44" : T.border}`, borderRadius: 14, padding: "12px 16px", marginBottom: 2 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                <span style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim, letterSpacing: 1.5, flexShrink: 0 }}>WHO ARE YOU HIDING FROM?</span>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  <Pill active={!tm} onClick={() => setThreat(null)}>Everyone</Pill>
+                  {THREAT_MODELS.map(m => (
+                    <Pill key={m.id} active={threat === m.id} onClick={() => setThreat(threat === m.id ? null : m.id)}>{m.icon} {m.label}</Pill>
+                  ))}
+                </div>
+              </div>
+              {tm && (
+                <div style={{ fontSize: 12.5, color: T.textMid, lineHeight: 1.6, marginTop: 10, borderTop: `1px solid ${T.borderLo}`, paddingTop: 10 }}>
+                  {tm.sees}
+                </div>
+              )}
+            </div>
             <div style={{ fontSize: 13, color: T.textMid, marginBottom: 4 }}>
-              Sorted by impact. Fixing the top 3 alone could raise your score by <strong style={{ color: T.cyan }}>{recommendations.slice(0, 3).reduce((a, r) => a + r.impact, 0)} points</strong>.
+              {tm
+                ? <>Re-ranked for <strong style={{ color: T.cyan }}>{tm.label.toLowerCase()}</strong>. Impact points are unchanged — only the priorities shift with the adversary.</>
+                : <>Sorted by impact. Fixing the top 3 alone could raise your score by <strong style={{ color: T.cyan }}>{recommendations.slice(0, 3).reduce((a, r) => a + r.impact, 0)} points</strong>.</>}
             </div>
             {/* AI assistant card — privacy guarantees shown before clicking */}
             <div style={{ background: T.card, border: `1px solid ${T.cyan}33`, borderRadius: 16, overflow: "hidden", marginBottom: 2 }}>
@@ -5378,13 +5428,14 @@ function Dashboard({ address, addrInfo, utxos, txs, isMobile, onBack, onRescan, 
                 </div>
               )}
             </div>
-            {recommendations.map((r, i) => {
+            {shownRecs.map((r, i) => {
               const done = doneFixes.has(r.key);
+              const w = weight(r);
               const simple = SIMPLE.recs[r.key];
               const displayAction = simpleMode && simple ? simple.action : r.action;
               const displayPlain  = simpleMode && simple ? simple.plain  : r.plain;
               return (
-              <div key={r.key || i} className={done ? "" : "lift"} style={{ background: done ? T.greenLo : T.card, border: `1px solid ${done ? T.green + "44" : T.border}`, borderLeft: done ? undefined : `3px solid ${r.status === "fail" ? T.red : r.status === "warn" ? T.amber : T.green}`, borderRadius: 16, padding: isMobile ? "18px 16px" : "20px 24px", display: "flex", gap: isMobile ? 12 : 20, animation: `fadeUp .35s ease ${i * .06}s both`, flexDirection: isMobile ? "column" : "row", transition: "border-color .2s, background-color .2s, filter .2s, transform .28s cubic-bezier(.16,.84,.44,1), box-shadow .28s", filter: done ? "opacity(0.65)" : "none" }}
+              <div key={r.key || i} className={done ? "" : "lift"} style={{ background: done ? T.greenLo : T.card, border: `1px solid ${done ? T.green + "44" : T.border}`, borderLeft: done ? undefined : `3px solid ${r.status === "fail" ? T.red : r.status === "warn" ? T.amber : T.green}`, borderRadius: 16, padding: isMobile ? "18px 16px" : "20px 24px", display: "flex", gap: isMobile ? 12 : 20, animation: `fadeUp .35s ease ${i * .06}s both`, flexDirection: isMobile ? "column" : "row", transition: "border-color .2s, background-color .2s, filter .2s, transform .28s cubic-bezier(.16,.84,.44,1), box-shadow .28s", filter: done ? "opacity(0.65)" : (tm && w === 0 ? "opacity(0.8)" : "none") }}
                 onMouseEnter={e => { if (!done) { e.currentTarget.style.borderColor = T.cyan + "55"; e.currentTarget.style.boxShadow = `0 10px 34px -14px ${T.cyan}77`; } }}
                 onMouseLeave={e => { if (!done) { e.currentTarget.style.borderColor = T.border; e.currentTarget.style.boxShadow = "none"; } }}>
                 <div style={{ fontFamily: T.mono, fontSize: 11, color: T.textDim, flexShrink: 0, paddingTop: 2, minWidth: 28 }}>0{i + 1}</div>
@@ -5417,6 +5468,8 @@ function Dashboard({ address, addrInfo, utxos, txs, isMobile, onBack, onRescan, 
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 8, alignItems: isMobile ? "flex-start" : "flex-end", flexShrink: 0 }}>
                   <div style={{ fontFamily: T.serif, fontSize: 22, color: T.green }}>+{r.impact}pts</div>
+                  {tm && !done && w === 3 && <Tag label="front line" color={T.cyan} size={9} />}
+                  {tm && !done && w === 0 && <Tag label="lower priority here" color={T.textDim} size={9} />}
                   <Tag label={r.effort} color={r.effort === "Easy" ? T.green : r.effort === "Medium" ? T.amber : T.textMid} size={9} />
                   <button onClick={() => toggleDone(r.key)} style={{ background: done ? T.green : "transparent", border: `1.5px solid ${done ? T.green : T.border}`, borderRadius: 8, padding: "5px 10px", color: done ? T.bg : T.textDim, fontSize: 11, cursor: "pointer", transition: "all .2s", whiteSpace: "nowrap" }}>
                     {done ? "✓ Done" : "Mark done"}
@@ -5441,7 +5494,8 @@ function Dashboard({ address, addrInfo, utxos, txs, isMobile, onBack, onRescan, 
               <button onClick={() => setShareOpen(true)} style={{ background: T.cyan, border: "none", borderRadius: 10, padding: "11px 20px", color: T.bg, fontFamily: T.sans, fontWeight: 700, fontSize: 14, cursor: "pointer" }}>Share Grade {grade} →</button>
             </div>
           </div>
-        )}
+          );
+        })()}
 
         {/* ── OVERVIEW ── */}
         {tab === "Overview" && (
