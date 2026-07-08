@@ -27,7 +27,7 @@ const pass = (msg) => console.log("  ✓ " + msg);
 // ───────────────────────────────────────────
 // 1. Build invariants — fail fast if files are malformed
 // ───────────────────────────────────────────
-console.log("[1/5] Build invariants");
+console.log("[1/6] Build invariants");
 const jsxBytes = statSync(join(ROOT, "anonscore.jsx")).size;
 if (jsxBytes < 100_000) fail(`anonscore.jsx is suspiciously small (${jsxBytes} bytes — the May disaster left it at ~130 bytes)`);
 else pass(`anonscore.jsx is ${jsxBytes} bytes`);
@@ -126,7 +126,7 @@ try {
 // ───────────────────────────────────────────
 // 2. Spin up local server serving the actual production files
 // ───────────────────────────────────────────
-console.log("[2/5] Local server");
+console.log("[2/6] Local server");
 const server = createServer((req, res) => {
   let url = req.url.split("?")[0]; if (url === "/") url = "/index.html";
   let p = join(ROOT, url);
@@ -148,7 +148,7 @@ pass(`Server on :${PORT}`);
 // ───────────────────────────────────────────
 // 3. Browser-based checks (smoke + a11y + network)
 // ───────────────────────────────────────────
-console.log("[3/5] Smoke test (real browser)");
+console.log("[3/6] Smoke test (real browser)");
 const browser = await chromium.launch({ headless: true });
 const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
 const page = await ctx.newPage();
@@ -243,8 +243,90 @@ else if (!swInfo.registered) fail("Service worker did not register");
 else if (swInfo.entries < 5) fail(`Service worker registered but precached only ${swInfo.entries} entries (expected ≥5)`);
 else pass(`Service worker registered, ${swInfo.entries} entries cached in ${swInfo.caches[0]}`);
 
+// ───────────────────────────────────────────
+// 4. Engine unit tests — run against the BUILT bundle via the read-only
+//    window.__ANONSCORE_TEST__ hook ("verify, don't trust", applied to
+//    ourselves). These pin the pure scoring/analysis functions so a logic
+//    regression can't ship silently behind a green smoke test.
+// ───────────────────────────────────────────
+console.log("[4/6] Engine unit tests (built bundle)");
+const unit = await page.evaluate(() => {
+  const E = window.__ANONSCORE_TEST__;
+  if (!E) return { missing: true };
+  const r = [];
+  const t = (name, cond) => r.push({ name, ok: !!cond });
+  const pv = a => ({ prevout: { scriptpubkey_address: a } });
+  const me = "bc1qm34lsc65zpw79lxes69zkqmk6ee3ewf0j77s3h";
+  const sib1 = "bc1qsibling1aaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+  const sib2 = "bc1qsibling2bbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+
+  // — Cluster: common-input ownership —
+  {
+    const consolidation = { txid: "t1", vin: [pv(me), pv(sib1), pv(sib2)], vout: [{ value: 9e7 }] };
+    const c1 = E.computeCluster([consolidation], me);
+    t("cluster: 3-input spend links the 2 sibling addresses", c1.linked.length === 2 && c1.spends === 1);
+    // Equal-output CoinJoin must NOT imply one owner
+    const cj = { txid: "t2", vin: [pv(me), pv(sib1)], vout: [{ value: 5e6 }, { value: 5e6 }, { value: 5e6 }, { value: 1e6 }, { value: 2e6 }] };
+    const c2 = E.computeCluster([cj], me);
+    t("cluster: equal-output CoinJoin is excluded", c2.linked.length === 0 && c2.cjExcluded === 1);
+    // Receive-only history links nothing
+    const recv = { txid: "t3", vin: [pv(sib1)], vout: [{ value: 1e6, scriptpubkey_address: me }] };
+    const c3 = E.computeCluster([recv], me);
+    t("cluster: receive-only history links nothing", c3.linked.length === 0 && c3.spends === 0);
+  }
+
+  // — Address poisoning: lookalike matching —
+  {
+    const bait = "bc1qm34lx9k2v7d0trplq5u8snw6hjazy4j77s3h"; // head+tail match `me`, middle differs
+    t("poisoning: true bait detected", E.isLookalikeAddress(me, bait) === true);
+    t("poisoning: identical address is not bait", E.isLookalikeAddress(me, me) === false);
+    t("poisoning: different head rejected", E.isLookalikeAddress(me, "bc1qzzzzsc65zpw79lxes69zkqmk6ee3ewf0j77s3h") === false);
+    t("poisoning: cross-type bc1q/bc1p rejected", E.isLookalikeAddress(me, "bc1p" + me.slice(4)) === false);
+    t("poisoning: legacy 1… lookalike detected", E.isLookalikeAddress("1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa", "1A1zPxxxxxxxxxxxxxxxxxxxxxx7DivfNa") === true);
+    const pz = E.computePoisoning([
+      { txid: "p1", vin: [], vout: [{ value: 546, scriptpubkey_address: bait }] },
+      { txid: "p2", vin: [pv(sib1)], vout: [{ value: 1e6, scriptpubkey_address: me }] },
+    ], me);
+    t("poisoning: sweep finds planted bait exactly once", pz.lookalikes.length === 1 && pz.lookalikes[0].addr === bait);
+  }
+
+  // — Activity clock: timezone inference —
+  {
+    // 12 txs all at 18:xx UTC → strong daily rhythm; quiet window must exclude 18.
+    const txs = Array.from({ length: 12 }, (_, i) => ({ status: { block_time: i * 86400 + 18 * 3600 + 120 } }));
+    const ac = E.computeActivityClock(txs);
+    const inQuiet = h => ((h - ac.qStart + 24) % 24) < ac.K;
+    t("clock: strong single-hour rhythm detected", ac.hasData && ac.strong && ac.counts[18] === 12);
+    t("clock: quiet window excludes the active hour", !inQuiet(18));
+    t("clock: timezone estimate is well-formed", /^UTC[+-]?\d+$/.test(ac.tz));
+  }
+
+  // — Engine invariants —
+  {
+    const empty = E.runEngine([], [], 0);
+    t("engine: empty wallet is the honest isEmpty state (null score, — grade)", empty.isEmpty === true && empty.score === null && empty.grade === "—");
+    const now = Math.floor(Date.now() / 1000);
+    const coin = v => ({ txid: "u", vout: 0, value: v, scriptpubkey_type: "v0_p2wpkh", status: { confirmed: true, block_time: now - 86400 * 30 } });
+    const clean = E.runEngine([coin(5e7), coin(3e7)], [], 2);
+    const dusted = E.runEngine([coin(5e7), coin(3e7), coin(500), coin(510), coin(520)], [], 5);
+    t("engine: dust beacons lower the score", dusted.score < clean.score);
+    t("engine: grade boundaries (A/F)", E.scoreGrade(95) === "A" && E.scoreGrade(30) === "F");
+    t("engine: validators (genesis addr, junk, LN pubkey)",
+      E.isValidBitcoinAddress("1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa") === true &&
+      E.isValidBitcoinAddress("not-an-address") === false &&
+      E.detectInputType("02".padEnd(66, "ab")) === "ln_pubkey");
+  }
+  return { results: r };
+});
+if (unit.missing) fail("window.__ANONSCORE_TEST__ hook missing from the built bundle");
+else {
+  const bad = unit.results.filter(u => !u.ok);
+  bad.forEach(u => fail("engine unit: " + u.name));
+  if (!bad.length) pass(`engine unit tests: ${unit.results.length}/${unit.results.length} passed (cluster, poisoning, clock, engine)`);
+}
+
 // Run a demo scan end-to-end
-console.log("[4/5] Demo scan flow");
+console.log("[5/6] Demo scan flow");
 // Re-navigate to a clean landing (earlier blocks switched language / visited
 // the directory page), then trigger the demo from the sample chip.
 await page.goto(`http://127.0.0.1:${PORT}/`, { waitUntil: "load" });
@@ -290,7 +372,7 @@ if (!jsCode.includes("vendor/dom-to-image-more.min.js")) fail("anonscore.js does
 else pass("PNG export wired to self-hosted dom-to-image (no broken SRI)");
 
 // Same-origin network check (proves no third-party CDN crept back in)
-console.log("[5/5] Same-origin network check");
+console.log("[6/6] Same-origin network check");
 const thirdParty = [...new Set(requests.map(r => new URL(r.url).origin))]
   .filter(o => !o.includes("127.0.0.1"));
 if (thirdParty.length) fail(`Third-party origins detected: ${thirdParty.join(", ")}`);
