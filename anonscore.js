@@ -11000,6 +11000,68 @@ function ExposureFlow({
     }, explain));
   }));
 }
+const THREAT_MODELS = [{
+  id: "snoop",
+  label: "Nosy individuals",
+  icon: "👀",
+  sees: "Anyone who knows this address — an ex, a landlord, someone who paid you once — can read its balance and full history on a free explorer. The defense is showing them less: fresh addresses, a spread-out balance, day-to-day spending off-chain.",
+  w: {
+    reuse: 3,
+    conc: 3,
+    lightning: 3,
+    change: 2,
+    utxo: 1,
+    node: 1
+  }
+}, {
+  id: "exchange",
+  label: "KYC exchanges",
+  icon: "🏦",
+  sees: "An exchange knows your identity and watches where withdrawals go — and many report to chain-analysis partners. The defense is cutting the thread at the withdrawal: odd amounts, no reuse, and breaking the trail before coins reach your main stack.",
+  w: {
+    round: 3,
+    reuse: 3,
+    cj: 3,
+    cons: 2,
+    payjoin: 2,
+    node: 1
+  }
+}, {
+  id: "analyst",
+  label: "Surveillance firms",
+  icon: "🛰️",
+  sees: "Chain-analysis firms cluster the entire graph — co-spends, change patterns, dust responses, wallet fingerprints — and sell the map to exchanges and governments. The defense is starving their heuristics: mixing, Payjoin, and strict coin control.",
+  w: {
+    cj: 3,
+    payjoin: 3,
+    cons: 3,
+    dust: 3,
+    changeid: 3,
+    change: 2,
+    fee: 2,
+    reuse: 2,
+    conc: 1,
+    round: 1
+  }
+}, {
+  id: "attacker",
+  label: "A targeted attacker",
+  icon: "🎯",
+  sees: "Someone after you specifically — a thief, a stalker, a hostile state — combines everything above with your visible balance and timing patterns. The defense is everything here, starting with never showing your net worth on every spend.",
+  w: {
+    conc: 3,
+    reuse: 3,
+    node: 3,
+    cj: 2,
+    lightning: 2,
+    dust: 2,
+    cons: 2,
+    change: 1,
+    changeid: 1,
+    fee: 1,
+    round: 1
+  }
+}];
 function Dashboard({
   address,
   addrInfo,
@@ -11018,6 +11080,7 @@ function Dashboard({
   delta
 }) {
   const [tab, setTab] = useState("Fix It");
+  const [threat, setThreat] = useState(null);
   const clusterN = useMemo(() => computeCluster(txs, address).linked.length, [txs, address]);
   const poison = useMemo(() => computePoisoning(txs, address), [txs, address]);
   const caseEntity = CASE_FILES.find(c => c.address === address)?.entity;
@@ -11766,416 +11829,479 @@ function Dashboard({
       color: simpleMode ? T.bg : T.textMid,
       whiteSpace: "nowrap"
     }
-  }, simpleMode ? "✓ Plain English ON" : "Plain English"))), tab === "Fix It" && React.createElement("div", {
-    style: {
-      display: "flex",
-      flexDirection: "column",
-      gap: 10
-    }
-  }, React.createElement("div", {
-    style: {
-      fontSize: 13,
-      color: T.textMid,
-      marginBottom: 4
-    }
-  }, "Sorted by impact. Fixing the top 3 alone could raise your score by ", React.createElement("strong", {
-    style: {
-      color: T.cyan
-    }
-  }, recommendations.slice(0, 3).reduce((a, r) => a + r.impact, 0), " points"), "."), React.createElement("div", {
-    style: {
-      background: T.card,
-      border: `1px solid ${T.cyan}33`,
-      borderRadius: 16,
-      overflow: "hidden",
-      marginBottom: 2
-    }
-  }, React.createElement("div", {
-    style: {
-      display: "flex",
-      gap: 0,
-      borderBottom: `1px solid ${T.borderLo}`
-    }
-  }, [{
-    icon: "✕",
-    label: "Address never sent"
-  }, {
-    icon: "✕",
-    label: "No data stored"
-  }, {
-    icon: "✕",
-    label: "Not used for training"
-  }].map((badge, i) => React.createElement("div", {
-    key: i,
-    style: {
-      flex: 1,
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-      gap: 5,
-      padding: "7px 8px",
-      borderRight: i < 2 ? `1px solid ${T.borderLo}` : undefined,
-      background: T.greenLo
-    }
-  }, React.createElement("span", {
-    style: {
-      fontFamily: T.mono,
-      fontSize: 9,
-      color: T.green,
-      fontWeight: 700
-    }
-  }, badge.icon), React.createElement("span", {
-    style: {
-      fontFamily: T.mono,
-      fontSize: 9,
-      color: T.green,
-      letterSpacing: 0.3,
-      whiteSpace: "nowrap"
-    }
-  }, badge.label)))), React.createElement("button", {
-    onClick: openAi,
-    style: {
-      display: "flex",
-      alignItems: "center",
-      gap: 14,
-      padding: "16px 18px",
-      cursor: "pointer",
-      textAlign: "left",
-      width: "100%",
-      background: "transparent",
-      border: "none",
-      transition: "background .15s"
-    },
-    onMouseOver: e => e.currentTarget.style.background = T.cyan + "0a",
-    onMouseOut: e => e.currentTarget.style.background = "transparent"
-  }, React.createElement("div", {
-    style: {
-      width: 36,
-      height: 36,
-      background: T.cyan + "18",
-      border: `1px solid ${T.cyan}33`,
-      borderRadius: 10,
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-      fontSize: 16,
-      flexShrink: 0
-    }
-  }, "\u2726"), React.createElement("div", {
-    style: {
-      flex: 1
-    }
-  }, React.createElement("div", {
-    style: {
-      fontSize: 14,
-      fontWeight: 700,
-      color: T.text,
-      marginBottom: 3
-    }
-  }, "Ask the Privacy Assistant"), React.createElement("div", {
-    style: {
-      fontSize: 12,
-      color: T.textMid,
-      lineHeight: 1.55
-    }
-  }, "Get step-by-step guidance for your ", checks.filter(c => c.status !== "pass").length, " specific issues. Only your score and issue names are shared \u2014 never your address. ", React.createElement("span", {
-    style: {
-      color: T.textDim
-    }
-  }, "5 questions per session."))), React.createElement("div", {
-    style: {
-      flexShrink: 0,
-      textAlign: "center"
-    }
-  }, React.createElement("div", {
-    style: {
-      background: T.cyan,
-      borderRadius: 8,
-      padding: "7px 14px",
-      color: T.bg,
-      fontSize: 12,
-      fontWeight: 700,
-      whiteSpace: "nowrap"
-    }
-  }, "Ask now \u2192"))), onCoach && React.createElement("div", {
-    style: {
-      borderTop: `1px solid ${T.borderLo}`,
-      padding: "8px 18px",
-      display: "flex",
-      justifyContent: "space-between",
-      alignItems: "center",
-      gap: 8,
-      flexWrap: "wrap"
-    }
-  }, React.createElement("span", {
-    style: {
-      fontFamily: T.mono,
-      fontSize: 10,
-      color: T.textDim
-    }
-  }, "Hit the 5-question cap?"), React.createElement("button", {
-    onClick: onCoach,
-    style: {
-      background: "none",
-      border: "none",
-      padding: 0,
-      fontFamily: T.mono,
-      fontSize: 10,
-      color: T.cyan,
-      cursor: "pointer",
-      textDecoration: "underline",
-      textUnderlineOffset: 3
-    }
-  }, "Join the Coach early-access waitlist \u2192"))), recommendations.map((r, i) => {
-    const done = doneFixes.has(r.key);
-    const simple = SIMPLE.recs[r.key];
-    const displayAction = simpleMode && simple ? simple.action : r.action;
-    const displayPlain = simpleMode && simple ? simple.plain : r.plain;
+  }, simpleMode ? "✓ Plain English ON" : "Plain English"))), tab === "Fix It" && (() => {
+    const tm = THREAT_MODELS.find(m => m.id === threat) || null;
+    const weight = r => tm ? tm.w[r.key] || 0 : 0;
+    const shownRecs = tm ? [...recommendations].sort((a, b) => weight(b) - weight(a) || b.impact - a.impact) : recommendations;
     return React.createElement("div", {
-      key: r.key || i,
-      className: done ? "" : "lift",
       style: {
-        background: done ? T.greenLo : T.card,
-        border: `1px solid ${done ? T.green + "44" : T.border}`,
-        borderLeft: done ? undefined : `3px solid ${r.status === "fail" ? T.red : r.status === "warn" ? T.amber : T.green}`,
-        borderRadius: 16,
-        padding: isMobile ? "18px 16px" : "20px 24px",
         display: "flex",
-        gap: isMobile ? 12 : 20,
-        animation: `fadeUp .35s ease ${i * .06}s both`,
-        flexDirection: isMobile ? "column" : "row",
-        transition: "border-color .2s, background-color .2s, filter .2s, transform .28s cubic-bezier(.16,.84,.44,1), box-shadow .28s",
-        filter: done ? "opacity(0.65)" : "none"
-      },
-      onMouseEnter: e => {
-        if (!done) {
-          e.currentTarget.style.borderColor = T.cyan + "55";
-          e.currentTarget.style.boxShadow = `0 10px 34px -14px ${T.cyan}77`;
-        }
-      },
-      onMouseLeave: e => {
-        if (!done) {
-          e.currentTarget.style.borderColor = T.border;
-          e.currentTarget.style.boxShadow = "none";
-        }
+        flexDirection: "column",
+        gap: 10
       }
     }, React.createElement("div", {
       style: {
-        fontFamily: T.mono,
-        fontSize: 11,
-        color: T.textDim,
-        flexShrink: 0,
-        paddingTop: 2,
-        minWidth: 28
-      }
-    }, "0", i + 1), React.createElement("div", {
-      style: {
-        flex: 1
+        background: T.card,
+        border: `1px solid ${tm ? T.cyan + "44" : T.border}`,
+        borderRadius: 14,
+        padding: "12px 16px",
+        marginBottom: 2
       }
     }, React.createElement("div", {
       style: {
         display: "flex",
         alignItems: "center",
-        gap: 8,
-        marginBottom: 8
-      }
-    }, React.createElement("span", {
-      key: done ? "done" : "todo",
-      style: {
-        fontSize: 18,
-        display: "inline-block",
-        animation: done ? "checkPop .45s cubic-bezier(.34,1.56,.64,1) both" : undefined
-      }
-    }, done ? "✅" : r.icon), React.createElement("div", {
-      style: {
-        fontFamily: T.serif,
-        fontSize: isMobile ? 17 : 20,
-        color: done ? T.green : T.text,
-        fontWeight: 400,
-        textDecoration: done ? "line-through" : "none",
-        transition: "color .25s ease"
-      }
-    }, displayAction)), !done && React.createElement(React.Fragment, null, React.createElement("div", {
-      style: {
-        fontSize: 14,
-        color: T.textMid,
-        lineHeight: 1.7,
-        marginBottom: 10
-      }
-    }, displayPlain), !simpleMode && React.createElement("div", {
-      style: {
-        fontSize: 12,
-        color: T.textDim,
-        lineHeight: 1.6,
-        background: T.surface,
-        borderRadius: 8,
-        padding: "10px 14px"
-      }
-    }, React.createElement("strong", {
-      style: {
-        color: T.textMid
-      }
-    }, "How:"), " ", r.detail), React.createElement("div", {
-      style: {
-        marginTop: 10,
-        display: "flex",
-        flexWrap: "wrap",
-        gap: 6,
-        alignItems: "center"
+        gap: 10,
+        flexWrap: "wrap"
       }
     }, React.createElement("span", {
       style: {
         fontFamily: T.mono,
         fontSize: 9,
         color: T.textDim,
-        letterSpacing: 1
-      }
-    }, "OPTIONS:"), (r.tools || [{
-      name: r.tool,
-      note: ""
-    }]).map((t, ti) => {
-      const href = toolLink(t.name);
-      const aff = toolIsAffiliate(t.name);
-      const base = {
-        fontFamily: T.mono,
-        fontSize: 9,
-        padding: "3px 8px",
-        borderRadius: 4,
-        background: T.cyan + "18",
-        color: T.cyan,
-        border: `1px solid ${T.cyan}30`,
-        letterSpacing: 0.3,
-        textDecoration: "none",
-        cursor: href ? "pointer" : t.note ? "help" : "default"
-      };
-      const label = aff ? `${t.name} · affiliate` : t.name;
-      return href ? React.createElement("a", {
-        key: ti,
-        href: href,
-        target: "_blank",
-        rel: "noopener noreferrer nofollow",
-        title: aff ? `${t.note ? t.note + " · " : ""}AnonScore earns a referral when you sign up — see /how-we-get-paid` : t.note,
-        style: base
-      }, label) : React.createElement("span", {
-        key: ti,
-        title: t.note,
-        style: base
-      }, t.name);
-    })), !simpleMode && (r.tools || []).length > 0 && React.createElement("div", {
-      style: {
-        marginTop: 6,
-        fontSize: 11,
-        color: T.textDim,
-        lineHeight: 1.55
-      }
-    }, (r.tools || []).map((t, ti) => t.note ? React.createElement("span", {
-      key: ti
-    }, React.createElement("span", {
-      style: {
-        color: T.textMid
-      }
-    }, t.name), " \u2014 ", t.note, ti < r.tools.length - 1 ? " · " : "") : null)))), React.createElement("div", {
-      style: {
-        display: "flex",
-        flexDirection: "column",
-        gap: 8,
-        alignItems: isMobile ? "flex-start" : "flex-end",
+        letterSpacing: 1.5,
         flexShrink: 0
+      }
+    }, "WHO ARE YOU HIDING FROM?"), React.createElement("div", {
+      style: {
+        display: "flex",
+        gap: 6,
+        flexWrap: "wrap"
+      }
+    }, React.createElement(Pill, {
+      active: !tm,
+      onClick: () => setThreat(null)
+    }, "Everyone"), THREAT_MODELS.map(m => React.createElement(Pill, {
+      key: m.id,
+      active: threat === m.id,
+      onClick: () => setThreat(threat === m.id ? null : m.id)
+    }, m.icon, " ", m.label)))), tm && React.createElement("div", {
+      style: {
+        fontSize: 12.5,
+        color: T.textMid,
+        lineHeight: 1.6,
+        marginTop: 10,
+        borderTop: `1px solid ${T.borderLo}`,
+        paddingTop: 10
+      }
+    }, tm.sees)), React.createElement("div", {
+      style: {
+        fontSize: 13,
+        color: T.textMid,
+        marginBottom: 4
+      }
+    }, tm ? React.createElement(React.Fragment, null, "Re-ranked for ", React.createElement("strong", {
+      style: {
+        color: T.cyan
+      }
+    }, tm.label.toLowerCase()), ". Impact points are unchanged \u2014 only the priorities shift with the adversary.") : React.createElement(React.Fragment, null, "Sorted by impact. Fixing the top 3 alone could raise your score by ", React.createElement("strong", {
+      style: {
+        color: T.cyan
+      }
+    }, recommendations.slice(0, 3).reduce((a, r) => a + r.impact, 0), " points"), ".")), React.createElement("div", {
+      style: {
+        background: T.card,
+        border: `1px solid ${T.cyan}33`,
+        borderRadius: 16,
+        overflow: "hidden",
+        marginBottom: 2
       }
     }, React.createElement("div", {
       style: {
-        fontFamily: T.serif,
-        fontSize: 22,
-        color: T.green
+        display: "flex",
+        gap: 0,
+        borderBottom: `1px solid ${T.borderLo}`
       }
-    }, "+", r.impact, "pts"), React.createElement(Tag, {
-      label: r.effort,
-      color: r.effort === "Easy" ? T.green : r.effort === "Medium" ? T.amber : T.textMid,
-      size: 9
-    }), React.createElement("button", {
-      onClick: () => toggleDone(r.key),
+    }, [{
+      icon: "✕",
+      label: "Address never sent"
+    }, {
+      icon: "✕",
+      label: "No data stored"
+    }, {
+      icon: "✕",
+      label: "Not used for training"
+    }].map((badge, i) => React.createElement("div", {
+      key: i,
       style: {
-        background: done ? T.green : "transparent",
-        border: `1.5px solid ${done ? T.green : T.border}`,
-        borderRadius: 8,
-        padding: "5px 10px",
-        color: done ? T.bg : T.textDim,
-        fontSize: 11,
-        cursor: "pointer",
-        transition: "all .2s",
+        flex: 1,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 5,
+        padding: "7px 8px",
+        borderRight: i < 2 ? `1px solid ${T.borderLo}` : undefined,
+        background: T.greenLo
+      }
+    }, React.createElement("span", {
+      style: {
+        fontFamily: T.mono,
+        fontSize: 9,
+        color: T.green,
+        fontWeight: 700
+      }
+    }, badge.icon), React.createElement("span", {
+      style: {
+        fontFamily: T.mono,
+        fontSize: 9,
+        color: T.green,
+        letterSpacing: 0.3,
         whiteSpace: "nowrap"
       }
-    }, done ? "✓ Done" : "Mark done")));
-  }), React.createElement("div", {
-    style: {
-      background: T.greenLo,
-      border: `1px solid ${T.green}33`,
-      borderRadius: 14,
-      padding: "18px 22px",
-      display: "flex",
-      gap: 14,
-      alignItems: "center"
-    }
-  }, React.createElement("div", {
-    style: {
-      fontSize: 24
-    }
-  }, "\uD83C\uDFAF"), React.createElement("div", null, React.createElement("div", {
-    style: {
-      fontFamily: T.serif,
-      fontSize: 17,
-      color: T.text,
-      fontWeight: 400
-    }
-  }, "After all fixes, projected score: ", React.createElement("span", {
-    style: {
-      color: T.green
-    }
-  }, Math.min(score + recommendations.reduce((a, r) => a + r.impact, 0), 97), "/100")), React.createElement("div", {
-    style: {
-      fontSize: 13,
-      color: T.textMid,
-      marginTop: 4
-    }
-  }, "Estimated: 1\u20133 weeks, depending on CoinJoin wait times."))), React.createElement("div", {
-    style: {
-      background: T.surface,
-      border: `1px solid ${T.border}`,
-      borderRadius: 14,
-      padding: "18px 22px",
-      display: "flex",
-      justifyContent: "space-between",
-      alignItems: "center",
-      flexWrap: "wrap",
-      gap: 12
-    }
-  }, React.createElement("div", null, React.createElement("div", {
-    style: {
-      fontFamily: T.serif,
-      fontSize: 17,
-      color: T.text,
-      fontWeight: 400
-    }
-  }, "Share your privacy score"), React.createElement("div", {
-    style: {
-      fontSize: 13,
-      color: T.textMid,
-      marginTop: 3
-    }
-  }, "Let your Nostr or Twitter followers check theirs.")), React.createElement("button", {
-    onClick: () => setShareOpen(true),
-    style: {
-      background: T.cyan,
-      border: "none",
-      borderRadius: 10,
-      padding: "11px 20px",
-      color: T.bg,
-      fontFamily: T.sans,
-      fontWeight: 700,
-      fontSize: 14,
-      cursor: "pointer"
-    }
-  }, "Share Grade ", grade, " \u2192"))), tab === "Overview" && React.createElement(React.Fragment, null, React.createElement(ScoreBreakdown, {
+    }, badge.label)))), React.createElement("button", {
+      onClick: openAi,
+      style: {
+        display: "flex",
+        alignItems: "center",
+        gap: 14,
+        padding: "16px 18px",
+        cursor: "pointer",
+        textAlign: "left",
+        width: "100%",
+        background: "transparent",
+        border: "none",
+        transition: "background .15s"
+      },
+      onMouseOver: e => e.currentTarget.style.background = T.cyan + "0a",
+      onMouseOut: e => e.currentTarget.style.background = "transparent"
+    }, React.createElement("div", {
+      style: {
+        width: 36,
+        height: 36,
+        background: T.cyan + "18",
+        border: `1px solid ${T.cyan}33`,
+        borderRadius: 10,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        fontSize: 16,
+        flexShrink: 0
+      }
+    }, "\u2726"), React.createElement("div", {
+      style: {
+        flex: 1
+      }
+    }, React.createElement("div", {
+      style: {
+        fontSize: 14,
+        fontWeight: 700,
+        color: T.text,
+        marginBottom: 3
+      }
+    }, "Ask the Privacy Assistant"), React.createElement("div", {
+      style: {
+        fontSize: 12,
+        color: T.textMid,
+        lineHeight: 1.55
+      }
+    }, "Get step-by-step guidance for your ", checks.filter(c => c.status !== "pass").length, " specific issues. Only your score and issue names are shared \u2014 never your address. ", React.createElement("span", {
+      style: {
+        color: T.textDim
+      }
+    }, "5 questions per session."))), React.createElement("div", {
+      style: {
+        flexShrink: 0,
+        textAlign: "center"
+      }
+    }, React.createElement("div", {
+      style: {
+        background: T.cyan,
+        borderRadius: 8,
+        padding: "7px 14px",
+        color: T.bg,
+        fontSize: 12,
+        fontWeight: 700,
+        whiteSpace: "nowrap"
+      }
+    }, "Ask now \u2192"))), onCoach && React.createElement("div", {
+      style: {
+        borderTop: `1px solid ${T.borderLo}`,
+        padding: "8px 18px",
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+        gap: 8,
+        flexWrap: "wrap"
+      }
+    }, React.createElement("span", {
+      style: {
+        fontFamily: T.mono,
+        fontSize: 10,
+        color: T.textDim
+      }
+    }, "Hit the 5-question cap?"), React.createElement("button", {
+      onClick: onCoach,
+      style: {
+        background: "none",
+        border: "none",
+        padding: 0,
+        fontFamily: T.mono,
+        fontSize: 10,
+        color: T.cyan,
+        cursor: "pointer",
+        textDecoration: "underline",
+        textUnderlineOffset: 3
+      }
+    }, "Join the Coach early-access waitlist \u2192"))), shownRecs.map((r, i) => {
+      const done = doneFixes.has(r.key);
+      const w = weight(r);
+      const simple = SIMPLE.recs[r.key];
+      const displayAction = simpleMode && simple ? simple.action : r.action;
+      const displayPlain = simpleMode && simple ? simple.plain : r.plain;
+      return React.createElement("div", {
+        key: r.key || i,
+        className: done ? "" : "lift",
+        style: {
+          background: done ? T.greenLo : T.card,
+          border: `1px solid ${done ? T.green + "44" : T.border}`,
+          borderLeft: done ? undefined : `3px solid ${r.status === "fail" ? T.red : r.status === "warn" ? T.amber : T.green}`,
+          borderRadius: 16,
+          padding: isMobile ? "18px 16px" : "20px 24px",
+          display: "flex",
+          gap: isMobile ? 12 : 20,
+          animation: `fadeUp .35s ease ${i * .06}s both`,
+          flexDirection: isMobile ? "column" : "row",
+          transition: "border-color .2s, background-color .2s, filter .2s, transform .28s cubic-bezier(.16,.84,.44,1), box-shadow .28s",
+          filter: done ? "opacity(0.65)" : tm && w === 0 ? "opacity(0.8)" : "none"
+        },
+        onMouseEnter: e => {
+          if (!done) {
+            e.currentTarget.style.borderColor = T.cyan + "55";
+            e.currentTarget.style.boxShadow = `0 10px 34px -14px ${T.cyan}77`;
+          }
+        },
+        onMouseLeave: e => {
+          if (!done) {
+            e.currentTarget.style.borderColor = T.border;
+            e.currentTarget.style.boxShadow = "none";
+          }
+        }
+      }, React.createElement("div", {
+        style: {
+          fontFamily: T.mono,
+          fontSize: 11,
+          color: T.textDim,
+          flexShrink: 0,
+          paddingTop: 2,
+          minWidth: 28
+        }
+      }, "0", i + 1), React.createElement("div", {
+        style: {
+          flex: 1
+        }
+      }, React.createElement("div", {
+        style: {
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          marginBottom: 8
+        }
+      }, React.createElement("span", {
+        key: done ? "done" : "todo",
+        style: {
+          fontSize: 18,
+          display: "inline-block",
+          animation: done ? "checkPop .45s cubic-bezier(.34,1.56,.64,1) both" : undefined
+        }
+      }, done ? "✅" : r.icon), React.createElement("div", {
+        style: {
+          fontFamily: T.serif,
+          fontSize: isMobile ? 17 : 20,
+          color: done ? T.green : T.text,
+          fontWeight: 400,
+          textDecoration: done ? "line-through" : "none",
+          transition: "color .25s ease"
+        }
+      }, displayAction)), !done && React.createElement(React.Fragment, null, React.createElement("div", {
+        style: {
+          fontSize: 14,
+          color: T.textMid,
+          lineHeight: 1.7,
+          marginBottom: 10
+        }
+      }, displayPlain), !simpleMode && React.createElement("div", {
+        style: {
+          fontSize: 12,
+          color: T.textDim,
+          lineHeight: 1.6,
+          background: T.surface,
+          borderRadius: 8,
+          padding: "10px 14px"
+        }
+      }, React.createElement("strong", {
+        style: {
+          color: T.textMid
+        }
+      }, "How:"), " ", r.detail), React.createElement("div", {
+        style: {
+          marginTop: 10,
+          display: "flex",
+          flexWrap: "wrap",
+          gap: 6,
+          alignItems: "center"
+        }
+      }, React.createElement("span", {
+        style: {
+          fontFamily: T.mono,
+          fontSize: 9,
+          color: T.textDim,
+          letterSpacing: 1
+        }
+      }, "OPTIONS:"), (r.tools || [{
+        name: r.tool,
+        note: ""
+      }]).map((t, ti) => {
+        const href = toolLink(t.name);
+        const aff = toolIsAffiliate(t.name);
+        const base = {
+          fontFamily: T.mono,
+          fontSize: 9,
+          padding: "3px 8px",
+          borderRadius: 4,
+          background: T.cyan + "18",
+          color: T.cyan,
+          border: `1px solid ${T.cyan}30`,
+          letterSpacing: 0.3,
+          textDecoration: "none",
+          cursor: href ? "pointer" : t.note ? "help" : "default"
+        };
+        const label = aff ? `${t.name} · affiliate` : t.name;
+        return href ? React.createElement("a", {
+          key: ti,
+          href: href,
+          target: "_blank",
+          rel: "noopener noreferrer nofollow",
+          title: aff ? `${t.note ? t.note + " · " : ""}AnonScore earns a referral when you sign up — see /how-we-get-paid` : t.note,
+          style: base
+        }, label) : React.createElement("span", {
+          key: ti,
+          title: t.note,
+          style: base
+        }, t.name);
+      })), !simpleMode && (r.tools || []).length > 0 && React.createElement("div", {
+        style: {
+          marginTop: 6,
+          fontSize: 11,
+          color: T.textDim,
+          lineHeight: 1.55
+        }
+      }, (r.tools || []).map((t, ti) => t.note ? React.createElement("span", {
+        key: ti
+      }, React.createElement("span", {
+        style: {
+          color: T.textMid
+        }
+      }, t.name), " \u2014 ", t.note, ti < r.tools.length - 1 ? " · " : "") : null)))), React.createElement("div", {
+        style: {
+          display: "flex",
+          flexDirection: "column",
+          gap: 8,
+          alignItems: isMobile ? "flex-start" : "flex-end",
+          flexShrink: 0
+        }
+      }, React.createElement("div", {
+        style: {
+          fontFamily: T.serif,
+          fontSize: 22,
+          color: T.green
+        }
+      }, "+", r.impact, "pts"), tm && !done && w === 3 && React.createElement(Tag, {
+        label: "front line",
+        color: T.cyan,
+        size: 9
+      }), tm && !done && w === 0 && React.createElement(Tag, {
+        label: "lower priority here",
+        color: T.textDim,
+        size: 9
+      }), React.createElement(Tag, {
+        label: r.effort,
+        color: r.effort === "Easy" ? T.green : r.effort === "Medium" ? T.amber : T.textMid,
+        size: 9
+      }), React.createElement("button", {
+        onClick: () => toggleDone(r.key),
+        style: {
+          background: done ? T.green : "transparent",
+          border: `1.5px solid ${done ? T.green : T.border}`,
+          borderRadius: 8,
+          padding: "5px 10px",
+          color: done ? T.bg : T.textDim,
+          fontSize: 11,
+          cursor: "pointer",
+          transition: "all .2s",
+          whiteSpace: "nowrap"
+        }
+      }, done ? "✓ Done" : "Mark done")));
+    }), React.createElement("div", {
+      style: {
+        background: T.greenLo,
+        border: `1px solid ${T.green}33`,
+        borderRadius: 14,
+        padding: "18px 22px",
+        display: "flex",
+        gap: 14,
+        alignItems: "center"
+      }
+    }, React.createElement("div", {
+      style: {
+        fontSize: 24
+      }
+    }, "\uD83C\uDFAF"), React.createElement("div", null, React.createElement("div", {
+      style: {
+        fontFamily: T.serif,
+        fontSize: 17,
+        color: T.text,
+        fontWeight: 400
+      }
+    }, "After all fixes, projected score: ", React.createElement("span", {
+      style: {
+        color: T.green
+      }
+    }, Math.min(score + recommendations.reduce((a, r) => a + r.impact, 0), 97), "/100")), React.createElement("div", {
+      style: {
+        fontSize: 13,
+        color: T.textMid,
+        marginTop: 4
+      }
+    }, "Estimated: 1\u20133 weeks, depending on CoinJoin wait times."))), React.createElement("div", {
+      style: {
+        background: T.surface,
+        border: `1px solid ${T.border}`,
+        borderRadius: 14,
+        padding: "18px 22px",
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+        flexWrap: "wrap",
+        gap: 12
+      }
+    }, React.createElement("div", null, React.createElement("div", {
+      style: {
+        fontFamily: T.serif,
+        fontSize: 17,
+        color: T.text,
+        fontWeight: 400
+      }
+    }, "Share your privacy score"), React.createElement("div", {
+      style: {
+        fontSize: 13,
+        color: T.textMid,
+        marginTop: 3
+      }
+    }, "Let your Nostr or Twitter followers check theirs.")), React.createElement("button", {
+      onClick: () => setShareOpen(true),
+      style: {
+        background: T.cyan,
+        border: "none",
+        borderRadius: 10,
+        padding: "11px 20px",
+        color: T.bg,
+        fontFamily: T.sans,
+        fontWeight: 700,
+        fontSize: 14,
+        cursor: "pointer"
+      }
+    }, "Share Grade ", grade, " \u2192")));
+  })(), tab === "Overview" && React.createElement(React.Fragment, null, React.createElement(ScoreBreakdown, {
     checks: checks,
     score: score,
     isMobile: isMobile,
