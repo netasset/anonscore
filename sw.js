@@ -14,7 +14,10 @@
  * calls (blockstream.info, mempool.space) go straight to the network — the
  * service worker never sees user addresses.
  */
-const CACHE = "anonscore-v2";
+// v3: bumped to purge any previously-cached query-bearing URLs (e.g. a
+// /?scan=<address> share link) that older SW versions may have stored — see
+// the query-stripping guard in the fetch handler below.
+const CACHE = "anonscore-v3";
 const PRECACHE = [
   "/",
   "/index.html",
@@ -64,7 +67,13 @@ self.addEventListener("fetch", (e) => {
       const network = fetch(req).then(async (res) => {
         if (res && res.ok && res.type === "basic") {
           const clone = res.clone();
-          await caches.open(CACHE).then((c) => c.put(req, clone));
+          // Never persist a URL that carries query params (e.g. /?scan=<address>
+          // or /?case=…) — that would write a scanned address into the on-disk
+          // cache. The SPA shell is byte-identical for every query, so store it
+          // under the bare pathname instead. Address-bearing URLs then simply
+          // fall through to network (or the /index.html offline fallback).
+          const key = url.search ? new Request(url.origin + url.pathname) : req;
+          await caches.open(CACHE).then((c) => c.put(key, clone));
         }
         return res;
       }).catch(() =>
