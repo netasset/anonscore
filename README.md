@@ -11,7 +11,7 @@ Live: <https://anonscore.com>
 ## What it does
 
 - **11 Bitcoin heuristics**: address reuse, dust attacks, round amounts, CoinJoin usage, unsafe consolidation, UTXO count, fee fingerprinting, change address reuse, balance concentration, script-type mixing, change detection (script-type mismatch).
-- **8 Lightning heuristics**: KYC peers, channel diversity, Tor/IP exposure, alias privacy, capacity concentration, peer analysis, node age, fee fingerprinting.
+- **8 Lightning heuristics**: public node announcement, KYC exchange peers, Tor/clearnet exposure, channel diversity, capacity concentration, alias privacy, node establishment (age), on-chain channel footprint.
 - **Cluster Exposure**: computes the common-input-ownership heuristic — the workhorse of chain surveillance — client-side, and draws the cluster of other addresses the chain ties to the one you scanned. Each linked address is auditable in one click.
 - **Address-poisoning alert**: flags lookalike addresses planted in your history (same first/last characters as yours) — the copy-paste scam bait — before you copy the wrong one. Deliberately not part of the privacy score: being targeted doesn't make a wallet more traceable.
 - **Plain-English mode**: every check rephrased for non-technical users.

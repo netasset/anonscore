@@ -214,24 +214,24 @@ const LANDING_CHECKS = [{
   desc: "When a payment's two outputs use different address types and only one matches your input, analysts know that one is your change."
 }];
 const LANDING_FACTS = [{
-  stat: "$1.1B",
-  desc: "Chainalysis 2023 revenue — the price governments pay to surveil Bitcoin transactions",
-  source: "Bloomberg, Apr 2023",
-  url: "https://www.bloomberg.com/news/articles/2023-04-21/crypto-sleuth-chainalysis-raises-170-million-to-expand"
+  stat: "$8.6B",
+  desc: "valuation of Chainalysis — the largest blockchain-surveillance firm, whose customers include governments and exchanges (~$190M 2023 revenue)",
+  source: "Chainalysis Series F, May 2022",
+  url: "https://www.chainalysis.com/blog/series-f/"
 }, {
-  stat: "91%",
-  desc: "of Bitcoin addresses have been reused at least once — the most common privacy mistake",
-  source: "Blockchair analytics, 2023",
-  url: "https://blockchair.com"
+  stat: "§10",
+  desc: "of the Bitcoin whitepaper says to use a new address for every payment. Reusing one permanently links all its transactions — the most common avoidable privacy mistake.",
+  source: "Bitcoin whitepaper (Nakamoto, 2008)",
+  url: "https://bitcoin.org/bitcoin.pdf"
 }, {
   stat: "546 sat",
   desc: "minimum dust threshold — outputs below this are used by surveillance firms as tracking beacons",
-  source: "Bitcoin protocol spec / BIP 113",
+  source: "Bitcoin Core relay policy (GetDustThreshold)",
   url: "https://github.com/bitcoin/bitcoin/blob/master/src/policy/policy.cpp"
 }, {
-  stat: "38/100",
-  desc: "typical wallet privacy score — most users have address reuse, no CoinJoin, and round-amount withdrawals",
-  source: "AnonScore internal data, 2024",
+  stat: "~38/100",
+  desc: "what this tool scores a typical wallet — address reuse, no CoinJoin, round-amount withdrawals. An illustrative baseline you can reproduce, not survey data.",
+  source: "AnonScore scoring rubric — we store no scan data",
   url: ""
 }];
 const FUNDING = {
@@ -285,7 +285,7 @@ const STRINGS = {
     "hero.h1.em": "Find out in 60 seconds.",
     "hero.sub": "Paste a Bitcoin address or a Lightning node pubkey. Get a privacy score, every issue explained, and a ranked fix plan — free, open source, nothing stored.",
     "spectrum.low": "0 · Fully traceable",
-    "spectrum.avg": "avg wallet: 38",
+    "spectrum.avg": "typical wallet: ~38",
     "spectrum.high": "100 · Invisible",
     "trust.btc": "₿ Addresses are public by design — we never see or store yours. The relay decides whether the explorer can see your IP too.",
     "trust.ln": "⚡ Node pubkeys are public on the gossip network — we never see or store yours. The relay decides whether mempool.space can see your IP too.",
@@ -319,7 +319,7 @@ const STRINGS = {
     "err.empty": "Please enter a Bitcoin address or Lightning node pubkey.",
     "err.invalid": "Paste a Bitcoin address (bc1…, 1…, 3…) or a Lightning node pubkey (66-char hex).",
     "err.lnaddress": "Lightning addresses can't be audited yet — paste your node's 66-character pubkey instead.",
-    "finalcta.h2.a": "Most wallets score 38/100.",
+    "finalcta.h2.a": "A typical wallet scores ~38/100.",
     "finalcta.h2.b": "Where does yours land?",
     "finalcta.sub": "Free, open source, nothing stored. Takes 60 seconds.",
     "finalcta.scan": "Scan my address ↑",
@@ -346,7 +346,7 @@ const STRINGS = {
     "hero.h1.em": "Descúbrelo en 60 segundos.",
     "hero.sub": "Pega una dirección de Bitcoin o la clave pública de un nodo Lightning. Obtén una puntuación de privacidad, cada problema explicado y un plan de mejora priorizado — gratis, código abierto, nada se guarda.",
     "spectrum.low": "0 · Totalmente rastreable",
-    "spectrum.avg": "billetera promedio: 38",
+    "spectrum.avg": "billetera típica: ~38",
     "spectrum.high": "100 · Invisible",
     "trust.btc": "₿ Las direcciones son públicas por diseño — nunca vemos ni guardamos la tuya. El relé decide si el explorador también puede ver tu IP.",
     "trust.ln": "⚡ Las claves de nodo son públicas en la red gossip — nunca vemos ni guardamos la tuya. El relé decide si mempool.space también puede ver tu IP.",
@@ -380,7 +380,7 @@ const STRINGS = {
     "err.empty": "Ingresa una dirección de Bitcoin o la clave pública de un nodo Lightning.",
     "err.invalid": "Pega una dirección de Bitcoin (bc1…, 1…, 3…) o una clave pública de nodo Lightning (66 caracteres hex).",
     "err.lnaddress": "Las direcciones Lightning aún no se pueden auditar — pega la clave pública (66 caracteres hex) de tu nodo.",
-    "finalcta.h2.a": "La mayoría de billeteras puntúa 38/100.",
+    "finalcta.h2.a": "Una billetera típica puntúa ~38/100.",
     "finalcta.h2.b": "¿Dónde queda la tuya?",
     "finalcta.sub": "Gratis, código abierto, nada se guarda. Toma 60 segundos.",
     "finalcta.scan": "Escanear mi dirección ↑",
@@ -851,11 +851,11 @@ The forensic lesson: holding coins without moving them is effective short-term p
   title: "The Satoshi Cluster",
   address: "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa",
   entity: "Satoshi Nakamoto (attributed)",
-  btc: "~1,100,000",
+  btc: "~100",
   category: "miner",
   status: "dormant",
   added: "2026-04-01",
-  hook: "The genesis address. The first Bitcoin ever mined. 1,000,000+ BTC never moved. What does the original Bitcoin wallet tell us about privacy — and what happens if it ever moves?",
+  hook: "The genesis address holds the first 50 BTC ever mined — provably unspendable, never moved (the ~100 BTC you see is well-wishers' tribute dust). It anchors the ~1.1M-BTC 'Patoshi' cluster: thousands of early addresses, identified by one mining fingerprint, untouched for 15+ years. What happens if it ever moves?",
   summary: "Satoshi Nakamoto mined approximately 1.1 million Bitcoin in the early days of the network, identifiable through a distinctive mining pattern called the Patoshi Pattern. None of it has ever been spent. These dormant coins represent the ultimate long-term hodl — and the ultimate privacy case study.",
   narrative: `On January 3, 2009, Satoshi Nakamoto mined the first Bitcoin block — the Genesis Block — and received 50 BTC. That reward has never moved. Neither have the rewards from thousands of subsequent blocks Satoshi mined in the following months.
 
@@ -1702,10 +1702,10 @@ const SCAN_STEPS = [{
   fact: "UTXOs are like banknotes. How many you hold and their sizes reveal your spending habits."
 }, {
   label: "Pulling transaction history…",
-  fact: "Chainalysis has processed 1B+ transactions for government agencies since 2014."
+  fact: "Blockchain-surveillance is a multi-billion-dollar industry — its whole business is de-anonymizing public chain data."
 }, {
   label: "Checking address reuse…",
-  fact: "91% of wallets reuse addresses. It's the single biggest privacy mistake in Bitcoin."
+  fact: "Reusing an address even once permanently links all its transactions — the single biggest avoidable privacy mistake in Bitcoin."
 }, {
   label: "Looking for dust attacks…",
   fact: "Exchanges and surveillance firms send dust to wallets they want to track. It's legal."
@@ -2855,6 +2855,7 @@ const Pill = ({
   color
 }) => React.createElement("button", {
   onClick: onClick,
+  "aria-pressed": !!active,
   style: {
     background: active ? (color || T.cyan) + "22" : "transparent",
     border: `1.5px solid ${active ? color || T.cyan : T.border}`,
@@ -3282,13 +3283,13 @@ function DemoPreview() {
       fontWeight: 600,
       marginBottom: 4
     }
-  }, "\u20BF Average wallet scores 38/100"), React.createElement("div", {
+  }, "\u20BF A typical wallet scores ~38/100"), React.createElement("div", {
     style: {
       fontSize: 12,
       color: T.textMid,
       lineHeight: 1.6
     }
-  }, "Most wallets have at least 3 fixable issues. The most common? Address reuse \u2014 found in 91% of wallets."), React.createElement("div", {
+  }, "Most wallets have at least 3 fixable issues \u2014 usually address reuse, no CoinJoin, and round-amount withdrawals."), React.createElement("div", {
     style: {
       fontFamily: T.mono,
       fontSize: 9,
@@ -3296,7 +3297,7 @@ function DemoPreview() {
       marginTop: 6,
       letterSpacing: 1
     }
-  }, "Source: OXT Research, 2023")));
+  }, "Illustrative baseline \u2014 reproducible, we store no scan data")));
 }
 function ensureDomToImage() {
   if (window.domtoimage) return Promise.resolve();
@@ -3728,7 +3729,7 @@ function ShareCard({
   const issueCount = checks.filter(c => c.status !== "pass").length;
   const modeStr = isLightning ? "Lightning node" : "Bitcoin wallet";
   const heuristicStr = isLightning ? "8 Lightning privacy checks" : "11 on-chain heuristics";
-  const avgStr = isLightning ? "" : "\n\nMost wallets score 38/100. How does yours compare?";
+  const avgStr = isLightning ? "" : "\n\nA typical wallet scores ~38/100. How does yours compare?";
   const shareText = `My ${modeStr} privacy score: Grade ${grade} (${score}/100)\n${issueCount} issue${issueCount !== 1 ? "s" : ""} found.\nCheck yours free → anonscore.com`;
   const xText = `My ${modeStr} privacy score: Grade ${grade} (${score}/100) — ${issueCount} issue${issueCount !== 1 ? "s" : ""} found.${avgStr}\n\nFree tool 👇\nanonscore.com`;
   const badgeMd = `\`Privacy: ${score}/100 · Grade ${grade}\` — [AnonScore](https://anonscore.com)`;
@@ -9376,7 +9377,7 @@ function AiConsentGate({
   onDecline
 }) {
   const {
-    preview
+    systemPrompt
   } = buildAiContext(checks, recommendations, score, grade, walletMeta);
   const dialogRef = useDialog(onDecline);
   return React.createElement("div", {
@@ -9451,39 +9452,33 @@ function AiConsentGate({
       fontSize: 9,
       color: T.green,
       letterSpacing: 1.5,
-      marginBottom: 10
+      marginBottom: 8
     }
-  }, "\u2713 SENT TO ANTHROPIC'S API"), preview.map((line, i) => React.createElement("div", {
-    key: i,
+  }, "\u2713 SENT TO ANTHROPIC'S API \u2014 THE EXACT TEXT"), React.createElement("pre", {
     style: {
-      display: "flex",
-      gap: 8,
-      padding: "4px 0",
-      borderTop: i > 0 ? `1px solid ${T.borderLo}` : undefined
-    }
-  }, React.createElement("span", {
-    style: {
-      color: T.textDim,
-      fontSize: 10,
-      flexShrink: 0,
-      marginTop: 1
-    }
-  }, "\u203A"), React.createElement("span", {
-    style: {
+      margin: 0,
+      maxHeight: 200,
+      overflow: "auto",
+      background: T.bg,
+      border: `1px solid ${T.borderLo}`,
+      borderRadius: 8,
+      padding: "10px 12px",
       fontFamily: T.mono,
-      fontSize: 11,
+      fontSize: 10.5,
+      lineHeight: 1.5,
       color: T.textMid,
-      lineHeight: 1.5
+      whiteSpace: "pre-wrap",
+      wordBreak: "break-word"
     }
-  }, line))), React.createElement("div", {
+  }, systemPrompt), React.createElement("div", {
     style: {
       fontFamily: T.mono,
       fontSize: 9,
       color: T.textDim,
-      marginTop: 10,
+      marginTop: 8,
       lineHeight: 1.5
     }
-  }, "This is the complete list. Nothing else leaves your browser.", " ", React.createElement("a", {
+  }, "That's the complete context \u2014 plus the questions you type in the chat. Don't paste your address or anything you don't want sent.", " ", React.createElement("a", {
     href: "https://github.com/netasset/anonscore/blob/main/anonscore.jsx",
     target: "_blank",
     rel: "noopener noreferrer",
@@ -11602,9 +11597,9 @@ function Dashboard({
     sub: "total",
     color: T.cyan
   }, {
-    label: "VS AVG",
+    label: "VS TYPICAL",
     val: score > 38 ? `+${score - 38}` : `${score - 38}`,
-    sub: "avg is 38",
+    sub: "typical ~38",
     color: score > 38 ? T.green : T.red
   }, ...(clusterN > 0 ? [{
     label: "CLUSTER",
@@ -12481,7 +12476,7 @@ function Dashboard({
       letterSpacing: 1.5,
       marginBottom: 12
     }
-  }, "YOUR SCORE VS AVERAGE"), React.createElement("div", {
+  }, "YOUR SCORE VS TYPICAL"), React.createElement("div", {
     style: {
       display: "flex",
       gap: 20
@@ -12492,7 +12487,7 @@ function Dashboard({
     c: riskColor
   }, {
     v: 38,
-    l: "AVERAGE",
+    l: "TYPICAL",
     c: T.textMid
   }, {
     v: 97,
@@ -13005,14 +13000,14 @@ function Dashboard({
     src: "Blockstream / mempool.space Esplora API",
     desc: "Public blockchain data — UTXOs, transactions, address stats. Read-only, your choice of explorer — by default fetched via our open-source no-log relay so the explorer can't see your IP."
   }, {
-    src: "OXT Research (2023)",
-    desc: "Wallet address reuse rates — 91% of wallets reuse at least one address."
+    src: "Bitcoin whitepaper §10 (Nakamoto, 2008)",
+    desc: "Nakamoto's own privacy guidance: use a new address for every payment. Reuse permanently links transactions — the heuristic behind our address-reuse check."
   }, {
-    src: "Chainalysis 2023 Annual Report",
-    desc: "$1.1B surveillance contract revenue figure. 1B+ transactions processed for governments."
+    src: "Chainalysis (Series F, May 2022)",
+    desc: "$8.6B valuation, ~$190M 2023 revenue (Sacra) — the scale of the blockchain-surveillance industry that reads this same public data."
   }, {
-    src: "Blockstream Research",
-    desc: "1-in-3 wallets contain dust UTXOs planted by tracking services."
+    src: "Bitcoin Core relay policy",
+    desc: "The 546-sat dust threshold (GetDustThreshold) — outputs below it are used as tracking beacons."
   }].map((s, i) => React.createElement("div", {
     key: i,
     style: {
