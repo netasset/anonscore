@@ -1059,6 +1059,22 @@ function classifyUtxo(u) {
   return "clean";
 }
 
+// A CoinJoin has many *participants*: several inputs (each from a different
+// owner) AND several equal-value outputs (the shared denomination). A single-
+// sender batch payout also emits many equal outputs — but from ONE input.
+// Requiring multiple inputs is what separates a real mix from a batch, so a
+// batch is never miscredited as privacy-positive mixing. Used everywhere
+// CoinJoin shape is judged (scoring, cluster exclusion, exposure map) so the
+// definition can't drift between call sites.
+function isCoinJoinShape(vin, vout) {
+  const inputs = (vin || []).length;
+  const outs = vout || [];
+  if (inputs < 3 || outs.length < 5) return false;
+  const dn = {};
+  outs.forEach(o => { if (o && o.value != null) dn[o.value] = (dn[o.value] || 0) + 1; });
+  return Math.max(0, ...Object.values(dn)) >= 3;
+}
+
 /* ─────────────────────────────────────────────
    PRIVACY ENGINE — 11 heuristics
 ───────────────────────────────────────────── */
@@ -1101,15 +1117,11 @@ function runEngine(utxos = [], txs = [], txCount = 0) {
   else if (round.length) add("round","Round Amounts","warn","1 round-number UTXO — minor fingerprint","One round amount. Use odd numbers next time you withdraw from an exchange.","medium",-5);
   else                   add("round","Round Amounts","pass","No suspicious round amounts","Good — your UTXOs use non-round amounts.","clean",0);
 
-  // 4. CoinJoin — FIX: guard against empty vals array
+  // 4. CoinJoin — requires multiple inputs (participants), not just repeated
+  // outputs, so a single-sender batch payout isn't miscredited as a mix.
   let cjCount = 0;
   for (const tx of txs.slice(0, 20)) {
-    if (tx.vout?.length >= 5) {
-      const vals = tx.vout.map(o => o.value).filter(Boolean);
-      if (!vals.length) continue; // FIX: guard Math.max of empty array
-      const freq = Math.max(...[...new Set(vals)].map(v => vals.filter(x => x === v).length));
-      if (freq >= 3) cjCount++;
-    }
+    if (isCoinJoinShape(tx.vin, tx.vout)) cjCount++;
   }
   if (cjCount >= 2)      add("cj","CoinJoin Used","pass",`${cjCount} CoinJoin transactions — strong mixing hygiene`,"You've used CoinJoin to break transaction links. This significantly improves your privacy.","clean",+12);
   else if (cjCount === 1)add("cj","CoinJoin Used","warn","1 CoinJoin — anonymity set may be small","You've used CoinJoin once. More rounds with larger groups improve your score.","medium",+4);
@@ -1333,8 +1345,8 @@ const DEMO_A = {
     { txid:"38ee9c7be5f02266",vout:1,value:9847251, scriptpubkey_type:"v0_p2wpkh",status:{confirmed:true,block_time:now()-86400*15}},
   ],
   txs: [
-    // CoinJoin #1 — 8 outputs, 5 share the 5,000,000-sat denomination
-    { txid:"7a82bc91",vin:[{txid:"src1",vout:0}],vout:[
+    // CoinJoin #1 — 5 inputs (participants), 8 outputs, 5 share the 5,000,000-sat denomination
+    { txid:"7a82bc91",vin:[{txid:"src1a",vout:0},{txid:"src1b",vout:1},{txid:"src1c",vout:0},{txid:"src1d",vout:3},{txid:"src1e",vout:1}],vout:[
       {value:5000000,scriptpubkey_address:"bc1qcj1"},
       {value:5000000,scriptpubkey_address:"bc1qcj2"},
       {value:5000000,scriptpubkey_address:"bc1qcj3"},
@@ -1344,8 +1356,8 @@ const DEMO_A = {
       {value:3214557,scriptpubkey_address:"bc1qch1"},
       {value:1024113,scriptpubkey_address:"bc1qch2"},
     ],fee:8923,size:545,status:{block_time:now()-86400*30}},
-    // CoinJoin #2 — 6 outputs, 4 share the 1,000,000-sat denomination
-    { txid:"2e91a4bc",vin:[{txid:"src2",vout:0}],vout:[
+    // CoinJoin #2 — 4 inputs (participants), 6 outputs, 4 share the 1,000,000-sat denomination
+    { txid:"2e91a4bc",vin:[{txid:"src2a",vout:0},{txid:"src2b",vout:1},{txid:"src2c",vout:0},{txid:"src2d",vout:2}],vout:[
       {value:1000000,scriptpubkey_address:"bc1qcj6"},
       {value:1000000,scriptpubkey_address:"bc1qcj7"},
       {value:1000000,scriptpubkey_address:"bc1qcj8"},
@@ -4751,8 +4763,7 @@ function computeCluster(txs, address) {
     const vin = tx.vin || [], vout = tx.vout || [];
     const inAddrs = vin.map(v => v.prevout?.scriptpubkey_address).filter(Boolean);
     if (!inAddrs.includes(address)) return; // only spends FROM this address link anything
-    const dn = {}; vout.forEach(o => { dn[o.value] = (dn[o.value] || 0) + 1; });
-    if (vout.length >= 5 && Math.max(0, ...Object.values(dn)) >= 3) { cjExcluded++; return; }
+    if (isCoinJoinShape(vin, vout)) { cjExcluded++; return; }
     spends++;
     new Set(inAddrs).forEach(a => { if (a !== address) links.set(a, (links.get(a) || 0) + 1); });
   });
@@ -4909,8 +4920,7 @@ function ExposureFlow({ txs, isMobile, onFix, entity, address, onScan }) {
   list.forEach(tx => {
     const vin = tx.vin || [], vout = tx.vout || [];
     const inAddrs = new Set(vin.map(v => v.prevout?.scriptpubkey_address).filter(Boolean));
-    const dn = {}; vout.forEach(o => { dn[o.value] = (dn[o.value] || 0) + 1; });
-    const cj = vout.length >= 5 && Math.max(0, ...Object.values(dn)) >= 3;
+    const cj = isCoinJoinShape(vin, vout);
     const cons = vin.length >= 4 && vout.length <= 2;
     const dust = vout.some(isDust);
     const reuse = vout.some(o => o.scriptpubkey_address && inAddrs.has(o.scriptpubkey_address));
@@ -4978,7 +4988,7 @@ function ExposureFlow({ txs, isMobile, onFix, entity, address, onScan }) {
         const maxOut = Math.max(...vout.map(o => o.value || 0), 1);
         const inCount = vin.length, outCount = vout.length;
         const denom = {}; vout.forEach(o => { denom[o.value] = (denom[o.value] || 0) + 1; });
-        const coinjoin = outCount >= 5 && Math.max(0, ...Object.values(denom)) >= 3;
+        const coinjoin = isCoinJoinShape(vin, vout);
         const consolidation = inCount >= 4 && outCount <= 2;
         const hasDust = vout.some(isDust);
         const hasReuse = vout.some(o => o.scriptpubkey_address && inputAddrs.has(o.scriptpubkey_address));

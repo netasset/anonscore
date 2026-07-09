@@ -1734,6 +1734,16 @@ function classifyUtxo(u) {
   if (u.value > 5000000) return "low";
   return "clean";
 }
+function isCoinJoinShape(vin, vout) {
+  const inputs = (vin || []).length;
+  const outs = vout || [];
+  if (inputs < 3 || outs.length < 5) return false;
+  const dn = {};
+  outs.forEach(o => {
+    if (o && o.value != null) dn[o.value] = (dn[o.value] || 0) + 1;
+  });
+  return Math.max(0, ...Object.values(dn)) >= 3;
+}
 function runEngine(utxos = [], txs = [], txCount = 0) {
   if (txCount === 0 && utxos.length === 0) {
     return {
@@ -1767,12 +1777,7 @@ function runEngine(utxos = [], txs = [], txCount = 0) {
   if (round.length >= 2) add("round", "Round Amounts", "fail", `${round.length} round-number UTXOs — KYC withdrawal pattern`, "Round amounts like 0.1 BTC are a Chainalysis red flag. Analysts assume these came from KYC exchanges.", "high", -10);else if (round.length) add("round", "Round Amounts", "warn", "1 round-number UTXO — minor fingerprint", "One round amount. Use odd numbers next time you withdraw from an exchange.", "medium", -5);else add("round", "Round Amounts", "pass", "No suspicious round amounts", "Good — your UTXOs use non-round amounts.", "clean", 0);
   let cjCount = 0;
   for (const tx of txs.slice(0, 20)) {
-    if (tx.vout?.length >= 5) {
-      const vals = tx.vout.map(o => o.value).filter(Boolean);
-      if (!vals.length) continue;
-      const freq = Math.max(...[...new Set(vals)].map(v => vals.filter(x => x === v).length));
-      if (freq >= 3) cjCount++;
-    }
+    if (isCoinJoinShape(tx.vin, tx.vout)) cjCount++;
   }
   if (cjCount >= 2) add("cj", "CoinJoin Used", "pass", `${cjCount} CoinJoin transactions — strong mixing hygiene`, "You've used CoinJoin to break transaction links. This significantly improves your privacy.", "clean", +12);else if (cjCount === 1) add("cj", "CoinJoin Used", "warn", "1 CoinJoin — anonymity set may be small", "You've used CoinJoin once. More rounds with larger groups improve your score.", "medium", +4);else add("cj", "CoinJoin Used", "fail", "No CoinJoin — full history traceable", "Your transaction history is fully visible. CoinJoin breaks this chain permanently.", "high", -8);
   const cons = txs.filter(t => t.vin?.length >= 4 && t.vout?.length <= 2);
@@ -2194,8 +2199,20 @@ const DEMO_A = {
   txs: [{
     txid: "7a82bc91",
     vin: [{
-      txid: "src1",
+      txid: "src1a",
       vout: 0
+    }, {
+      txid: "src1b",
+      vout: 1
+    }, {
+      txid: "src1c",
+      vout: 0
+    }, {
+      txid: "src1d",
+      vout: 3
+    }, {
+      txid: "src1e",
+      vout: 1
     }],
     vout: [{
       value: 5000000,
@@ -2230,8 +2247,17 @@ const DEMO_A = {
   }, {
     txid: "2e91a4bc",
     vin: [{
-      txid: "src2",
+      txid: "src2a",
       vout: 0
+    }, {
+      txid: "src2b",
+      vout: 1
+    }, {
+      txid: "src2c",
+      vout: 0
+    }, {
+      txid: "src2d",
+      vout: 2
     }],
     vout: [{
       value: 1000000,
@@ -10253,11 +10279,7 @@ function computeCluster(txs, address) {
       vout = tx.vout || [];
     const inAddrs = vin.map(v => v.prevout?.scriptpubkey_address).filter(Boolean);
     if (!inAddrs.includes(address)) return;
-    const dn = {};
-    vout.forEach(o => {
-      dn[o.value] = (dn[o.value] || 0) + 1;
-    });
-    if (vout.length >= 5 && Math.max(0, ...Object.values(dn)) >= 3) {
+    if (isCoinJoinShape(vin, vout)) {
       cjExcluded++;
       return;
     }
@@ -10621,11 +10643,7 @@ function ExposureFlow({
     const vin = tx.vin || [],
       vout = tx.vout || [];
     const inAddrs = new Set(vin.map(v => v.prevout?.scriptpubkey_address).filter(Boolean));
-    const dn = {};
-    vout.forEach(o => {
-      dn[o.value] = (dn[o.value] || 0) + 1;
-    });
-    const cj = vout.length >= 5 && Math.max(0, ...Object.values(dn)) >= 3;
+    const cj = isCoinJoinShape(vin, vout);
     const cons = vin.length >= 4 && vout.length <= 2;
     const dust = vout.some(isDust);
     const reuse = vout.some(o => o.scriptpubkey_address && inAddrs.has(o.scriptpubkey_address));
@@ -10815,7 +10833,7 @@ function ExposureFlow({
     vout.forEach(o => {
       denom[o.value] = (denom[o.value] || 0) + 1;
     });
-    const coinjoin = outCount >= 5 && Math.max(0, ...Object.values(denom)) >= 3;
+    const coinjoin = isCoinJoinShape(vin, vout);
     const consolidation = inCount >= 4 && outCount <= 2;
     const hasDust = vout.some(isDust);
     const hasReuse = vout.some(o => o.scriptpubkey_address && inputAddrs.has(o.scriptpubkey_address));
