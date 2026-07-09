@@ -355,10 +355,15 @@ const unit = await page.evaluate(() => {
     const consolidation = { txid: "t1", vin: [pv(me), pv(sib1), pv(sib2)], vout: [{ value: 9e7 }] };
     const c1 = E.computeCluster([consolidation], me);
     t("cluster: 3-input spend links the 2 sibling addresses", c1.linked.length === 2 && c1.spends === 1);
-    // Equal-output CoinJoin must NOT imply one owner
-    const cj = { txid: "t2", vin: [pv(me), pv(sib1)], vout: [{ value: 5e6 }, { value: 5e6 }, { value: 5e6 }, { value: 1e6 }, { value: 2e6 }] };
+    // A real (multi-participant) CoinJoin must NOT imply one owner
+    const cj = { txid: "t2", vin: [pv(me), pv(sib1), pv(sib2)], vout: [{ value: 5e6 }, { value: 5e6 }, { value: 5e6 }, { value: 1e6 }, { value: 2e6 }] };
     const c2 = E.computeCluster([cj], me);
-    t("cluster: equal-output CoinJoin is excluded", c2.linked.length === 0 && c2.cjExcluded === 1);
+    t("cluster: multi-input equal-output CoinJoin is excluded", c2.linked.length === 0 && c2.cjExcluded === 1);
+    // Audit regression: a SINGLE-input batch payout also has repeated equal
+    // outputs but is NOT a CoinJoin — it must not be excluded as one.
+    const batch = { txid: "b1", vin: [pv(me)], vout: [{ value: 5e6 }, { value: 5e6 }, { value: 5e6 }, { value: 5e6 }, { value: 1e6 }] };
+    const c4 = E.computeCluster([batch], me);
+    t("cluster: single-input batch payout is NOT treated as a CoinJoin", c4.cjExcluded === 0 && c4.spends === 1);
     // Receive-only history links nothing
     const recv = { txid: "t3", vin: [pv(sib1)], vout: [{ value: 1e6, scriptpubkey_address: me }] };
     const c3 = E.computeCluster([recv], me);
@@ -400,6 +405,12 @@ const unit = await page.evaluate(() => {
     const clean = E.runEngine([coin(5e7), coin(3e7)], [], 2);
     const dusted = E.runEngine([coin(5e7), coin(3e7), coin(500), coin(510), coin(520)], [], 5);
     t("engine: dust beacons lower the score", dusted.score < clean.score);
+    // Audit regression: a single-input batch payout (repeated equal outputs,
+    // one input) must NOT be credited as CoinJoin — the cj check stays "fail".
+    const batchTx = { txid: "bt", vin: [{ txid: "s", vout: 0 }], vout: [{ value: 5e6 }, { value: 5e6 }, { value: 5e6 }, { value: 5e6 }, { value: 1e6 }], status: { block_time: now - 86400 } };
+    const batchRes = E.runEngine([coin(5e7)], [batchTx], 1);
+    const cjCheck = batchRes.checks.find(c => c.key === "cj");
+    t("engine: single-input batch is not miscredited as CoinJoin", !!cjCheck && cjCheck.status === "fail");
     t("engine: grade boundaries (A/F)", E.scoreGrade(95) === "A" && E.scoreGrade(30) === "F");
     t("engine: validators (genesis addr, junk, LN pubkey)",
       E.isValidBitcoinAddress("1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa") === true &&
