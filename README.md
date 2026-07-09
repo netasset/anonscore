@@ -15,7 +15,7 @@ Live: <https://anonscore.com>
 - **Cluster Exposure**: computes the common-input-ownership heuristic — the workhorse of chain surveillance — client-side, and draws the cluster of other addresses the chain ties to the one you scanned. Each linked address is auditable in one click.
 - **Address-poisoning alert**: flags lookalike addresses planted in your history (same first/last characters as yours) — the copy-paste scam bait — before you copy the wrong one. Deliberately not part of the privacy score: being targeted doesn't make a wallet more traceable.
 - **Plain-English mode**: every check rephrased for non-technical users.
-- **AI Privacy Assistant** (optional, consent-gated): personalized guidance for *your* specific issues. Your address is never sent — only your analysis results: the score, the findings (each with its plain-English explanation), and the ranked recommendations. For public/institutional wallets (Case Files, forensic mode) the payload also includes public on-chain transaction and UTXO summaries — all data anyone can already read off the chain. A preview of exactly what will be sent is shown in the consent gate before anything leaves the browser.
+- **AI Privacy Assistant** (optional, consent-gated): personalized guidance for *your* specific issues. Your address is never sent — only your analysis results: the score, the findings (each with its plain-English explanation), and the ranked recommendations. For public/institutional wallets (Case Files, forensic mode) the payload also includes public on-chain transaction and UTXO summaries — all data anyone can already read off the chain. The **exact text** that will be sent is shown in the consent gate before anything leaves the browser, and the worker that receives it is open source ([`workers/ai/`](workers/ai/)).
 - **Case Files**: forensic narratives of notable Bitcoin wallets (Bitfinex, Binance, Silk Road, etc.).
 - **PWA**: works fully offline after first visit. Installable to home screen.
 
@@ -98,7 +98,7 @@ Until `endpoint` is set, the signup form opens a `mailto:` link instead. Point i
 
 ### 4. AI Assistant (already configured)
 
-The AI worker URL (`anonscore-ai.netassetpremium.workers.dev`) is wired in. The 5-message daily cap is enforced server-side. The worker only ever receives what the consent gate previews — never the user's address.
+The AI worker URL (`anonscore-ai.netassetpremium.workers.dev`) is wired in. The 5-message daily cap is enforced server-side. The worker only ever receives what the consent gate shows — never the user's address. Its full source is published at [`workers/ai/`](workers/ai/) so those claims are verifiable, exactly like the relay.
 
 ### 5. Languages (i18n)
 
@@ -139,7 +139,7 @@ These same contacts are published machine-readably at [`/.well-known/security.tx
 
 **What we care about most**, given the threat model of a client-side privacy tool:
 
-- Anything that could leak a user's address off their device — the core promise is that the address you scan never reaches the AI worker or any server. The only outbound calls are the block explorer for the address you paste (by default via our open-source no-log relay — `workers/relay/` — so the explorer can't tie the address to your IP) and, if you opt in, the AI worker with the payload previewed in the consent gate.
+- Anything that could leak a user's address off their device — the core promise is that the address you scan never reaches the AI worker or any server. The only outbound calls are the block explorer for the address you paste (by default via our open-source no-log relay — `workers/relay/` — so the explorer can't tie the address to your IP) and, if you opt in, the AI worker (also open source — `workers/ai/`) with the exact payload shown in the consent gate.
 - CSP or self-hosting bypasses that would introduce a third-party runtime request.
 - XSS or injection via scanned addresses, URL params, or API responses.
 

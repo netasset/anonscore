@@ -1,0 +1,22 @@
+name = "anonscore-ai"
+main = "worker.js"
+compatibility_date = "2026-01-01"
+
+# Rate-limit counter store. Holds ONLY an integer per (hashed-IP, day) key,
+# each with a 24h TTL — no addresses, no message content, no raw IPs. See
+# hashIp() and the rate-limit block in worker.js. Fill in your namespace id.
+[[kv_namespaces]]
+binding = "KV"
+id = "<your-kv-namespace-id>"
+
+# The Anthropic API key is a SECRET, never committed here. Set it out-of-band:
+#   wrangler secret put ANTHROPIC_API_KEY
+# It is read as env.ANTHROPIC_API_KEY at runtime and never logged.
+
+# Observability OFF: the worker never logs message content or addresses (only
+# error metadata via console.error — status codes and Anthropic error text),
+# and the scanned address never reaches this worker at all. Keeping logs/traces
+# off means even that error metadata isn't retained — matching the privacy
+# stance of the relay. Pinned here so it stays off across deploys.
+[observability]
+enabled = false
