@@ -1076,6 +1076,261 @@ function isCoinJoinShape(vin, vout) {
 }
 
 /* ─────────────────────────────────────────────
+   TRANSACTION INSPECTOR — parse a PSBT / raw tx entirely in the browser and
+   analyze what it will leak BEFORE it's broadcast. Pure-JS (no eval/WASM, so
+   CSP-clean; no dependency). PSBTs embed their input UTXO data, so a PSBT is
+   analyzed with ZERO network — the transaction never leaves the browser.
+   Parser + encoders validated against BIP174 / BIP173 / BIP350 test vectors.
+───────────────────────────────────────────── */
+
+// -- byte helpers --
+function _hexToBytes(h) {
+  h = (h || "").trim().replace(/^0x/i, "");
+  if (h.length % 2) throw new Error("odd-length hex");
+  const out = new Uint8Array(h.length / 2);
+  for (let i = 0; i < out.length; i++) {
+    const b = parseInt(h.substr(i * 2, 2), 16);
+    if (Number.isNaN(b)) throw new Error("invalid hex");
+    out[i] = b;
+  }
+  return out;
+}
+function _bytesToHex(b) { let s = ""; for (const x of b) s += x.toString(16).padStart(2, "0"); return s; }
+function _base64ToBytes(b64) {
+  const bin = atob((b64 || "").trim());
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
+// -- pure-JS SHA-256 (for base58check + double-SHA256; SubtleCrypto is async
+//    and unusable in synchronous parse/render) --
+function _sha256(bytes) {
+  const K = [0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2];
+  let h0=0x6a09e667,h1=0xbb67ae85,h2=0x3c6ef372,h3=0xa54ff53a,h4=0x510e527f,h5=0x9b05688c,h6=0x1f83d9ab,h7=0x5be0cd19;
+  const l = bytes.length, bitLen = l * 8, withOne = l + 1;
+  const pad = (56 - (withOne % 64) + 64) % 64, total = withOne + pad + 8;
+  const m = new Uint8Array(total); m.set(bytes); m[l] = 0x80;
+  const dv = new DataView(m.buffer);
+  dv.setUint32(total - 4, bitLen >>> 0);
+  dv.setUint32(total - 8, Math.floor(bitLen / 0x100000000));
+  const w = new Int32Array(64), rotr = (x, n) => (x >>> n) | (x << (32 - n));
+  for (let off = 0; off < total; off += 64) {
+    for (let i = 0; i < 16; i++) w[i] = dv.getUint32(off + i * 4);
+    for (let i = 16; i < 64; i++) {
+      const s0 = rotr(w[i-15],7) ^ rotr(w[i-15],18) ^ (w[i-15] >>> 3);
+      const s1 = rotr(w[i-2],17) ^ rotr(w[i-2],19) ^ (w[i-2] >>> 10);
+      w[i] = (w[i-16] + s0 + w[i-7] + s1) | 0;
+    }
+    let a=h0,b=h1,c=h2,d=h3,e=h4,f=h5,g=h6,h=h7;
+    for (let i = 0; i < 64; i++) {
+      const S1 = rotr(e,6) ^ rotr(e,11) ^ rotr(e,25), ch = (e & f) ^ (~e & g);
+      const t1 = (h + S1 + ch + K[i] + w[i]) | 0;
+      const S0 = rotr(a,2) ^ rotr(a,13) ^ rotr(a,22), maj = (a & b) ^ (a & c) ^ (b & c);
+      const t2 = (S0 + maj) | 0;
+      h=g; g=f; f=e; e=(d + t1)|0; d=c; c=b; b=a; a=(t1 + t2)|0;
+    }
+    h0=(h0+a)|0;h1=(h1+b)|0;h2=(h2+c)|0;h3=(h3+d)|0;h4=(h4+e)|0;h5=(h5+f)|0;h6=(h6+g)|0;h7=(h7+h)|0;
+  }
+  const out = new Uint8Array(32), odv = new DataView(out.buffer);
+  [h0,h1,h2,h3,h4,h5,h6,h7].forEach((hv, i) => odv.setUint32(i * 4, hv >>> 0));
+  return out;
+}
+
+// -- bech32 / bech32m (BIP173 / BIP350); pure data, no secp256k1 --
+const _BECH = "qpzry9x8gf2tvdw0s3jn54khce6mua7l";
+function _bechPolymod(v){let chk=1;const G=[0x3b6a57b2,0x26508e6d,0x1ea119fa,0x3d4233dd,0x2a1462b3];for(const x of v){const b=chk>>25;chk=((chk&0x1ffffff)<<5)^x;for(let i=0;i<5;i++)if((b>>i)&1)chk^=G[i];}return chk;}
+function _hrpExpand(hrp){const r=[];for(let i=0;i<hrp.length;i++)r.push(hrp.charCodeAt(i)>>5);r.push(0);for(let i=0;i<hrp.length;i++)r.push(hrp.charCodeAt(i)&31);return r;}
+function _bechChecksum(hrp,data,spec){const C=spec==="bech32m"?0x2bc830a3:1;const v=_hrpExpand(hrp).concat(data).concat([0,0,0,0,0,0]);const pm=_bechPolymod(v)^C;const r=[];for(let i=0;i<6;i++)r.push((pm>>(5*(5-i)))&31);return r;}
+function _bechEncode(hrp,data,spec){const c=data.concat(_bechChecksum(hrp,data,spec));let s=hrp+"1";for(const d of c)s+=_BECH[d];return s;}
+function _convertBits(data,from,to,pad){let acc=0,bits=0;const r=[];const maxv=(1<<to)-1;for(const val of data){acc=((acc<<from)|val)&0xffffffff;bits+=from;while(bits>=to){bits-=to;r.push((acc>>bits)&maxv);}}if(pad&&bits)r.push((acc<<(to-bits))&maxv);return r;}
+function _segwitAddress(version,program){const data=[version].concat(_convertBits(Array.from(program),8,5,true));return _bechEncode("bc",data,version===0?"bech32":"bech32m");}
+
+// -- base58check (P2PKH / P2SH) --
+const _B58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+function _base58encode(bytes){let zeros=0;while(zeros<bytes.length&&bytes[zeros]===0)zeros++;const digits=[0];for(let i=zeros;i<bytes.length;i++){let carry=bytes[i];for(let j=0;j<digits.length;j++){carry+=digits[j]<<8;digits[j]=carry%58;carry=(carry/58)|0;}while(carry){digits.push(carry%58);carry=(carry/58)|0;}}let s="";for(let i=0;i<zeros;i++)s+="1";for(let i=digits.length-1;i>=0;i--)s+=_B58[digits[i]];return s;}
+function _base58check(version,payload){const buf=new Uint8Array(1+payload.length);buf[0]=version;buf.set(payload,1);const chk=_sha256(_sha256(buf)).slice(0,4);const full=new Uint8Array(buf.length+4);full.set(buf);full.set(chk,buf.length);return _base58encode(full);}
+
+// -- byte cursor for deserialization --
+function _makeCursor(bytes) {
+  let p = 0;
+  return {
+    get p() { return p; },
+    byte() { return bytes[p++]; },
+    peek() { return bytes[p]; },
+    slice(n) { if (p + n > bytes.length) throw new Error("unexpected end of data"); const s = bytes.slice(p, p + n); p += n; return s; },
+    u32() { if (p + 4 > bytes.length) throw new Error("unexpected end of data"); const v = (bytes[p]|(bytes[p+1]<<8)|(bytes[p+2]<<16)|(bytes[p+3]<<24)) >>> 0; p += 4; return v; },
+    u64() { if (p + 8 > bytes.length) throw new Error("unexpected end of data"); let v = 0n; for (let i = 0; i < 8; i++) v |= BigInt(bytes[p+i]) << BigInt(8*i); p += 8; if (v > BigInt(Number.MAX_SAFE_INTEGER)) throw new Error("value exceeds 2^53"); return Number(v); },
+    varint() { const f = bytes[p++]; if (f === undefined) throw new Error("unexpected end of data"); if (f < 0xfd) return f; if (f === 0xfd) { const v = bytes[p]|(bytes[p+1]<<8); p += 2; return v; } if (f === 0xfe) { const v = (bytes[p]|(bytes[p+1]<<8)|(bytes[p+2]<<16)|(bytes[p+3]<<24)) >>> 0; p += 4; return v; } let v = 0n; for (let i = 0; i < 8; i++) v |= BigInt(bytes[p+i]) << BigInt(8*i); p += 8; if (v > BigInt(Number.MAX_SAFE_INTEGER)) throw new Error("varint exceeds 2^53"); return Number(v); },
+    varslice() { const n = this.varint(); return this.slice(n); },
+  };
+}
+
+// -- scriptPubKey → { type, address }. The address is deterministic from the
+//    script bytes (real bc1…/1…/3… where encodable, else a "script:<hex>"
+//    sentinel), so equality — used for reuse/cluster detection — is byte-exact
+//    for every type while common cases still show a real address. --
+function classifyScript(s) {
+  if (s.length === 25 && s[0]===0x76 && s[1]===0xa9 && s[2]===0x14 && s[23]===0x88 && s[24]===0xac)
+    return { type: "p2pkh", address: _base58check(0x00, s.slice(3, 23)) };
+  if (s.length === 23 && s[0]===0xa9 && s[1]===0x14 && s[22]===0x87)
+    return { type: "p2sh", address: _base58check(0x05, s.slice(2, 22)) };
+  if (s.length === 22 && s[0]===0x00 && s[1]===0x14)
+    return { type: "v0_p2wpkh", address: _segwitAddress(0, s.slice(2)) };
+  if (s.length === 34 && s[0]===0x00 && s[1]===0x20)
+    return { type: "v0_p2wsh", address: _segwitAddress(0, s.slice(2)) };
+  if (s.length === 34 && s[0]===0x51 && s[1]===0x20)
+    return { type: "v1_p2tr", address: _segwitAddress(1, s.slice(2)) };
+  if (s.length >= 1 && s[0]===0x6a)
+    return { type: "op_return", address: null };
+  return { type: "unknown", address: null };
+}
+function _spkAddr(cl, spk) { return cl.address ?? ("script:" + _bytesToHex(spk)); }
+
+// -- deserialize a raw Bitcoin transaction → Esplora-ish shape --
+function parseRawTx(bytes) {
+  const c = _makeCursor(bytes);
+  const version = c.u32();
+  let segwit = false;
+  if (c.peek() === 0x00) { c.byte(); const flag = c.byte(); if (flag !== 0x01) throw new Error("bad segwit flag"); segwit = true; }
+  const nIn = c.varint();
+  if (nIn > 5000) throw new Error("too many inputs");
+  const vin = [];
+  for (let i = 0; i < nIn; i++) {
+    const prevTxid = c.slice(32);
+    const vout = c.u32();
+    c.varslice();        // scriptSig
+    c.u32();             // sequence
+    vin.push({ txid: _bytesToHex(prevTxid.slice().reverse()), vout, prevout: null });
+  }
+  const nOut = c.varint();
+  if (nOut > 5000) throw new Error("too many outputs");
+  const vout = [];
+  for (let i = 0; i < nOut; i++) {
+    const value = c.u64();
+    const spk = c.varslice();
+    const cl = classifyScript(spk);
+    vout.push({ value, scriptpubkey: _bytesToHex(spk), scriptpubkey_type: cl.type, scriptpubkey_address: _spkAddr(cl, spk) });
+  }
+  if (segwit) { for (let i = 0; i < nIn; i++) { const items = c.varint(); for (let j = 0; j < items; j++) c.varslice(); } }
+  const locktime = c.u32();
+  return { version, vin, vout, locktime, segwit };
+}
+
+// -- deserialize a PSBT (BIP174, v0) → the same shape, with input prevouts
+//    resolved from witness_utxo / non_witness_utxo (so fully offline) --
+function parsePsbt(bytes) {
+  const c = _makeCursor(bytes);
+  if (_bytesToHex(c.slice(5)) !== "70736274ff") throw new Error("not a PSBT (bad magic)");
+  let unsigned = null;
+  while (true) {                                  // global map
+    const kl = c.varint(); if (kl === 0) break;
+    const key = c.slice(kl); const val = c.varslice();
+    if (key[0] === 0x00) unsigned = parseRawTx(val);
+  }
+  if (!unsigned) throw new Error("PSBTv2 (or missing unsigned tx) isn't supported yet — paste a v0 PSBT or the raw transaction hex");
+  let partial = false;
+  for (let i = 0; i < unsigned.vin.length; i++) {  // one input map per vin
+    let wUtxo = null, nwUtxo = null;
+    while (true) {
+      const kl = c.varint(); if (kl === 0) break;
+      const key = c.slice(kl); const val = c.varslice();
+      if (key[0] === 0x01) { const ic = _makeCursor(val); const value = ic.u64(); const spk = ic.varslice(); wUtxo = { value, spk }; }
+      else if (key[0] === 0x00) { nwUtxo = parseRawTx(val); }
+    }
+    let uxo = null;
+    if (wUtxo) uxo = wUtxo;
+    else if (nwUtxo) { const o = nwUtxo.vout[unsigned.vin[i].vout]; if (o) uxo = { value: o.value, spk: _hexToBytes(o.scriptpubkey) }; }
+    if (!uxo) { partial = true; continue; }
+    const cl = classifyScript(uxo.spk);
+    unsigned.vin[i].prevout = { value: uxo.value, scriptpubkey_type: cl.type, scriptpubkey_address: _spkAddr(cl, uxo.spk) };
+  }
+  const inSum = unsigned.vin.reduce((a, v) => a + (v.prevout ? v.prevout.value : 0), 0);
+  const outSum = unsigned.vout.reduce((a, o) => a + o.value, 0);
+  return { txid: null, vin: unsigned.vin, vout: unsigned.vout, fee: partial ? null : inSum - outSum, partial };
+}
+
+// -- input detection + dispatch (paste-DoS capped) --
+function detectTxInput(v) {
+  const s = (v || "").trim();
+  if (!s) return null;
+  if (/^[0-9a-fA-F]{64}$/.test(s)) return "txid";
+  if (/^cHNidP/.test(s)) return "psbt";                                  // base64 PSBT magic
+  if (/^[0-9a-fA-F]+$/.test(s) && s.length % 2 === 0 && s.length >= 20) return "rawhex";
+  return null;
+}
+function parseTransactionInput(raw) {
+  const s = (raw || "").trim();
+  if (s.length > 100000) throw new Error("Input too large — paste a single transaction");
+  const kind = detectTxInput(s);
+  if (kind === "psbt") return { kind, tx: parsePsbt(_base64ToBytes(s)) };
+  if (kind === "rawhex") { const t = parseRawTx(_hexToBytes(s)); return { kind, tx: { txid: null, vin: t.vin, vout: t.vout, fee: null, partial: true } }; }
+  if (kind === "txid") return { kind, tx: null };   // networked path (handled by the caller)
+  throw new Error("Unrecognized input — paste a PSBT (base64), raw transaction hex, or a 64-character txid");
+}
+
+// -- transaction privacy analysis (mirrors the on-chain Exposure heuristics,
+//    applied to one not-yet-broadcast transaction) --
+const _txRound = v => v >= 100000 && (v % 1000000 === 0 || v % 500000 === 0);
+const _txOpReturn = o => o.scriptpubkey_type === "op_return";
+const _txDust = o => !_txOpReturn(o) && o.value > 0 && o.value < 546;
+function analyzeTx(tx) {
+  const vin = tx.vin || [], vout = tx.vout || [];
+  const inAddrs = new Set(vin.map(v => v.prevout && v.prevout.scriptpubkey_address).filter(Boolean));
+  const coinjoin = isCoinJoinShape(vin, vout);
+  const consolidation = vin.length >= 4 && vout.length <= 2;
+  const dust = vout.some(_txDust);
+  const reuse = vout.some(o => o.scriptpubkey_address && inAddrs.has(o.scriptpubkey_address));
+  const round = vout.some(o => _txRound(o.value));
+  const leaky = consolidation || dust || reuse || (round && !coinjoin);
+  const findings = [];
+  if (coinjoin) findings.push({ ok: true, t: "Looks like a CoinJoin (many inputs, repeated equal outputs) — this breaks the trail" });
+  if (consolidation) findings.push({ ok: false, t: vin.length + " inputs merge into " + vout.length + " output" + (vout.length !== 1 ? "s" : "") + " — this provably links those coins' histories forever" });
+  if (reuse) findings.push({ ok: false, t: "An output pays back to one of the input addresses — address reuse exposes your whole balance" });
+  if (round && !coinjoin) findings.push({ ok: false, t: "A round-number output — the classic KYC-exchange withdrawal fingerprint" });
+  if (dust) findings.push({ ok: false, t: "A sub-546-sat dust output — a tracking beacon if it's ever spent" });
+  return { coinjoin, consolidation, reuse, dust, round, leaky, findings };
+}
+// Which output is likely change (for a not-yet-broadcast tx)
+function guessChange(tx) {
+  const vin = tx.vin || [], vout = tx.vout || [];
+  const spend = vout.map((o, i) => ({ o, i })).filter(x => x.o.scriptpubkey_type !== "op_return");
+  const inAddrs = new Set(vin.map(v => v.prevout && v.prevout.scriptpubkey_address).filter(Boolean));
+  const reuseHit = spend.find(x => x.o.scriptpubkey_address && inAddrs.has(x.o.scriptpubkey_address));
+  if (reuseHit) return { index: reuseHit.i, confidence: "High", reason: "it pays back to one of the input addresses" };
+  const inTypes = new Set(vin.map(v => v.prevout && v.prevout.scriptpubkey_type).filter(Boolean));
+  if (spend.length === 2 && inTypes.size === 1) {
+    const only = [...inTypes][0];
+    const match = spend.filter(x => x.o.scriptpubkey_type === only);
+    if (match.length === 1) return { index: match[0].i, confidence: "Medium", reason: "its address type (" + only + ") matches the inputs, and the other output's doesn't" };
+  }
+  if (spend.length === 2) {
+    const rnd = spend.filter(x => _txRound(x.o.value));
+    if (rnd.length === 1) { const other = spend.find(x => !_txRound(x.o.value)); return { index: other.i, confidence: "Low", reason: "the other output is a round payment amount, so this non-round one is likely change" }; }
+  }
+  return null;
+}
+// Addresses this spend fuses into one provable identity (common-input heuristic)
+function clusterUnification(tx) {
+  const vin = tx.vin || [];
+  const addrs = [...new Set(vin.map(v => v.prevout && v.prevout.scriptpubkey_address).filter(a => a && !a.startsWith("script:")))];
+  const types = new Set(vin.map(v => v.prevout && v.prevout.scriptpubkey_type).filter(Boolean));
+  return { addrs, distinctTypes: types.size, knownInputs: vin.filter(v => v.prevout).length, totalInputs: vin.length };
+}
+function estimateVsize(tx) {
+  const vin = tx.vin || [], vout = tx.vout || [];
+  let vb = 10.5 + vout.length * 33;
+  for (const v of vin) { const t = v.prevout && v.prevout.scriptpubkey_type; vb += (t === "v0_p2wpkh" || t === "v1_p2tr") ? 68 : t === "p2sh" ? 91 : 148; }
+  return Math.max(1, Math.round(vb));
+}
+function feeRate(tx) { if (tx.fee == null) return null; const vs = estimateVsize(tx); return { sat: tx.fee, vsize: vs, rate: +(tx.fee / vs).toFixed(1), estimated: !tx.txid }; }
+
+// A real, minted PSBT (validated round-trip): 3 bech32 inputs fused, a round
+// 5,000,000-sat payment, and change reused back to input #1 — a compact tour
+// of what the Inspector catches. Parsed live by the real parser (zero network).
+const DEMO_PSBT = "cHNidP8BAMMCAAAAAwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD9////AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABAAAAAP3///8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIAAAAA/f///wJAS0wAAAAAABYAFEREREREREREREREREREREREREREUC0ZAAAAAAAWABQREREREREREREREREREREREREREQAAAAAAAQEfwMYtAAAAAAAWABQREREREREREREREREREREREREREQABAR+gJSYAAAAAABYAFCIiIiIiIiIiIiIiIiIiIiIiIiIiAAEBH4BPEgAAAAAAFgAUMzMzMzMzMzMzMzMzMzMzMzMzMzMAAAA=";
+
+/* ─────────────────────────────────────────────
    PRIVACY ENGINE — 11 heuristics
 ───────────────────────────────────────────── */
 function runEngine(utxos = [], txs = [], txCount = 0) {
@@ -3368,6 +3623,12 @@ function Landing({ onAnalyze, isMobile, onCases }) {
             onMouseOut={e => e.currentTarget.style.color = T.textMid}>
             Wallet directory
           </a>
+          <a href="/?page=inspector"
+            style={{ fontFamily: T.mono, fontSize: 10, color: T.textMid, textDecoration: "underline dotted", textUnderlineOffset: 3, transition: "color .15s" }}
+            onMouseOver={e => e.currentTarget.style.color = T.cyan}
+            onMouseOut={e => e.currentTarget.style.color = T.textMid}>
+            Transaction Inspector
+          </a>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
           {(FUNDING.lightning || FUNDING.nostr) && (
@@ -3896,6 +4157,212 @@ function NewsletterSignup({ compact = false }) {
         No spam. Unsubscribe link in every issue. We never link your email to a scanned address.
       </div>
     </form>
+  );
+}
+
+/* ─────────────────────────────────────────────
+   TRANSACTION INSPECTOR — standalone tool at /?page=inspector. Paste a PSBT or
+   raw tx your wallet is about to sign and see what it leaks BEFORE you broadcast.
+   PSBT/raw-hex are parsed and analyzed entirely in the browser (zero network).
+───────────────────────────────────────────── */
+function TransactionInspector({ onBack, isMobile, onScan }) {
+  useLang();
+  const [raw, setRaw] = useState("");
+  const [result, setResult] = useState(null);   // { kind, tx }
+  const [error, setError] = useState("");
+  const detected = detectTxInput(raw);
+
+  useEffect(() => {
+    const prev = document.title;
+    document.title = "Transaction Inspector — pre-broadcast privacy check — AnonScore";
+    const desc = document.querySelector('meta[name="description"]');
+    const prevDesc = desc?.getAttribute("content");
+    desc?.setAttribute("content", "Paste a PSBT or raw Bitcoin transaction and see exactly what it will leak — before you broadcast. Runs entirely in your browser; nothing is sent anywhere. Free and open source.");
+    return () => { document.title = prev; if (desc && prevDesc) desc.setAttribute("content", prevDesc); };
+  }, []);
+
+  const inspect = (text) => {
+    const input = text != null ? text : raw;
+    setError(""); setResult(null);
+    try {
+      const parsed = parseTransactionInput(input);
+      if (parsed.kind === "txid") { setError("Pasting a txid looks up a confirmed transaction — that path is coming soon. For now paste a PSBT (base64) or raw transaction hex, which are analyzed fully offline."); return; }
+      setResult(parsed);
+    } catch (e) { setError(e && e.message ? e.message : "Couldn't parse that input."); }
+  };
+  const loadDemo = () => { setRaw(DEMO_PSBT); inspect(DEMO_PSBT); };
+
+  const sats = v => v == null ? "—" : v >= 1e8 ? "₿" + (v / 1e8).toFixed(4) : v.toLocaleString() + " sats";
+  const trunc = a => !a ? "—" : a.startsWith("script:") ? "unrecognized script" : a.length > 26 ? a.slice(0, 13) + "…" + a.slice(-6) : a;
+
+  const label = { fontFamily: T.mono, fontSize: 9, color: T.textDim, letterSpacing: 1.5, marginBottom: 8 };
+  const panel = extra => ({ background: T.card, border: `1px solid ${T.border}`, borderRadius: 16, padding: isMobile ? "16px 18px" : "18px 22px", ...extra });
+
+  // ---- report ----
+  let report = null;
+  if (result) {
+    const tx = result.tx;
+    const a = analyzeTx(tx);
+    const change = guessChange(tx);
+    const clus = clusterUnification(tx);
+    const fr = feeRate(tx);
+    const inAddrs = new Set((tx.vin || []).map(v => v.prevout && v.prevout.scriptpubkey_address).filter(Boolean));
+    const outColor = (o, i) => _txDust(o) ? T.red : (o.scriptpubkey_address && inAddrs.has(o.scriptpubkey_address)) ? T.red
+      : _txOpReturn(o) ? T.textDim : (change && change.index === i) ? T.cyan : _txRound(o.value) ? T.btc : T.textMid;
+    const outNote = (o, i) => _txDust(o) ? "dust" : (o.scriptpubkey_address && inAddrs.has(o.scriptpubkey_address)) ? "reuse"
+      : _txOpReturn(o) ? "data" : (change && change.index === i) ? "likely change" : _txRound(o.value) ? "round" : "payment";
+
+    report = (
+      <div style={{ display: "flex", flexDirection: "column", gap: 14, marginTop: 20, animation: "fadeUp .4s ease both" }}>
+        {/* verdict */}
+        <div style={{ background: a.leaky ? T.red + "10" : T.green + "12", border: `1px solid ${a.leaky ? T.red + "40" : T.green + "45"}`, borderRadius: 16, padding: isMobile ? "16px 18px" : "18px 22px" }}>
+          <div style={{ ...label, color: a.leaky ? T.red : T.green }}>PRE-BROADCAST VERDICT</div>
+          <div style={{ fontFamily: T.serif, fontSize: isMobile ? 18 : 21, color: T.text, fontWeight: 400, marginBottom: a.findings.length ? 12 : 0 }}>
+            {a.leaky ? "This transaction leaks — you can still fix it before broadcasting." : "Clean — nothing in this transaction obviously links or identifies you."}
+          </div>
+          {a.findings.length > 0 && (
+            <ul style={{ listStyle: "none", display: "flex", flexDirection: "column", gap: 7, padding: 0, margin: 0 }}>
+              {a.findings.map((f, i) => (
+                <li key={i} style={{ display: "flex", gap: 8, alignItems: "flex-start", fontSize: 13, color: T.textMid, lineHeight: 1.5 }}>
+                  <span style={{ color: f.ok ? T.green : T.red, flexShrink: 0, marginTop: 1, fontFamily: T.mono }}>{f.ok ? "✓" : "→"}</span>{f.t}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        {/* likely change */}
+        {change && (
+          <div style={panel()}>
+            <div style={label}>LIKELY CHANGE OUTPUT</div>
+            <div style={{ fontSize: 13.5, color: T.textMid, lineHeight: 1.6 }}>
+              Output <strong style={{ color: T.cyan }}>#{change.index + 1}</strong> ({sats(tx.vout[change.index].value)}) is most likely your <strong style={{ color: T.text }}>change</strong> — {change.reason}. <span style={{ color: T.textDim }}>Confidence: {change.confidence}.</span> Anyone reading the chain makes the same guess, then keeps following your coins.
+            </div>
+          </div>
+        )}
+
+        {/* cluster unification */}
+        {clus.addrs.length > 1 && (
+          <div style={panel({ borderColor: T.red + "33" })}>
+            <div style={{ ...label, color: T.red }}>CLUSTER THIS SPEND CREATES</div>
+            <div style={{ fontSize: 13.5, color: T.textMid, lineHeight: 1.6, marginBottom: 10 }}>
+              Broadcasting fuses these <strong style={{ color: T.text }}>{clus.addrs.length} input addresses</strong>{clus.distinctTypes > 1 ? ` (${clus.distinctTypes} script types)` : ""} into one provable identity — the common-input heuristic every chain-surveillance firm runs.
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              {clus.addrs.slice(0, 6).map(ad => (
+                <div key={ad} style={{ display: "flex", alignItems: "center", gap: 10, background: T.surface, border: `1px solid ${T.borderLo}`, borderRadius: 10, padding: "8px 12px" }}>
+                  <span style={{ width: 7, height: 7, borderRadius: "50%", background: T.red, flexShrink: 0 }} />
+                  <span style={{ fontFamily: T.mono, fontSize: 12, color: T.text, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>{trunc(ad)}</span>
+                  {onScan && isValidBitcoinAddress(ad) && (
+                    <button onClick={() => onScan(ad)} style={{ marginLeft: "auto", flexShrink: 0, background: "transparent", border: `1px solid ${T.cyan}55`, borderRadius: 8, padding: "5px 12px", color: T.cyan, fontFamily: T.sans, fontSize: 12, fontWeight: 600, cursor: "pointer" }}
+                      onMouseOver={e => e.currentTarget.style.background = T.cyan + "14"} onMouseOut={e => e.currentTarget.style.background = "transparent"}>Audit →</button>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* inputs → outputs */}
+        <div style={panel()}>
+          <div style={label}>INPUTS → OUTPUTS</div>
+          {tx.partial && (
+            <div style={{ fontSize: 12, color: T.amber, background: T.amber + "12", border: `1px solid ${T.amber}33`, borderRadius: 8, padding: "8px 12px", marginBottom: 12, lineHeight: 1.5 }}>
+              {result.kind === "rawhex" ? "Raw hex carries no input data — paste the PSBT for full input-side analysis (cluster + fee)." : "Partial PSBT — some inputs lack UTXO data, so the fee and input analysis cover only the known inputs."}
+            </div>
+          )}
+          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr auto 1fr", gap: isMobile ? 12 : 16, alignItems: "start" }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              {(tx.vin || []).map((v, i) => (
+                <div key={i} style={{ fontFamily: T.mono, fontSize: 11.5, color: T.textMid, background: T.surface, border: `1px solid ${T.borderLo}`, borderRadius: 8, padding: "7px 10px" }}>
+                  <div style={{ color: T.text }}>{v.prevout ? trunc(v.prevout.scriptpubkey_address) : "input " + (i + 1) + " (no UTXO data)"}</div>
+                  <div style={{ color: T.textDim, fontSize: 10, marginTop: 2 }}>{v.prevout ? sats(v.prevout.value) + " · " + v.prevout.scriptpubkey_type : "unknown"}</div>
+                </div>
+              ))}
+            </div>
+            <div style={{ display: isMobile ? "none" : "flex", alignItems: "center", justifyContent: "center", color: T.textDim, fontSize: 18, alignSelf: "center" }}>→</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              {(tx.vout || []).map((o, i) => (
+                <div key={i} style={{ fontFamily: T.mono, fontSize: 11.5, background: T.surface, border: `1px solid ${outColor(o, i)}44`, borderLeft: `3px solid ${outColor(o, i)}`, borderRadius: 8, padding: "7px 10px" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+                    <span style={{ color: T.text, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>{trunc(o.scriptpubkey_address)}</span>
+                    <span style={{ color: outColor(o, i), flexShrink: 0, fontSize: 9 }}>{outNote(o, i)}</span>
+                  </div>
+                  <div style={{ color: T.textDim, fontSize: 10, marginTop: 2 }}>{sats(o.value)} · {o.scriptpubkey_type}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 14, alignItems: "center" }}>
+            {fr && <Tag label={"≈ " + fr.rate + " sat/vB" + (fr.estimated ? " (est)" : "")} color={T.textMid} size={9} />}
+            {tx.fee != null && <Tag label={"fee " + sats(tx.fee)} color={T.textMid} size={9} />}
+            {a.coinjoin && <Tag label="CoinJoin shape" color={T.green} size={9} />}
+            <span style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim, marginLeft: "auto" }}>{(tx.vin || []).length} in · {(tx.vout || []).length} out{tx.txid ? "" : " · unsigned"}</span>
+          </div>
+        </div>
+
+        <div style={{ fontSize: 11.5, color: T.textDim, lineHeight: 1.6, textAlign: "center" }}>
+          Heuristics, not proof — PayJoin and batching can change these readings. This transaction was analyzed entirely in your browser; nothing was sent anywhere.
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div role="main" aria-label="Transaction Inspector" style={{ minHeight: "100vh", background: "transparent", display: "flex", flexDirection: "column" }}>
+      <h1 className="sr-only">Bitcoin Transaction Inspector — pre-broadcast privacy analysis</h1>
+      <nav style={{ display: "flex", alignItems: "center", gap: 10, padding: isMobile ? "12px 16px" : "14px 32px", borderBottom: `1px solid ${T.border}`, background: T.bg, position: "sticky", top: 0, zIndex: 100 }}>
+        <button onClick={onBack} style={{ background: "transparent", border: `1.5px solid ${T.border}`, borderRadius: 8, padding: "7px 12px", color: T.textMid, fontFamily: T.sans, fontSize: 13, cursor: "pointer", transition: "border .15s" }}
+          onMouseOver={e => e.currentTarget.style.borderColor = T.cyan} onMouseOut={e => e.currentTarget.style.borderColor = T.border}>← Back</button>
+        <div style={{ fontFamily: T.display, fontSize: 15, letterSpacing: 4, fontWeight: 700 }}>ANON<span style={{ color: T.cyan }}>SCORE</span></div>
+        <div style={{ flex: 1 }} />
+        <span style={{ fontFamily: T.mono, fontSize: 9, color: T.cyan, background: T.cyanLo, border: `1px solid ${T.cyan}44`, borderRadius: 6, padding: "4px 9px", letterSpacing: 1 }}>INSPECTOR</span>
+      </nav>
+
+      <div style={{ flex: 1, maxWidth: 760, margin: "0 auto", width: "100%", padding: isMobile ? "28px 16px" : "44px 32px" }}>
+        <div style={{ textAlign: "center", marginBottom: 24 }}>
+          <div style={{ fontFamily: T.mono, fontSize: 10, color: T.cyan, letterSpacing: 2.5, marginBottom: 14 }}>BEFORE YOU BROADCAST</div>
+          <h2 style={{ fontFamily: T.serif, fontSize: isMobile ? 30 : 40, color: T.text, lineHeight: 1.1, fontWeight: 400, marginBottom: 14 }}>
+            See what your transaction<br /><em style={{ color: T.cyan }}>leaks — before it's permanent.</em>
+          </h2>
+          <p style={{ fontSize: isMobile ? 14 : 16, color: T.textMid, lineHeight: 1.7, maxWidth: 560, margin: "0 auto", fontWeight: 300 }}>
+            Paste a <strong style={{ color: T.text }}>PSBT</strong> or raw transaction your wallet is about to sign. Every scan runs entirely in your browser — the transaction is never sent anywhere.
+          </p>
+        </div>
+
+        <div style={{ background: T.card, border: `1.5px solid ${detected ? T.cyan + "55" : T.border}`, borderRadius: 16, padding: isMobile ? "16px" : "20px 22px", transition: "border .2s" }}>
+          <label htmlFor="tx-input" style={{ display: "block", fontFamily: T.mono, fontSize: 9, color: T.textDim, letterSpacing: 1.5, marginBottom: 8 }}>PSBT (BASE64) · RAW TX HEX · TXID</label>
+          <textarea id="tx-input" value={raw} onChange={e => { setRaw(e.target.value); setError(""); }}
+            placeholder="cHNidP8B…  or  0200000001…"
+            aria-label="Paste a PSBT (base64), raw transaction hex, or a transaction id"
+            spellCheck={false}
+            style={{ width: "100%", boxSizing: "border-box", minHeight: 120, resize: "vertical", background: "#070910", border: `1px solid ${T.border}`, borderRadius: 10, padding: "12px 14px", color: T.text, fontFamily: T.mono, fontSize: 12.5, lineHeight: 1.5, outline: "none" }} />
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 12, flexWrap: "wrap" }}>
+            <button onClick={() => inspect()} disabled={!raw.trim()} className="sheen"
+              style={{ background: raw.trim() ? T.cyan : T.surface, border: "none", borderRadius: 10, padding: "12px 22px", color: raw.trim() ? T.bg : T.textDim, fontFamily: T.sans, fontWeight: 700, fontSize: 14, cursor: raw.trim() ? "pointer" : "default", transition: "all .15s" }}>
+              Inspect →
+            </button>
+            <button onClick={loadDemo} style={{ background: "transparent", border: `1px solid ${T.border}`, borderRadius: 10, padding: "12px 16px", color: T.textMid, fontFamily: T.sans, fontSize: 13, cursor: "pointer" }}
+              onMouseOver={e => e.currentTarget.style.borderColor = T.cyan} onMouseOut={e => e.currentTarget.style.borderColor = T.border}>Load example PSBT</button>
+            {detected && <span style={{ fontFamily: T.mono, fontSize: 10, color: T.cyan }}>{detected === "psbt" ? "✓ PSBT detected" : detected === "rawhex" ? "✓ raw tx hex" : "txid — fetch coming soon"}</span>}
+          </div>
+        </div>
+
+        {error && (
+          <div role="alert" style={{ marginTop: 14, background: T.red + "12", border: `1px solid ${T.red}44`, borderRadius: 12, padding: "12px 16px", fontSize: 13, color: T.text, lineHeight: 1.6 }}>
+            <span style={{ color: T.red, fontFamily: T.mono, marginRight: 6 }}>⚠</span>{error}
+          </div>
+        )}
+
+        {report}
+
+        {!result && !error && (
+          <div style={{ marginTop: 20, fontSize: 12.5, color: T.textDim, lineHeight: 1.7, textAlign: "center" }}>
+            Export a PSBT from Sparrow, Electrum, Bitcoin Core, or a hardware wallet — before you sign it — and drop it here. No keys, no signing, nothing leaves the page.
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -6343,6 +6810,7 @@ function App() {
       const pageParam = params.get("page");
       if (pageParam === "coach") setPage("coach");
       else if (pageParam === "wallets") setPage("wallets");
+      else if (pageParam === "inspector") setPage("inspector");
     } catch {}
   }, []);
   // Bitcoin state
@@ -6496,6 +6964,7 @@ function App() {
       {page === "ln_dashboard" && <LightningDashboard nodeId={lnNodeId} nodeData={lnNodeData} channels={lnChannels} isMobile={isMobile} onBack={() => setPage("landing")} onRescan={analyze} toast={toast} />}
       {page === "coach"        && <CoachWaitlist onBack={() => setPage("landing")} isMobile={isMobile} />}
       {page === "wallets"      && <WalletDirectory onBack={() => setPage("landing")} isMobile={isMobile} />}
+      {page === "inspector"    && <TransactionInspector onBack={() => setPage("landing")} isMobile={isMobile} onScan={analyze} />}
       </div>
     </>
   );
@@ -6508,6 +6977,9 @@ window.__ANONSCORE_TEST__ = Object.freeze({
   runEngine, runLightningEngine, classifyUtxo, scoreGrade,
   computeCluster, computePoisoning, isLookalikeAddress, computeActivityClock,
   isValidBitcoinAddress, isValidLightningPubkey, detectInputType,
+  // Transaction Inspector — parser + analysis (validated against BIP174/173/350)
+  parsePsbt, parseRawTx, classifyScript, parseTransactionInput, detectTxInput,
+  analyzeTx, guessChange, clusterUnification, feeRate, DEMO_PSBT,
 });
 
 ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(App));

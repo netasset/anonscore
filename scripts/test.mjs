@@ -310,6 +310,37 @@ else {
   }
 }
 
+// Transaction Inspector page: deep-linkable at /?page=inspector; "Load example
+// PSBT" parses a real PSBT and renders the report entirely offline.
+{
+  const insPage = await ctx.newPage();
+  const insReqs = [];
+  insPage.on("request", r => insReqs.push(new URL(r.url()).origin));
+  try {
+    await insPage.goto(`http://127.0.0.1:${PORT}/?page=inspector`, { waitUntil: "load" });
+    await insPage.waitForFunction(() => document.getElementById("root")?.childElementCount > 0, { timeout: 15000 });
+    await insPage.waitForTimeout(600);
+    const hasInput = await insPage.locator('textarea#tx-input').count();
+    const hasH1 = await insPage.locator('h1.sr-only').count();
+    await insPage.getByText("Load example PSBT").click();
+    await insPage.waitForTimeout(500);
+    const report = await insPage.evaluate(() => ({
+      verdict: !![...document.querySelectorAll('*')].find(e => e.textContent === 'PRE-BROADCAST VERDICT'),
+      cluster: !![...document.querySelectorAll('*')].find(e => e.textContent === 'CLUSTER THIS SPEND CREATES'),
+      io: !![...document.querySelectorAll('*')].find(e => e.textContent === 'INPUTS → OUTPUTS'),
+    }));
+    const thirdParty = [...new Set(insReqs)].filter(o => !o.includes("127.0.0.1"));
+    if (!hasInput || !hasH1) fail("inspector: input textarea or sr-only h1 missing");
+    else if (!report.verdict || !report.cluster || !report.io) fail(`inspector: report incomplete after Load example (${JSON.stringify(report)})`);
+    else if (thirdParty.length) fail(`inspector: made third-party requests (must be fully offline): ${thirdParty.join(", ")}`);
+    else pass("inspector renders at /?page=inspector; example PSBT parsed + full report, 100% offline");
+  } catch (e) {
+    fail("inspector: " + e.message.slice(0, 120));
+  } finally {
+    await insPage.close();
+  }
+}
+
 // Service worker should register and precache the static assets.
 await page.waitForFunction(
   () => navigator.serviceWorker?.controller || navigator.serviceWorker?.ready,
@@ -417,13 +448,43 @@ const unit = await page.evaluate(() => {
       E.isValidBitcoinAddress("not-an-address") === false &&
       E.detectInputType("02".padEnd(66, "ab")) === "ln_pubkey");
   }
+
+  // — Transaction Inspector: parser + analysis (validated against BIP174/173/350) —
+  {
+    const b64ToBytes = s => { const bin = atob(s); const u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return u; };
+    const bytes = a => new Uint8Array(a);
+    // classifyScript across every script type
+    t("inspector: classify p2pkh→address (genesis)", E.classifyScript(bytes([0x76,0xa9,0x14,0x62,0xe9,0x07,0xb1,0x5c,0xbf,0x27,0xd5,0x42,0x53,0x99,0xeb,0xf6,0xf0,0xfb,0x50,0xeb,0xb8,0x8f,0x18,0x88,0xac])).address === "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa");
+    t("inspector: classify p2wpkh (bech32)", E.classifyScript(bytes([0x00,0x14,0x75,0x1e,0x76,0xe8,0x19,0x91,0x96,0xd4,0x54,0x94,0x1c,0x45,0xd1,0xb3,0xa3,0x23,0xf1,0x43,0x3b,0xd6])).address === "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4");
+    t("inspector: classify p2tr (bech32m)", E.classifyScript(bytes([0x51,0x20,0x79,0xbe,0x66,0x7e,0xf9,0xdc,0xbb,0xac,0x55,0xa0,0x62,0x95,0xce,0x87,0x0b,0x07,0x02,0x9b,0xfc,0xdb,0x2d,0xce,0x28,0xd9,0x59,0xf2,0x81,0x5b,0x16,0xf8,0x17,0x98])).address === "bc1p0xlxvlhemja6c4dqv22uapctqupfhlxm9h8z3k2e72q4k9hcz7vqzk5jj0");
+    t("inspector: classify op_return", E.classifyScript(bytes([0x6a,0x05,1,2,3,4,5])).type === "op_return");
+    // BIP174 canonical PSBT: 2 in (p2pkh + p2sh), 2 out (199900000 + 9358), fee 90341
+    const PSBT = "cHNidP8BAKACAAAAAqsJSaCMWvfEm4IS9Bfi8Vqz9cM9zxU4IagTn4d6W3vkAAAAAAD+////qwlJoIxa98SbghL0F+LxWrP1wz3PFTghqBOfh3pbe+QBAAAAAP7///8CYDvqCwAAAAAZdqkUdopAu9dAy+gdmI5x3ipNXHE5ax2IrI4kAAAAAAAAGXapFG9GILVT+glechue4O/p+gOcykWXiKwAAAAAAAEA3wIAAAABJoFxNx7f8oXpN63upLN7eAAMBWbLs61kZBcTykIXG/YAAAAAakcwRAIgcLIkUSPmv0dNYMW1DAQ9TGkaXSQ18Jo0p2YqncJReQoCIAEynKnazygL3zB0DsA5BCJCLIHLRYOUV663b8Eu3ZWzASECZX0RjTNXuOD0ws1G23s59tnDjZpwq8ubLeXcjb/kzjH+////AtPf9QUAAAAAGXapFNDFmQPFusKGh2DpD9UhpGZap2UgiKwA4fUFAAAAABepFDVF5uM7gyxHBQ8k0+65PJwDlIvHh7MuEwAAAQEgAOH1BQAAAAAXqRQ1RebjO4MsRwUPJNPuuTycA5SLx4cBBBYAFIXRNTfy4mVAWjTbr6nj3aAfuCMIAAAA";
+    const psbt = E.parsePsbt(b64ToBytes(PSBT));
+    t("inspector: PSBT 2 in / 2 out", psbt.vin.length === 2 && psbt.vout.length === 2);
+    t("inspector: PSBT output values (199900000, 9358)", psbt.vout[0].value === 199900000 && psbt.vout[1].value === 9358);
+    t("inspector: PSBT input prevout types (p2pkh, p2sh)", psbt.vin[0].prevout.scriptpubkey_type === "p2pkh" && psbt.vin[1].prevout.scriptpubkey_type === "p2sh");
+    t("inspector: PSBT fee = 90341", psbt.fee === 90341);
+    // The bundled DEMO_PSBT: 3 fused inputs, round payment, change reused
+    const demo = E.parseTransactionInput(E.DEMO_PSBT);
+    const a = E.analyzeTx(demo.tx), ch = E.guessChange(demo.tx), cl = E.clusterUnification(demo.tx);
+    t("inspector: demo parses to 3 inputs, fee 50000", demo.tx.vin.length === 3 && demo.tx.fee === 50000);
+    t("inspector: demo flagged leaky (reuse + round)", a.leaky === true && a.reuse === true && a.round === true);
+    t("inspector: demo change = output #2, High confidence", ch && ch.index === 1 && ch.confidence === "High");
+    t("inspector: demo cluster-unifies 3 addresses", cl.addrs.length === 3);
+    // Robustness: garbage input throws (never hangs), txid is recognized-but-deferred
+    let threw = false; try { E.parseTransactionInput("deadbeef00"); } catch { threw = true; }
+    t("inspector: malformed hex throws", threw);
+    t("inspector: txid detected as networked kind", E.detectTxInput("ab".repeat(32)) === "txid");
+  }
+
   return { results: r };
 });
 if (unit.missing) fail("window.__ANONSCORE_TEST__ hook missing from the built bundle");
 else {
   const bad = unit.results.filter(u => !u.ok);
   bad.forEach(u => fail("engine unit: " + u.name));
-  if (!bad.length) pass(`engine unit tests: ${unit.results.length}/${unit.results.length} passed (cluster, poisoning, clock, engine)`);
+  if (!bad.length) pass(`engine unit tests: ${unit.results.length}/${unit.results.length} passed (cluster, poisoning, clock, engine, tx-inspector)`);
 }
 
 // Run a demo scan end-to-end
@@ -496,6 +557,19 @@ async function axeRun(label, pg) {
   else pass(`a11y ${label}: 0 critical/serious`);
 }
 await axeRun("Dashboard", page);
+// a11y on the Transaction Inspector with a full report on screen
+{
+  const axePage = await ctx.newPage();
+  try {
+    await axePage.goto(`http://127.0.0.1:${PORT}/?page=inspector`, { waitUntil: "load" });
+    await axePage.waitForFunction(() => document.getElementById("root")?.childElementCount > 0, { timeout: 15000 });
+    await axePage.waitForTimeout(500);
+    await axePage.getByText("Load example PSBT").click();
+    await axePage.waitForTimeout(500);
+    await axeRun("Inspector", axePage);
+  } catch (e) { fail("inspector a11y: " + e.message.slice(0, 120)); }
+  finally { await axePage.close(); }
+}
 const back = page.getByText(/← Back/).first();
 if (await back.count()) { await back.click(); await page.waitForTimeout(900); }
 await axeRun("Landing (after demo)", page);
