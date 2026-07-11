@@ -1328,6 +1328,115 @@ function estimateVsize(tx) {
 }
 function feeRate(tx) { if (tx.fee == null) return null; const vs = estimateVsize(tx); return { sat: tx.fee, vsize: vs, rate: +(tx.fee / vs).toFixed(1), estimated: !tx.txid }; }
 
+/* ─────────────────────────────────────────────
+   TRANSACTION ENTROPY & LINKABILITY (Boltzmann / KYCP methodology, in pure JS)
+   ───────────────────────────────────────────────
+   The metric KYCP.org and OXT.me were built on — both offline since April 2024.
+   An "interpretation" is a way to read the transaction as one or more independent
+   sub-payments: a partition of the inputs and outputs into matched blocks (a
+   bijection between input-blocks and output-blocks) where each block's inputs
+   cover its outputs — the surplus is that sub-tx's share of the fee, so every
+   block's surplus is ≥ 0 and the surpluses sum to the total fee. N = the number
+   of such interpretations; the transaction's ENTROPY is E = log2(N) bits
+   (LaurentMT's definition: a plain payment N=1 → E=0; an ambiguous 2×2 N=2 →
+   E=1; a 2×2 equal-value CoinJoin N=3 → E=1.585). The LINK PROBABILITY LP(i,j)
+   is the fraction of interpretations in which input i and output j share a block;
+   LP=1 is a DETERMINISTIC link — an input→output connection provable on-chain,
+   the exact thing surveillance clustering exploits. Validated against those
+   canonical vectors (and LP=2/3 for the 2×2 CoinJoin) in the test suite.
+
+   Pure-JS bitmask enumeration with memoised partition counting — no eval, no
+   WASM, no dependency, unlike the Rust→WASM engines other tools ship. Capped at
+   12 inputs / 12 outputs (the reference Boltzmann limit) with an iteration budget
+   so it can never hang the browser; large equal-value CoinJoins are the only
+   shape that explodes, and their ambiguity is exactly the point. */
+function txInterpretations(ins, outs, fee, opts) {
+  opts = opts || {};
+  const n = ins.length, m = outs.length;
+  const CAP = opts.cap || 12;
+  if (n === 0 || m === 0) return { error: "empty" };
+  if (n > CAP || m > CAP) return { error: "too-many", n, m, cap: CAP };
+  if (fee == null) fee = ins.reduce((a, x) => a + x, 0) - outs.reduce((a, x) => a + x, 0);
+  if (fee < 0) return { error: "negative-fee" };
+
+  // subset sums (n,m ≤ 12 → ≤ 4096 masks each)
+  const inSum = new Array(1 << n), outSum = new Array(1 << m);
+  inSum[0] = 0; outSum[0] = 0;
+  for (let mask = 1; mask < (1 << n); mask++) { const low = mask & -mask; inSum[mask] = inSum[mask ^ low] + ins[31 - Math.clz32(low)]; }
+  for (let mask = 1; mask < (1 << m); mask++) { const low = mask & -mask; outSum[mask] = outSum[mask ^ low] + outs[31 - Math.clz32(low)]; }
+
+  const fullIn = (1 << n) - 1, fullOut = (1 << m) - 1;
+  const memo = new Map();
+  const IT_CAP = opts.itCap || 8_000_000;
+  let iterations = 0, bailed = false;
+
+  // number of valid matched partitions of (inMask, outMask)
+  function count(inMask, outMask) {
+    if (inMask === 0) return outMask === 0 ? 1 : 0;
+    if (outMask === 0) return 0;
+    const key = inMask * (1 << m) + outMask;
+    const hit = memo.get(key);
+    if (hit !== undefined) return hit;
+    const i0 = inMask & -inMask, restIn = inMask ^ i0;   // lowest input must be placed
+    let total = 0, sub = restIn;
+    for (;;) {
+      if (bailed) break;
+      const si = sub | i0, sIn = inSum[si];
+      let osub = outMask;
+      for (;;) {
+        if (++iterations > IT_CAP) { bailed = true; break; }
+        if (osub !== 0) { const surplus = sIn - outSum[osub]; if (surplus >= 0 && surplus <= fee) total += count(inMask ^ si, outMask ^ osub); }
+        if (osub === 0) break;
+        osub = (osub - 1) & outMask;
+      }
+      if (sub === 0) break;
+      sub = (sub - 1) & restIn;
+    }
+    memo.set(key, total);
+    return total;
+  }
+
+  const N = count(fullIn, fullOut);
+  if (bailed) return { error: "iteration-cap" };
+  if (N === 0) return { error: "no-interpretation" };
+
+  // LP(i,j) = Σ over valid blocks (Si,So) containing i and j of count(rest) / N
+  const link = [];
+  for (let i = 0; i < n; i++) link.push(new Array(m).fill(0));
+  for (let si = 1; si <= fullIn; si++) {
+    const sIn = inSum[si];
+    for (let so = 1; so <= fullOut; so++) {
+      const surplus = sIn - outSum[so];
+      if (surplus < 0 || surplus > fee) continue;
+      const rest = count(fullIn ^ si, fullOut ^ so);
+      if (rest === 0) continue;
+      for (let i = 0; i < n; i++) if (si & (1 << i)) for (let j = 0; j < m; j++) if (so & (1 << j)) link[i][j] += rest;
+    }
+  }
+  const lp = link.map(row => row.map(v => v / N));
+  let dl = 0;
+  for (let i = 0; i < n; i++) for (let j = 0; j < m; j++) if (Math.abs(lp[i][j] - 1) < 1e-9) dl++;
+  return { N, entropy: Math.log2(N), lp, dl };
+}
+
+// Wrap a parsed tx: pull input/output values, drop OP_RETURN data outputs, and
+// run the entropy analysis. Needs input amounts (a full PSBT or fetched tx), so
+// raw hex — which carries none — reports unavailable rather than guessing.
+function txLinkability(tx) {
+  const vin = tx.vin || [], voutAll = tx.vout || [];
+  if (!vin.length || vin.some(v => !v.prevout || v.prevout.value == null)) return { available: false, reason: "input-values-unknown" };
+  const outs = [];
+  voutAll.forEach((o, i) => { if (o.scriptpubkey_type !== "op_return" && o.value != null) outs.push({ v: o.value, idx: i }); });
+  if (!outs.length) return { available: false, reason: "no-outputs" };
+  const inVals = vin.map(v => v.prevout.value), outVals = outs.map(o => o.v);
+  const fee = inVals.reduce((a, b) => a + b, 0) - outVals.reduce((a, b) => a + b, 0);
+  if (fee < 0) return { available: false, reason: "negative-fee" };
+  if (vin.length > 12 || outs.length > 12) return { available: false, reason: "too-many", n: vin.length, m: outs.length };
+  const res = txInterpretations(inVals, outVals, fee);
+  if (res.error) return { available: false, reason: res.error, n: vin.length, m: outs.length };
+  return { available: true, n: vin.length, m: outs.length, N: res.N, entropy: res.entropy, dl: res.dl, lp: res.lp, outIdx: outs.map(o => o.idx), fee };
+}
+
 // A real, minted PSBT (validated round-trip): 3 bech32 inputs fused, a round
 // 5,000,000-sat payment, and change reused back to input #1 — a compact tour
 // of what the Inspector catches. Parsed live by the real parser (zero network).
@@ -4477,6 +4586,9 @@ function TransactionInspector({ onBack, isMobile, onScan }) {
     const change = guessChange(tx);
     const clus = clusterUnification(tx);
     const fr = feeRate(tx);
+    const link = txLinkability(tx);
+    const ent = link.available ? (link.N === 1 ? { c: T.red, t: "Fully deterministic" } : link.entropy < 1 ? { c: T.red, t: "Very low ambiguity" } : link.entropy < 1.585 ? { c: T.amber, t: "Low ambiguity" } : link.entropy < 3 ? { c: T.cyan, t: "Ambiguous" } : { c: T.green, t: "Strongly ambiguous" }) : null;
+    const lpCell = v => Math.abs(v - 1) < 1e-9 ? { bg: T.red, fg: T.bg, txt: "1" } : v === 0 ? { bg: T.surface, fg: T.textDim, txt: "0" } : { bg: T.red + Math.round(18 + v * 60).toString(16).padStart(2, "0"), fg: T.text, txt: v.toFixed(2).replace(/^0/, "") };
     const inAddrs = new Set((tx.vin || []).map(v => v.prevout && v.prevout.scriptpubkey_address).filter(Boolean));
     const outColor = (o, i) => _txDust(o) ? T.red : (o.scriptpubkey_address && inAddrs.has(o.scriptpubkey_address)) ? T.red
       : _txOpReturn(o) ? T.textDim : (change && change.index === i) ? T.cyan : _txRound(o.value) ? T.btc : T.textMid;
@@ -4501,6 +4613,51 @@ function TransactionInspector({ onBack, isMobile, onScan }) {
             </ul>
           )}
         </div>
+
+        {/* interpretation entropy / linkability (Boltzmann) */}
+        {link.available && (
+          <div style={panel({ borderColor: ent.c + "33" })}>
+            <div style={{ ...label, color: ent.c }}>INTERPRETATION ENTROPY</div>
+            <div style={{ display: "flex", alignItems: "baseline", gap: 12, flexWrap: "wrap", marginBottom: 10 }}>
+              <span style={{ fontFamily: T.serif, fontSize: isMobile ? 26 : 32, color: ent.c, fontWeight: 400 }}>{link.entropy.toFixed(2)}<span style={{ fontSize: 13, color: T.textDim, marginLeft: 4 }}>bits</span></span>
+              <span style={{ fontFamily: T.sans, fontSize: 14, color: T.text, fontWeight: 600 }}>{ent.t}</span>
+              <span style={{ fontFamily: T.mono, fontSize: 10, color: T.textDim, marginLeft: "auto" }}>{link.N.toLocaleString()} interpretation{link.N !== 1 ? "s" : ""}</span>
+            </div>
+            <div style={{ fontSize: 13, color: T.textMid, lineHeight: 1.6, marginBottom: link.dl > 0 ? 12 : 0 }}>
+              {link.N === 1
+                ? "There is exactly one way to read this transaction — every input maps to every output with certainty. An analyst needs no guesswork; the whole trail is provable."
+                : "There are " + link.N.toLocaleString() + " equally-valid ways to map these inputs to these outputs (E = log₂N). The more readings, the less any single input→output link can be proven — this is the metric KYCP.org and OXT scored before they went dark."}
+            </div>
+            {link.dl > 0 && (
+              <div style={{ background: T.red + "10", border: `1px solid ${T.red}33`, borderRadius: 10, padding: "9px 12px", fontSize: 12.5, color: T.textMid, lineHeight: 1.6 }}>
+                <strong style={{ color: T.red }}>{link.dl} deterministic link{link.dl !== 1 ? "s" : ""}</strong> — pairing{link.dl !== 1 ? "s" : ""} that hold{link.dl === 1 ? "s" : ""} in <em>every</em> interpretation, so it is provable on-chain which input funded which output. This is precisely what surveillance clustering exploits.
+              </div>
+            )}
+            {link.n * link.m <= 64 && (
+              <div style={{ marginTop: 12, overflowX: "auto" }}>
+                <div style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim, letterSpacing: 1, marginBottom: 6 }}>LINK PROBABILITY · rows = inputs · cols = outputs</div>
+                <div style={{ display: "inline-grid", gridTemplateColumns: `auto repeat(${link.m}, minmax(30px, 1fr))`, gap: 3 }}>
+                  <span />
+                  {link.outIdx.map((oi, j) => <span key={"h" + j} style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim, textAlign: "center", alignSelf: "end", paddingBottom: 2 }}>o{oi + 1}</span>)}
+                  {link.lp.map((row, i) => [
+                    <span key={"r" + i} style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim, alignSelf: "center", paddingRight: 4 }}>in{i + 1}</span>,
+                    ...row.map((v, j) => { const c = lpCell(v); return <span key={i + "-" + j} title={"P(input " + (i + 1) + " → output " + (link.outIdx[j] + 1) + ") = " + v.toFixed(3)} style={{ background: c.bg, color: c.fg, fontFamily: T.mono, fontSize: 10, textAlign: "center", padding: "6px 2px", borderRadius: 4, minWidth: 30 }}>{c.txt}</span>; })
+                  ])}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+        {!link.available && (link.reason === "too-many" || link.reason === "iteration-cap") && (
+          <div style={panel()}>
+            <div style={{ ...label, color: T.green }}>INTERPRETATION ENTROPY</div>
+            <div style={{ fontSize: 13, color: T.textMid, lineHeight: 1.6 }}>
+              {link.reason === "too-many"
+                ? "This transaction has " + link.n + " inputs and " + link.m + " outputs — beyond the 12×12 limit for exact link analysis (the same bound the reference Boltzmann tool uses). Very large transactions have astronomically many interpretations, which on its own means strong ambiguity."
+                : "This transaction has too many valid interpretations to count exactly in the browser — which itself signals very high entropy and strong input→output ambiguity (typical of a CoinJoin)."}
+            </div>
+          </div>
+        )}
 
         {/* likely change */}
         {change && (
@@ -7432,6 +7589,8 @@ window.__ANONSCORE_TEST__ = Object.freeze({
   // Transaction Inspector — parser + analysis (validated against BIP174/173/350)
   parsePsbt, parseRawTx, classifyScript, parseTransactionInput, detectTxInput,
   analyzeTx, guessChange, clusterUnification, feeRate, DEMO_PSBT,
+  // transaction entropy / linkability (Boltzmann · validated vs LaurentMT vectors)
+  txInterpretations, txLinkability,
   // xpub wallet scanner — crypto (validated against BIP32 TV1 + BIP84 vectors)
   _sha512, _hmacSha512, _ripemd160, decodeXpub, ckdPub, deriveWalletAddress, detectXpub,
   runWalletEngine, DEMO_WALLET,
