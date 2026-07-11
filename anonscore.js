@@ -9727,6 +9727,10 @@ function TransactionInspector({
     const inAddrs = new Set((tx.vin || []).map(v => v.prevout && v.prevout.scriptpubkey_address).filter(Boolean));
     const outColor = (o, i) => _txDust(o) ? T.red : o.scriptpubkey_address && inAddrs.has(o.scriptpubkey_address) ? T.red : _txOpReturn(o) ? T.textDim : change && change.index === i ? T.cyan : _txRound(o.value) ? T.btc : T.textMid;
     const outNote = (o, i) => _txDust(o) ? "dust" : o.scriptpubkey_address && inAddrs.has(o.scriptpubkey_address) ? "reuse" : _txOpReturn(o) ? "data" : change && change.index === i ? "likely change" : _txRound(o.value) ? "round" : "payment";
+    const detOut = new Set();
+    if (link.available) link.lp.forEach(row => row.forEach((v, j) => {
+      if (Math.abs(v - 1) < 1e-9) detOut.add(link.outIdx[j]);
+    }));
     report = React.createElement("div", {
       style: {
         display: "flex",
@@ -10106,7 +10110,14 @@ function TransactionInspector({
         fontSize: 10,
         marginTop: 2
       }
-    }, sats(o.value), " \xB7 ", o.scriptpubkey_type))))), React.createElement("div", {
+    }, sats(o.value), " \xB7 ", o.scriptpubkey_type), detOut.has(i) && React.createElement("div", {
+      style: {
+        color: T.red,
+        fontSize: 9,
+        marginTop: 3,
+        letterSpacing: .3
+      }
+    }, "\u26D3 provably from these inputs"))))), React.createElement("div", {
       style: {
         display: "flex",
         flexWrap: "wrap",

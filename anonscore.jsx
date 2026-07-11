@@ -4594,6 +4594,10 @@ function TransactionInspector({ onBack, isMobile, onScan }) {
       : _txOpReturn(o) ? T.textDim : (change && change.index === i) ? T.cyan : _txRound(o.value) ? T.btc : T.textMid;
     const outNote = (o, i) => _txDust(o) ? "dust" : (o.scriptpubkey_address && inAddrs.has(o.scriptpubkey_address)) ? "reuse"
       : _txOpReturn(o) ? "data" : (change && change.index === i) ? "likely change" : _txRound(o.value) ? "round" : "payment";
+    // Original output indices deterministically linked (LP=1) to some input — i.e.
+    // provably funded by this tx's inputs, the concrete face of the entropy metric.
+    const detOut = new Set();
+    if (link.available) link.lp.forEach(row => row.forEach((v, j) => { if (Math.abs(v - 1) < 1e-9) detOut.add(link.outIdx[j]); }));
 
     report = (
       <div style={{ display: "flex", flexDirection: "column", gap: 14, marginTop: 20, animation: "fadeUp .4s ease both" }}>
@@ -4717,6 +4721,7 @@ function TransactionInspector({ onBack, isMobile, onScan }) {
                     <span style={{ color: outColor(o, i), flexShrink: 0, fontSize: 9 }}>{outNote(o, i)}</span>
                   </div>
                   <div style={{ color: T.textDim, fontSize: 10, marginTop: 2 }}>{sats(o.value)} · {o.scriptpubkey_type}</div>
+                  {detOut.has(i) && <div style={{ color: T.red, fontSize: 9, marginTop: 3, letterSpacing: .3 }}>⛓ provably from these inputs</div>}
                 </div>
               ))}
             </div>
