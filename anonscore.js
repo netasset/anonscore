@@ -2272,6 +2272,154 @@ function feeRate(tx) {
     estimated: !tx.txid
   };
 }
+function txInterpretations(ins, outs, fee, opts) {
+  opts = opts || {};
+  const n = ins.length,
+    m = outs.length;
+  const CAP = opts.cap || 12;
+  if (n === 0 || m === 0) return {
+    error: "empty"
+  };
+  if (n > CAP || m > CAP) return {
+    error: "too-many",
+    n,
+    m,
+    cap: CAP
+  };
+  if (fee == null) fee = ins.reduce((a, x) => a + x, 0) - outs.reduce((a, x) => a + x, 0);
+  if (fee < 0) return {
+    error: "negative-fee"
+  };
+  const inSum = new Array(1 << n),
+    outSum = new Array(1 << m);
+  inSum[0] = 0;
+  outSum[0] = 0;
+  for (let mask = 1; mask < 1 << n; mask++) {
+    const low = mask & -mask;
+    inSum[mask] = inSum[mask ^ low] + ins[31 - Math.clz32(low)];
+  }
+  for (let mask = 1; mask < 1 << m; mask++) {
+    const low = mask & -mask;
+    outSum[mask] = outSum[mask ^ low] + outs[31 - Math.clz32(low)];
+  }
+  const fullIn = (1 << n) - 1,
+    fullOut = (1 << m) - 1;
+  const memo = new Map();
+  const IT_CAP = opts.itCap || 8_000_000;
+  let iterations = 0,
+    bailed = false;
+  function count(inMask, outMask) {
+    if (inMask === 0) return outMask === 0 ? 1 : 0;
+    if (outMask === 0) return 0;
+    const key = inMask * (1 << m) + outMask;
+    const hit = memo.get(key);
+    if (hit !== undefined) return hit;
+    const i0 = inMask & -inMask,
+      restIn = inMask ^ i0;
+    let total = 0,
+      sub = restIn;
+    for (;;) {
+      if (bailed) break;
+      const si = sub | i0,
+        sIn = inSum[si];
+      let osub = outMask;
+      for (;;) {
+        if (++iterations > IT_CAP) {
+          bailed = true;
+          break;
+        }
+        if (osub !== 0) {
+          const surplus = sIn - outSum[osub];
+          if (surplus >= 0 && surplus <= fee) total += count(inMask ^ si, outMask ^ osub);
+        }
+        if (osub === 0) break;
+        osub = osub - 1 & outMask;
+      }
+      if (sub === 0) break;
+      sub = sub - 1 & restIn;
+    }
+    memo.set(key, total);
+    return total;
+  }
+  const N = count(fullIn, fullOut);
+  if (bailed) return {
+    error: "iteration-cap"
+  };
+  if (N === 0) return {
+    error: "no-interpretation"
+  };
+  const link = [];
+  for (let i = 0; i < n; i++) link.push(new Array(m).fill(0));
+  for (let si = 1; si <= fullIn; si++) {
+    const sIn = inSum[si];
+    for (let so = 1; so <= fullOut; so++) {
+      const surplus = sIn - outSum[so];
+      if (surplus < 0 || surplus > fee) continue;
+      const rest = count(fullIn ^ si, fullOut ^ so);
+      if (rest === 0) continue;
+      for (let i = 0; i < n; i++) if (si & 1 << i) for (let j = 0; j < m; j++) if (so & 1 << j) link[i][j] += rest;
+    }
+  }
+  const lp = link.map(row => row.map(v => v / N));
+  let dl = 0;
+  for (let i = 0; i < n; i++) for (let j = 0; j < m; j++) if (Math.abs(lp[i][j] - 1) < 1e-9) dl++;
+  return {
+    N,
+    entropy: Math.log2(N),
+    lp,
+    dl
+  };
+}
+function txLinkability(tx) {
+  const vin = tx.vin || [],
+    voutAll = tx.vout || [];
+  if (!vin.length || vin.some(v => !v.prevout || v.prevout.value == null)) return {
+    available: false,
+    reason: "input-values-unknown"
+  };
+  const outs = [];
+  voutAll.forEach((o, i) => {
+    if (o.scriptpubkey_type !== "op_return" && o.value != null) outs.push({
+      v: o.value,
+      idx: i
+    });
+  });
+  if (!outs.length) return {
+    available: false,
+    reason: "no-outputs"
+  };
+  const inVals = vin.map(v => v.prevout.value),
+    outVals = outs.map(o => o.v);
+  const fee = inVals.reduce((a, b) => a + b, 0) - outVals.reduce((a, b) => a + b, 0);
+  if (fee < 0) return {
+    available: false,
+    reason: "negative-fee"
+  };
+  if (vin.length > 12 || outs.length > 12) return {
+    available: false,
+    reason: "too-many",
+    n: vin.length,
+    m: outs.length
+  };
+  const res = txInterpretations(inVals, outVals, fee);
+  if (res.error) return {
+    available: false,
+    reason: res.error,
+    n: vin.length,
+    m: outs.length
+  };
+  return {
+    available: true,
+    n: vin.length,
+    m: outs.length,
+    N: res.N,
+    entropy: res.entropy,
+    dl: res.dl,
+    lp: res.lp,
+    outIdx: outs.map(o => o.idx),
+    fee
+  };
+}
 const DEMO_PSBT = "cHNidP8BAMMCAAAAAwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD9////AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABAAAAAP3///8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIAAAAA/f///wJAS0wAAAAAABYAFEREREREREREREREREREREREREREUC0ZAAAAAAAWABQREREREREREREREREREREREREREQAAAAAAAQEfwMYtAAAAAAAWABQREREREREREREREREREREREREREQABAR+gJSYAAAAAABYAFCIiIiIiIiIiIiIiIiIiIiIiIiIiAAEBH4BPEgAAAAAAFgAUMzMzMzMzMzMzMzMzMzMzMzMzMzMAAAA=";
 const _M64 = (1n << 64n) - 1n;
 function _sha512(bytes) {
@@ -9546,9 +9694,43 @@ function TransactionInspector({
     const change = guessChange(tx);
     const clus = clusterUnification(tx);
     const fr = feeRate(tx);
+    const link = txLinkability(tx);
+    const ent = link.available ? link.N === 1 ? {
+      c: T.red,
+      t: "Fully deterministic"
+    } : link.entropy < 1 ? {
+      c: T.red,
+      t: "Very low ambiguity"
+    } : link.entropy < 1.585 ? {
+      c: T.amber,
+      t: "Low ambiguity"
+    } : link.entropy < 3 ? {
+      c: T.cyan,
+      t: "Ambiguous"
+    } : {
+      c: T.green,
+      t: "Strongly ambiguous"
+    } : null;
+    const lpCell = v => Math.abs(v - 1) < 1e-9 ? {
+      bg: T.red,
+      fg: T.bg,
+      txt: "1"
+    } : v === 0 ? {
+      bg: T.surface,
+      fg: T.textDim,
+      txt: "0"
+    } : {
+      bg: T.red + Math.round(18 + v * 60).toString(16).padStart(2, "0"),
+      fg: T.text,
+      txt: v.toFixed(2).replace(/^0/, "")
+    };
     const inAddrs = new Set((tx.vin || []).map(v => v.prevout && v.prevout.scriptpubkey_address).filter(Boolean));
     const outColor = (o, i) => _txDust(o) ? T.red : o.scriptpubkey_address && inAddrs.has(o.scriptpubkey_address) ? T.red : _txOpReturn(o) ? T.textDim : change && change.index === i ? T.cyan : _txRound(o.value) ? T.btc : T.textMid;
     const outNote = (o, i) => _txDust(o) ? "dust" : o.scriptpubkey_address && inAddrs.has(o.scriptpubkey_address) ? "reuse" : _txOpReturn(o) ? "data" : change && change.index === i ? "likely change" : _txRound(o.value) ? "round" : "payment";
+    const detOut = new Set();
+    if (link.available) link.lp.forEach(row => row.forEach((v, j) => {
+      if (Math.abs(v - 1) < 1e-9) detOut.add(link.outIdx[j]);
+    }));
     report = React.createElement("div", {
       style: {
         display: "flex",
@@ -9603,7 +9785,139 @@ function TransactionInspector({
         marginTop: 1,
         fontFamily: T.mono
       }
-    }, f.ok ? "✓" : "→"), f.t)))), change && React.createElement("div", {
+    }, f.ok ? "✓" : "→"), f.t)))), link.available && React.createElement("div", {
+      style: panel({
+        borderColor: ent.c + "33"
+      })
+    }, React.createElement("div", {
+      style: {
+        ...label,
+        color: ent.c
+      }
+    }, "INTERPRETATION ENTROPY"), React.createElement("div", {
+      style: {
+        display: "flex",
+        alignItems: "baseline",
+        gap: 12,
+        flexWrap: "wrap",
+        marginBottom: 10
+      }
+    }, React.createElement("span", {
+      style: {
+        fontFamily: T.serif,
+        fontSize: isMobile ? 26 : 32,
+        color: ent.c,
+        fontWeight: 400
+      }
+    }, link.entropy.toFixed(2), React.createElement("span", {
+      style: {
+        fontSize: 13,
+        color: T.textDim,
+        marginLeft: 4
+      }
+    }, "bits")), React.createElement("span", {
+      style: {
+        fontFamily: T.sans,
+        fontSize: 14,
+        color: T.text,
+        fontWeight: 600
+      }
+    }, ent.t), React.createElement("span", {
+      style: {
+        fontFamily: T.mono,
+        fontSize: 10,
+        color: T.textDim,
+        marginLeft: "auto"
+      }
+    }, link.N.toLocaleString(), " interpretation", link.N !== 1 ? "s" : "")), React.createElement("div", {
+      style: {
+        fontSize: 13,
+        color: T.textMid,
+        lineHeight: 1.6,
+        marginBottom: link.dl > 0 ? 12 : 0
+      }
+    }, link.N === 1 ? "There is exactly one way to read this transaction — every input maps to every output with certainty. An analyst needs no guesswork; the whole trail is provable." : "There are " + link.N.toLocaleString() + " equally-valid ways to map these inputs to these outputs (E = log₂N). The more readings, the less any single input→output link can be proven — this is the metric KYCP.org and OXT scored before they went dark."), link.dl > 0 && React.createElement("div", {
+      style: {
+        background: T.red + "10",
+        border: `1px solid ${T.red}33`,
+        borderRadius: 10,
+        padding: "9px 12px",
+        fontSize: 12.5,
+        color: T.textMid,
+        lineHeight: 1.6
+      }
+    }, React.createElement("strong", {
+      style: {
+        color: T.red
+      }
+    }, link.dl, " deterministic link", link.dl !== 1 ? "s" : ""), " \u2014 pairing", link.dl !== 1 ? "s" : "", " that hold", link.dl === 1 ? "s" : "", " in ", React.createElement("em", null, "every"), " interpretation, so it is provable on-chain which input funded which output. This is precisely what surveillance clustering exploits."), link.n * link.m <= 64 && React.createElement("div", {
+      style: {
+        marginTop: 12,
+        overflowX: "auto"
+      }
+    }, React.createElement("div", {
+      style: {
+        fontFamily: T.mono,
+        fontSize: 9,
+        color: T.textDim,
+        letterSpacing: 1,
+        marginBottom: 6
+      }
+    }, "LINK PROBABILITY \xB7 rows = inputs \xB7 cols = outputs"), React.createElement("div", {
+      style: {
+        display: "inline-grid",
+        gridTemplateColumns: `auto repeat(${link.m}, minmax(30px, 1fr))`,
+        gap: 3
+      }
+    }, React.createElement("span", null), link.outIdx.map((oi, j) => React.createElement("span", {
+      key: "h" + j,
+      style: {
+        fontFamily: T.mono,
+        fontSize: 9,
+        color: T.textDim,
+        textAlign: "center",
+        alignSelf: "end",
+        paddingBottom: 2
+      }
+    }, "o", oi + 1)), link.lp.map((row, i) => [React.createElement("span", {
+      key: "r" + i,
+      style: {
+        fontFamily: T.mono,
+        fontSize: 9,
+        color: T.textDim,
+        alignSelf: "center",
+        paddingRight: 4
+      }
+    }, "in", i + 1), ...row.map((v, j) => {
+      const c = lpCell(v);
+      return React.createElement("span", {
+        key: i + "-" + j,
+        title: "P(input " + (i + 1) + " → output " + (link.outIdx[j] + 1) + ") = " + v.toFixed(3),
+        style: {
+          background: c.bg,
+          color: c.fg,
+          fontFamily: T.mono,
+          fontSize: 10,
+          textAlign: "center",
+          padding: "6px 2px",
+          borderRadius: 4,
+          minWidth: 30
+        }
+      }, c.txt);
+    })])))), !link.available && (link.reason === "too-many" || link.reason === "iteration-cap") && React.createElement("div", {
+      style: panel()
+    }, React.createElement("div", {
+      style: {
+        ...label,
+        color: T.green
+      }
+    }, "INTERPRETATION ENTROPY"), React.createElement("div", {
+      style: {
+        fontSize: 13,
+        color: T.textMid,
+        lineHeight: 1.6
+      }
+    }, link.reason === "too-many" ? "This transaction has " + link.n + " inputs and " + link.m + " outputs — beyond the 12×12 limit for exact link analysis (the same bound the reference Boltzmann tool uses). Very large transactions have astronomically many interpretations, which on its own means strong ambiguity." : "This transaction has too many valid interpretations to count exactly in the browser — which itself signals very high entropy and strong input→output ambiguity (typical of a CoinJoin).")), change && React.createElement("div", {
       style: panel()
     }, React.createElement("div", {
       style: label
@@ -9796,7 +10110,14 @@ function TransactionInspector({
         fontSize: 10,
         marginTop: 2
       }
-    }, sats(o.value), " \xB7 ", o.scriptpubkey_type))))), React.createElement("div", {
+    }, sats(o.value), " \xB7 ", o.scriptpubkey_type), detOut.has(i) && React.createElement("div", {
+      style: {
+        color: T.red,
+        fontSize: 9,
+        marginTop: 3,
+        letterSpacing: .3
+      }
+    }, "\u26D3 provably from these inputs"))))), React.createElement("div", {
       style: {
         display: "flex",
         flexWrap: "wrap",
@@ -12566,7 +12887,22 @@ function ActivityClock({
     style: {
       color: T.text
     }
-  }, tz, " (\xB12)"), " \u2014 block timestamps are public, and time-of-day is one of the oldest deanonymization signals. Based on the ", total, " most recent transactions", total < 12 ? " (small sample — rough read)" : "", ".") : React.createElement(React.Fragment, null, "No strong daily rhythm across the ", total, " most recent transactions \u2014 ", third ? "this wallet's timing gives" : "good: your timing gives", " an analyst less to work with. (Wallets with automated or randomized broadcast times blur this signal on purpose.)"))));
+  }, tz, " (\xB12)"), " \u2014 block timestamps are public, and time-of-day is one of the oldest deanonymization signals. Based on the ", total, " most recent transactions", total < 12 ? " (small sample — rough read)" : "", ".") : React.createElement(React.Fragment, null, "No strong daily rhythm across the ", total, " most recent transactions \u2014 ", third ? "this wallet's timing gives" : "good: your timing gives", " an analyst less to work with. (Wallets with automated or randomized broadcast times blur this signal on purpose.)")), React.createElement("div", {
+    style: {
+      fontSize: 11,
+      color: T.textDim,
+      lineHeight: 1.55,
+      marginTop: 8
+    }
+  }, "A hint, not proof: block timestamps record when a transaction ", React.createElement("em", null, "confirmed"), ", not when it was broadcast \u2014 a noisy proxy for local time. Independent research (", React.createElement("a", {
+    href: "https://www.dci.mit.edu/posts/coinjoin-timing-questions",
+    target: "_blank",
+    rel: "noopener noreferrer",
+    style: {
+      color: T.textMid,
+      textDecoration: "underline"
+    }
+  }, "MIT DCI"), ") found timing alone often can't pin a timezone. Weigh it as one weak signal among many.")));
 }
 function computeCluster(txs, address) {
   const links = new Map();
@@ -17185,6 +17521,8 @@ window.__ANONSCORE_TEST__ = Object.freeze({
   clusterUnification,
   feeRate,
   DEMO_PSBT,
+  txInterpretations,
+  txLinkability,
   _sha512,
   _hmacSha512,
   _ripemd160,

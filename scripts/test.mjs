@@ -328,12 +328,14 @@ else {
       verdict: !![...document.querySelectorAll('*')].find(e => e.textContent === 'PRE-BROADCAST VERDICT'),
       cluster: !![...document.querySelectorAll('*')].find(e => e.textContent === 'CLUSTER THIS SPEND CREATES'),
       io: !![...document.querySelectorAll('*')].find(e => e.textContent === 'INPUTS → OUTPUTS'),
+      entropy: !![...document.querySelectorAll('*')].find(e => e.textContent === 'INTERPRETATION ENTROPY'),
+      provable: !![...document.querySelectorAll('*')].find(e => (e.textContent || '').includes('provably from these inputs')),
     }));
     const thirdParty = [...new Set(insReqs)].filter(o => !o.includes("127.0.0.1"));
     if (!hasInput || !hasH1) fail("inspector: input textarea or sr-only h1 missing");
-    else if (!report.verdict || !report.cluster || !report.io) fail(`inspector: report incomplete after Load example (${JSON.stringify(report)})`);
+    else if (!report.verdict || !report.cluster || !report.io || !report.entropy || !report.provable) fail(`inspector: report incomplete after Load example (${JSON.stringify(report)})`);
     else if (thirdParty.length) fail(`inspector: made third-party requests (must be fully offline): ${thirdParty.join(", ")}`);
-    else pass("inspector renders at /?page=inspector; example PSBT parsed + full report, 100% offline");
+    else pass("inspector renders at /?page=inspector; example PSBT parsed + full report (incl. entropy), 100% offline");
   } catch (e) {
     fail("inspector: " + e.message.slice(0, 120));
   } finally {
@@ -506,6 +508,34 @@ const unit = await page.evaluate(() => {
     let threw = false; try { E.parseTransactionInput("deadbeef00"); } catch { threw = true; }
     t("inspector: malformed hex throws", threw);
     t("inspector: txid detected as networked kind", E.detectTxInput("ab".repeat(32)) === "txid");
+  }
+
+  // — transaction entropy / linkability (Boltzmann · KYCP methodology) —
+  //   validated against LaurentMT's canonical examples: N=1/E=0 (payment),
+  //   N=2/E=1 (ambiguous), N=3/E=1.585 (CoinJoin), and LP=2/3 for the 2×2 CJ —
+  {
+    const close = (a, b) => Math.abs(a - b) < 1e-9;
+    const pay = E.txInterpretations([100000], [70000, 29000], 1000);
+    t("entropy: payment N=1, E=0", pay.N === 1 && pay.entropy === 0);
+    t("entropy: payment both outputs deterministically linked", pay.dl === 2);
+    const amb = E.txInterpretations([40000, 60000], [40000, 60000], 0);
+    t("entropy: ambiguous 2×2 distinct N=2, E=1", amb.N === 2 && amb.entropy === 1);
+    const cj = E.txInterpretations([1, 1], [1, 1], 0);
+    t("entropy: 2×2 equal CoinJoin N=3, E=1.585", cj.N === 3 && close(cj.entropy, Math.log2(3)));
+    t("entropy: 2×2 CoinJoin LP = 2/3, no deterministic links", close(cj.lp[0][0], 2 / 3) && cj.dl === 0);
+    const cj3 = E.txInterpretations([1, 1, 1], [1, 1, 1], 0);
+    t("entropy: 3×3 equal CoinJoin N=16, E=4", cj3.N === 16 && close(cj3.entropy, 4));
+    const undiv = E.txInterpretations([1, 3], [2, 2], 0);
+    t("entropy: indivisible 2×2 N=1, all 4 links deterministic", undiv.N === 1 && undiv.dl === 4);
+    t("entropy: negative fee rejected", E.txInterpretations([100], [200], -50).error === "negative-fee");
+    t("entropy: 13 inputs exceeds the 12-item cap", E.txInterpretations(new Array(13).fill(1), [1], 0).error === "too-many");
+    // txLinkability wraps a parsed tx (needs input amounts → full PSBT works)
+    const dtx = E.parseTransactionInput(E.DEMO_PSBT).tx;
+    const dl = E.txLinkability(dtx);
+    t("entropy: demo PSBT linkability available with a 3×2 matrix", dl.available === true && dl.n === 3 && dl.m === 2 && dl.lp.length === 3 && dl.lp[0].length === 2);
+    // raw hex carries no input values → honestly reports unavailable, never guesses
+    const noVals = { vin: [{ prevout: null }], vout: [{ value: 1000, scriptpubkey_type: "v0_p2wpkh" }] };
+    t("entropy: missing input values → unavailable (no guessing)", E.txLinkability(noVals).available === false && E.txLinkability(noVals).reason === "input-values-unknown");
   }
 
   // — xpub wallet scanner: BIP32 public derivation (validated end-to-end against
