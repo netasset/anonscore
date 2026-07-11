@@ -330,10 +330,11 @@ else {
       io: !![...document.querySelectorAll('*')].find(e => e.textContent === 'INPUTS → OUTPUTS'),
       entropy: !![...document.querySelectorAll('*')].find(e => e.textContent === 'INTERPRETATION ENTROPY'),
       provable: !![...document.querySelectorAll('*')].find(e => (e.textContent || '').includes('provably from these inputs')),
+      fingerprint: !![...document.querySelectorAll('*')].find(e => e.textContent === 'WALLET FINGERPRINT'),
     }));
     const thirdParty = [...new Set(insReqs)].filter(o => !o.includes("127.0.0.1"));
     if (!hasInput || !hasH1) fail("inspector: input textarea or sr-only h1 missing");
-    else if (!report.verdict || !report.cluster || !report.io || !report.entropy || !report.provable) fail(`inspector: report incomplete after Load example (${JSON.stringify(report)})`);
+    else if (!report.verdict || !report.cluster || !report.io || !report.entropy || !report.provable || !report.fingerprint) fail(`inspector: report incomplete after Load example (${JSON.stringify(report)})`);
     else if (thirdParty.length) fail(`inspector: made third-party requests (must be fully offline): ${thirdParty.join(", ")}`);
     else pass("inspector renders at /?page=inspector; example PSBT parsed + full report (incl. entropy), 100% offline");
   } catch (e) {
@@ -536,6 +537,40 @@ const unit = await page.evaluate(() => {
     // raw hex carries no input values → honestly reports unavailable, never guesses
     const noVals = { vin: [{ prevout: null }], vout: [{ value: 1000, scriptpubkey_type: "v0_p2wpkh" }] };
     t("entropy: missing input values → unavailable (no guessing)", E.txLinkability(noVals).available === false && E.txLinkability(noVals).reason === "input-values-unknown");
+  }
+
+  // — wallet fingerprint: structural tells (version / locktime / RBF / BIP69 / mix) —
+  {
+    // Demo PSBT: v2, all-0xfffffffd sequences (RBF default), locktime 0 (no anti-snipe)
+    const dtx = E.parseTransactionInput(E.DEMO_PSBT).tx;
+    t("fingerprint: parser now preserves nSequence", dtx.vin[0].sequence === 0xfffffffd && dtx.locktime === 0 && dtx.version === 2);
+    const fp = E.fingerprintTx(dtx);
+    t("fingerprint: demo flags locktime-0 as distinctive, RBF-default as common", fp.available && fp.distinctive === 1 && fp.signals.some(s => s.key === "locktime" && s.distinctive) && fp.signals.some(s => s.key === "rbf" && !s.distinctive));
+    t("fingerprint: demo narrative explains the RBF/anti-snipe mismatch", /RBF default matches/.test(fp.guess));
+    // Anti-fee-sniping + RBF → consistent-with-Core/Electrum narrative
+    const core = { version: 2, locktime: 800000, vin: [{ sequence: 0xfffffffd, prevout: { scriptpubkey_type: "v0_p2wpkh" } }], vout: [{ value: 100, scriptpubkey: "0014aa" }] };
+    t("fingerprint: anti-snipe + RBF reads as Core/Electrum", /Bitcoin Core or Electrum/.test(E.fingerprintTx(core).guess));
+    // Mixed input script types is a distinctive coin-control tell
+    const mixed = { version: 2, locktime: 800000, vin: [{ sequence: 0xfffffffd, prevout: { scriptpubkey_type: "v0_p2wpkh" } }, { sequence: 0xfffffffd, prevout: { scriptpubkey_type: "p2pkh" } }], vout: [{ value: 100, scriptpubkey: "0014aa" }, { value: 90, scriptpubkey: "0014bb" }] };
+    t("fingerprint: mixed input types flagged distinctive", E.fingerprintTx(mixed).signals.some(s => s.key === "mixin" && s.distinctive));
+    // No-RBF + locktime 0 rules out Core/Electrum defaults
+    const mobile = { version: 2, locktime: 0, vin: [{ sequence: 0xffffffff, prevout: { scriptpubkey_type: "v0_p2wpkh" } }], vout: [{ value: 100, scriptpubkey: "0014aa" }] };
+    t("fingerprint: no-RBF + locktime-0 rules out Core/Electrum", /rules out current Core/.test(E.fingerprintTx(mobile).guess));
+
+    // Low-r signature grinding — the deterministic "not Core" tell (DER classifier)
+    const hx = h => new Uint8Array(h.match(/../g).map(x => parseInt(x, 16)));
+    const lowR = hx("30" + "44" + "0220" + "11".repeat(32) + "0220" + "22".repeat(32) + "01");
+    const highR = hx("30" + "45" + "0221" + "00" + "11".repeat(32) + "0220" + "22".repeat(32) + "01");
+    t("fingerprint: DER low-r sig is 71 bytes, not high-r", E._derSigInfo(lowR).len === 71 && E._derSigInfo(lowR).highR === false);
+    t("fingerprint: DER high-r sig is 72 bytes, flagged high-r", E._derSigInfo(highR).len === 72 && E._derSigInfo(highR).highR === true);
+    t("fingerprint: a 33-byte pubkey is not misread as a signature", E._derSigInfo(hx("02" + "ab".repeat(32))) === null);
+    // End-to-end: a real signed segwit tx hex (high-r sig) → parser captures the
+    // witness → fingerprint decisively rules out Core.
+    const signedHighR = "0200000000010100000000000000000000000000000000000000000000000000000000000000000000000000fdffffff018038010000000000160014abababababababababababababababababababab02483045022100111111111111111111111111111111111111111111111111111111111111111102202222222222222222222222222222222222222222222222222222222222222222012103cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd00000000";
+    const stx = E.parseRawTx(hx(signedHighR));
+    t("fingerprint: parser captures the witness stack", Array.isArray(stx.vin[0].witness) && stx.vin[0].witness.length === 2);
+    const sfp = E.fingerprintTx(stx);
+    t("fingerprint: high-r signed tx decisively rules out Core", sfp.signals.some(s => s.key === "lowr" && s.distinctive) && /not signed by Bitcoin Core/.test(sfp.guess));
   }
 
   // — xpub wallet scanner: BIP32 public derivation (validated end-to-end against

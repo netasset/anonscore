@@ -2027,11 +2027,12 @@ function parseRawTx(bytes) {
     const prevTxid = c.slice(32);
     const vout = c.u32();
     c.varslice();
-    c.u32();
+    const sequence = c.u32();
     vin.push({
       txid: _bytesToHex(prevTxid.slice().reverse()),
       vout,
-      prevout: null
+      prevout: null,
+      sequence
     });
   }
   const nOut = c.varint();
@@ -2051,7 +2052,9 @@ function parseRawTx(bytes) {
   if (segwit) {
     for (let i = 0; i < nIn; i++) {
       const items = c.varint();
-      for (let j = 0; j < items; j++) c.varslice();
+      const w = [];
+      for (let j = 0; j < items; j++) w.push(c.varslice());
+      vin[i].witness = w;
     }
   }
   const locktime = c.u32();
@@ -2122,7 +2125,9 @@ function parsePsbt(bytes) {
     vin: unsigned.vin,
     vout: unsigned.vout,
     fee: partial ? null : inSum - outSum,
-    partial
+    partial,
+    version: unsigned.version,
+    locktime: unsigned.locktime
   };
 }
 function detectTxInput(v) {
@@ -2150,7 +2155,9 @@ function parseTransactionInput(raw) {
         vin: t.vin,
         vout: t.vout,
         fee: null,
-        partial: true
+        partial: true,
+        version: t.version,
+        locktime: t.locktime
       }
     };
   }
@@ -2418,6 +2425,133 @@ function txLinkability(tx) {
     lp: res.lp,
     outIdx: outs.map(o => o.idx),
     fee
+  };
+}
+function fingerprintTx(tx) {
+  const vin = tx.vin || [],
+    vout = tx.vout || [];
+  const nIn = vin.length,
+    nOut = vout.length;
+  if (!nIn || !nOut) return {
+    available: false
+  };
+  const seqs = vin.map(v => v.sequence).filter(s => s != null);
+  const haveSeq = seqs.length === nIn;
+  const signals = [];
+  if (tx.version === 1) signals.push({
+    key: "version",
+    distinctive: true,
+    t: "nVersion = 1 — most modern wallets set version 2; this is a mild tell of older or minimal software."
+  });
+  const lt = tx.locktime;
+  const antiSnipe = lt != null && lt > 0 && lt < 500000000;
+  if (lt != null) {
+    if (antiSnipe) signals.push({
+      key: "locktime",
+      distinctive: false,
+      t: `nLockTime = ${lt} (a recent block height) — anti-fee-sniping, the Bitcoin Core / Electrum default. Good: it's the herd behaviour.`
+    });else if (lt === 0) signals.push({
+      key: "locktime",
+      distinctive: true,
+      t: "nLockTime = 0 — no anti-fee-sniping. Rules out current Bitcoin Core / Electrum defaults; common in many mobile and hardware wallets."
+    });
+  }
+  let rbf = null;
+  if (haveSeq) {
+    rbf = seqs.some(s => s < 0xfffffffe);
+    const allFD = seqs.every(s => s === 0xfffffffd);
+    const allMax = seqs.every(s => s === 0xffffffff);
+    if (allFD) signals.push({
+      key: "rbf",
+      distinctive: false,
+      t: "All inputs nSequence = 0xfffffffd — opt-in RBF, the Core / Electrum default. Good: common."
+    });else if (allMax) signals.push({
+      key: "rbf",
+      distinctive: true,
+      t: "All inputs nSequence = 0xffffffff — no RBF, no locktime. A distinctive default of some wallets; also disables anti-fee-sniping."
+    });else if (rbf) signals.push({
+      key: "rbf",
+      distinctive: true,
+      t: "Mixed / non-standard nSequence values — an unusual signature that stands out."
+    });
+  }
+  const inSorted = vin.every((v, i) => i === 0 || cmpIn(vin[i - 1], v) <= 0);
+  const outSorted = vout.every((o, i) => i === 0 || cmpOut(vout[i - 1], o) <= 0);
+  const bip69Meaningful = nIn > 1 || nOut > 1;
+  if (bip69Meaningful && inSorted && outSorted) signals.push({
+    key: "bip69",
+    distinctive: true,
+    t: "Inputs and outputs are in BIP69 lexicographic order — a deterministic-ordering scheme only a minority of wallets use, so it narrows the field."
+  });
+  const inTypes = new Set(vin.map(v => v.prevout && v.prevout.scriptpubkey_type).filter(Boolean));
+  if (inTypes.size > 1) signals.push({
+    key: "mixin",
+    distinctive: true,
+    t: `Inputs mix ${inTypes.size} script types — spending different address types together is unusual and links those coins as one owner's coin-control choice.`
+  });
+  let sawSig = false,
+    sawHighR = false;
+  for (const v of vin) for (const it of v.witness || []) {
+    const si = _derSigInfo(it);
+    if (si) {
+      sawSig = true;
+      if (si.highR) sawHighR = true;
+    }
+  }
+  if (sawSig) {
+    if (sawHighR) signals.push({
+      key: "lowr",
+      distinctive: true,
+      t: "A high-r ECDSA signature (72 bytes) is present — Bitcoin Core grinds every signature to low-r since v0.17 (2018), so this rules Core out as the signer."
+    });else signals.push({
+      key: "lowr",
+      distinctive: false,
+      t: "All signatures are low-r (≤71 bytes) — consistent with Bitcoin Core and other modern wallets that grind signatures. Good: the common case."
+    });
+  }
+  let guess = "";
+  const allFDseq = haveSeq && seqs.every(s => s === 0xfffffffd);
+  if (sawHighR) return {
+    available: true,
+    signals,
+    distinctive: signals.filter(s => s.distinctive).length,
+    guess: "The high-r signature is decisive: this transaction was not signed by Bitcoin Core.",
+    version: tx.version,
+    locktime: lt,
+    rbf
+  };
+  if (antiSnipe && rbf) guess = "Structure is consistent with Bitcoin Core or Electrum (anti-fee-sniping + opt-in RBF defaults).";else if (lt === 0 && haveSeq && seqs.every(s => s === 0xffffffff)) guess = "Structure rules out current Core / Electrum defaults (no anti-fee-sniping, no RBF) — consistent with several mobile / hardware wallets.";else if (allFDseq && !antiSnipe) guess = "The RBF default matches Core / Electrum, but the missing anti-fee-sniping locktime doesn't — an inconsistent pairing that itself stands out.";
+  const distinctive = signals.filter(s => s.distinctive).length;
+  return {
+    available: true,
+    signals,
+    distinctive,
+    guess,
+    version: tx.version,
+    locktime: lt,
+    rbf
+  };
+}
+function cmpIn(a, b) {
+  if (a.txid !== b.txid) return a.txid < b.txid ? -1 : 1;
+  return (a.vout || 0) - (b.vout || 0);
+}
+function cmpOut(a, b) {
+  if ((a.value || 0) !== (b.value || 0)) return (a.value || 0) - (b.value || 0);
+  const x = a.scriptpubkey || "",
+    y = b.scriptpubkey || "";
+  return x < y ? -1 : x > y ? 1 : 0;
+}
+function _derSigInfo(b) {
+  if (!b || b.length < 9 || b[0] !== 0x30) return null;
+  if (b[1] !== b.length - 3) return null;
+  if (b[2] !== 0x02) return null;
+  const rlen = b[3];
+  if (4 + rlen >= b.length || b[4 + rlen] !== 0x02) return null;
+  return {
+    der: true,
+    len: b.length,
+    highR: rlen >= 0x21
   };
 }
 const DEMO_PSBT = "cHNidP8BAMMCAAAAAwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD9////AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABAAAAAP3///8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIAAAAA/f///wJAS0wAAAAAABYAFEREREREREREREREREREREREREREUC0ZAAAAAAAWABQREREREREREREREREREREREREREQAAAAAAAQEfwMYtAAAAAAAWABQREREREREREREREREREREREREREQABAR+gJSYAAAAAABYAFCIiIiIiIiIiIiIiIiIiIiIiIiIiAAEBH4BPEgAAAAAAFgAUMzMzMzMzMzMzMzMzMzMzMzMzMzMAAAA=";
@@ -9711,6 +9845,7 @@ function TransactionInspector({
       c: T.green,
       t: "Strongly ambiguous"
     } : null;
+    const fp = fingerprintTx(tx);
     const lpCell = v => Math.abs(v - 1) < 1e-9 ? {
       bg: T.red,
       fg: T.bg,
@@ -9917,7 +10052,49 @@ function TransactionInspector({
         color: T.textMid,
         lineHeight: 1.6
       }
-    }, link.reason === "too-many" ? "This transaction has " + link.n + " inputs and " + link.m + " outputs — beyond the 12×12 limit for exact link analysis (the same bound the reference Boltzmann tool uses). Very large transactions have astronomically many interpretations, which on its own means strong ambiguity." : "This transaction has too many valid interpretations to count exactly in the browser — which itself signals very high entropy and strong input→output ambiguity (typical of a CoinJoin).")), change && React.createElement("div", {
+    }, link.reason === "too-many" ? "This transaction has " + link.n + " inputs and " + link.m + " outputs — beyond the 12×12 limit for exact link analysis (the same bound the reference Boltzmann tool uses). Very large transactions have astronomically many interpretations, which on its own means strong ambiguity." : "This transaction has too many valid interpretations to count exactly in the browser — which itself signals very high entropy and strong input→output ambiguity (typical of a CoinJoin).")), fp.available && fp.signals.length > 0 && React.createElement("div", {
+      style: panel({
+        borderColor: fp.distinctive > 0 ? T.amber + "33" : T.border
+      })
+    }, React.createElement("div", {
+      style: {
+        ...label,
+        color: fp.distinctive > 0 ? T.amber : T.textDim
+      }
+    }, "WALLET FINGERPRINT"), React.createElement("div", {
+      style: {
+        fontSize: 13,
+        color: T.textMid,
+        lineHeight: 1.6,
+        marginBottom: 12
+      }
+    }, fp.distinctive > 0 ? "Your transaction's structure is a fingerprint — it links your transactions to one wallet and narrows which software you run. " + (fp.guess || "") : "Your transaction follows common defaults — good: structurally it doesn't stand out. " + (fp.guess || "")), React.createElement("ul", {
+      style: {
+        listStyle: "none",
+        display: "flex",
+        flexDirection: "column",
+        gap: 7,
+        padding: 0,
+        margin: 0
+      }
+    }, fp.signals.map((s, i) => React.createElement("li", {
+      key: i,
+      style: {
+        display: "flex",
+        gap: 8,
+        alignItems: "flex-start",
+        fontSize: 12.5,
+        color: T.textMid,
+        lineHeight: 1.55
+      }
+    }, React.createElement("span", {
+      style: {
+        color: s.distinctive ? T.amber : T.green,
+        flexShrink: 0,
+        marginTop: 1,
+        fontFamily: T.mono
+      }
+    }, s.distinctive ? "◆" : "✓"), s.t)))), change && React.createElement("div", {
       style: panel()
     }, React.createElement("div", {
       style: label
@@ -17523,6 +17700,8 @@ window.__ANONSCORE_TEST__ = Object.freeze({
   DEMO_PSBT,
   txInterpretations,
   txLinkability,
+  fingerprintTx,
+  _derSigInfo,
   _sha512,
   _hmacSha512,
   _ripemd160,
