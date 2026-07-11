@@ -1215,7 +1215,7 @@ function parseRawTx(bytes) {
     const cl = classifyScript(spk);
     vout.push({ value, scriptpubkey: _bytesToHex(spk), scriptpubkey_type: cl.type, scriptpubkey_address: _spkAddr(cl, spk) });
   }
-  if (segwit) { for (let i = 0; i < nIn; i++) { const items = c.varint(); for (let j = 0; j < items; j++) c.varslice(); } }
+  if (segwit) { for (let i = 0; i < nIn; i++) { const items = c.varint(); const w = []; for (let j = 0; j < items; j++) w.push(c.varslice()); vin[i].witness = w; } }
   const locktime = c.u32();
   return { version, vin, vout, locktime, segwit };
 }
@@ -1490,9 +1490,19 @@ function fingerprintTx(tx) {
   const inTypes = new Set(vin.map(v => v.prevout && v.prevout.scriptpubkey_type).filter(Boolean));
   if (inTypes.size > 1) signals.push({ key: "mixin", distinctive: true, t: `Inputs mix ${inTypes.size} script types — spending different address types together is unusual and links those coins as one owner's coin-control choice.` });
 
+  // Low-r signature grinding — the strongest deterministic tell, but only visible
+  // on a SIGNED tx (raw hex with witnesses); PSBTs are unsigned so it's skipped.
+  let sawSig = false, sawHighR = false;
+  for (const v of vin) for (const it of (v.witness || [])) { const si = _derSigInfo(it); if (si) { sawSig = true; if (si.highR) sawHighR = true; } }
+  if (sawSig) {
+    if (sawHighR) signals.push({ key: "lowr", distinctive: true, t: "A high-r ECDSA signature (72 bytes) is present — Bitcoin Core grinds every signature to low-r since v0.17 (2018), so this rules Core out as the signer." });
+    else signals.push({ key: "lowr", distinctive: false, t: "All signatures are low-r (≤71 bytes) — consistent with Bitcoin Core and other modern wallets that grind signatures. Good: the common case." });
+  }
+
   // A soft narrowing narrative from the strongest tells.
   let guess = "";
   const allFDseq = haveSeq && seqs.every(s => s === 0xfffffffd);
+  if (sawHighR) return { available: true, signals, distinctive: signals.filter(s => s.distinctive).length, guess: "The high-r signature is decisive: this transaction was not signed by Bitcoin Core.", version: tx.version, locktime: lt, rbf };
   if (antiSnipe && rbf) guess = "Structure is consistent with Bitcoin Core or Electrum (anti-fee-sniping + opt-in RBF defaults).";
   else if (lt === 0 && haveSeq && seqs.every(s => s === 0xffffffff)) guess = "Structure rules out current Core / Electrum defaults (no anti-fee-sniping, no RBF) — consistent with several mobile / hardware wallets.";
   else if (allFDseq && !antiSnipe) guess = "The RBF default matches Core / Electrum, but the missing anti-fee-sniping locktime doesn't — an inconsistent pairing that itself stands out.";
@@ -1503,6 +1513,19 @@ function fingerprintTx(tx) {
 // BIP69 comparators (module scope so fingerprintTx stays flat).
 function cmpIn(a, b) { if (a.txid !== b.txid) return a.txid < b.txid ? -1 : 1; return (a.vout || 0) - (b.vout || 0); }
 function cmpOut(a, b) { if ((a.value || 0) !== (b.value || 0)) return (a.value || 0) - (b.value || 0); const x = a.scriptpubkey || "", y = b.scriptpubkey || ""; return x < y ? -1 : x > y ? 1 : 0; }
+// A witness/scriptSig signature push is a DER ECDSA sig + 1 sighash byte:
+// 30 <len> 02 <rlen> <r> 02 <slen> <s> <sighash>. Bitcoin Core (≥v0.17, 2018)
+// grinds every signature to low-r, so r fits in 32 bytes (rlen=0x20) and the sig
+// is ≤71 bytes; a high-r sig (rlen=0x21, 33 bytes, total 72) is one Core would
+// never produce — a deterministic "not Core" tell. Returns null for non-sigs.
+function _derSigInfo(b) {
+  if (!b || b.length < 9 || b[0] !== 0x30) return null;
+  if (b[1] !== b.length - 3) return null;                 // DER length (excl. 2 header + 1 sighash)
+  if (b[2] !== 0x02) return null;                         // r INTEGER marker
+  const rlen = b[3];
+  if (4 + rlen >= b.length || b[4 + rlen] !== 0x02) return null; // s INTEGER marker
+  return { der: true, len: b.length, highR: rlen >= 0x21 };
+}
 
 // A real, minted PSBT (validated round-trip): 3 bech32 inputs fused, a round
 // 5,000,000-sat payment, and change reused back to input #1 — a compact tour
@@ -7689,8 +7712,8 @@ window.__ANONSCORE_TEST__ = Object.freeze({
   analyzeTx, guessChange, clusterUnification, feeRate, DEMO_PSBT,
   // transaction entropy / linkability (Boltzmann · validated vs LaurentMT vectors)
   txInterpretations, txLinkability,
-  // wallet fingerprint (structural tells: version/locktime/RBF/BIP69/script-mix)
-  fingerprintTx,
+  // wallet fingerprint (structural tells: version/locktime/RBF/BIP69/script-mix/low-r)
+  fingerprintTx, _derSigInfo,
   // xpub wallet scanner — crypto (validated against BIP32 TV1 + BIP84 vectors)
   _sha512, _hmacSha512, _ripemd160, decodeXpub, ckdPub, deriveWalletAddress, detectXpub,
   runWalletEngine, DEMO_WALLET,

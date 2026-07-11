@@ -2052,7 +2052,9 @@ function parseRawTx(bytes) {
   if (segwit) {
     for (let i = 0; i < nIn; i++) {
       const items = c.varint();
-      for (let j = 0; j < items; j++) c.varslice();
+      const w = [];
+      for (let j = 0; j < items; j++) w.push(c.varslice());
+      vin[i].witness = w;
     }
   }
   const locktime = c.u32();
@@ -2487,8 +2489,37 @@ function fingerprintTx(tx) {
     distinctive: true,
     t: `Inputs mix ${inTypes.size} script types — spending different address types together is unusual and links those coins as one owner's coin-control choice.`
   });
+  let sawSig = false,
+    sawHighR = false;
+  for (const v of vin) for (const it of v.witness || []) {
+    const si = _derSigInfo(it);
+    if (si) {
+      sawSig = true;
+      if (si.highR) sawHighR = true;
+    }
+  }
+  if (sawSig) {
+    if (sawHighR) signals.push({
+      key: "lowr",
+      distinctive: true,
+      t: "A high-r ECDSA signature (72 bytes) is present — Bitcoin Core grinds every signature to low-r since v0.17 (2018), so this rules Core out as the signer."
+    });else signals.push({
+      key: "lowr",
+      distinctive: false,
+      t: "All signatures are low-r (≤71 bytes) — consistent with Bitcoin Core and other modern wallets that grind signatures. Good: the common case."
+    });
+  }
   let guess = "";
   const allFDseq = haveSeq && seqs.every(s => s === 0xfffffffd);
+  if (sawHighR) return {
+    available: true,
+    signals,
+    distinctive: signals.filter(s => s.distinctive).length,
+    guess: "The high-r signature is decisive: this transaction was not signed by Bitcoin Core.",
+    version: tx.version,
+    locktime: lt,
+    rbf
+  };
   if (antiSnipe && rbf) guess = "Structure is consistent with Bitcoin Core or Electrum (anti-fee-sniping + opt-in RBF defaults).";else if (lt === 0 && haveSeq && seqs.every(s => s === 0xffffffff)) guess = "Structure rules out current Core / Electrum defaults (no anti-fee-sniping, no RBF) — consistent with several mobile / hardware wallets.";else if (allFDseq && !antiSnipe) guess = "The RBF default matches Core / Electrum, but the missing anti-fee-sniping locktime doesn't — an inconsistent pairing that itself stands out.";
   const distinctive = signals.filter(s => s.distinctive).length;
   return {
@@ -2510,6 +2541,18 @@ function cmpOut(a, b) {
   const x = a.scriptpubkey || "",
     y = b.scriptpubkey || "";
   return x < y ? -1 : x > y ? 1 : 0;
+}
+function _derSigInfo(b) {
+  if (!b || b.length < 9 || b[0] !== 0x30) return null;
+  if (b[1] !== b.length - 3) return null;
+  if (b[2] !== 0x02) return null;
+  const rlen = b[3];
+  if (4 + rlen >= b.length || b[4 + rlen] !== 0x02) return null;
+  return {
+    der: true,
+    len: b.length,
+    highR: rlen >= 0x21
+  };
 }
 const DEMO_PSBT = "cHNidP8BAMMCAAAAAwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD9////AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABAAAAAP3///8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIAAAAA/f///wJAS0wAAAAAABYAFEREREREREREREREREREREREREREUC0ZAAAAAAAWABQREREREREREREREREREREREREREQAAAAAAAQEfwMYtAAAAAAAWABQREREREREREREREREREREREREREQABAR+gJSYAAAAAABYAFCIiIiIiIiIiIiIiIiIiIiIiIiIiAAEBH4BPEgAAAAAAFgAUMzMzMzMzMzMzMzMzMzMzMzMzMzMAAAA=";
 const _M64 = (1n << 64n) - 1n;
@@ -17658,6 +17701,7 @@ window.__ANONSCORE_TEST__ = Object.freeze({
   txInterpretations,
   txLinkability,
   fingerprintTx,
+  _derSigInfo,
   _sha512,
   _hmacSha512,
   _ripemd160,

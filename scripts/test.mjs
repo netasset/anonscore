@@ -556,6 +556,21 @@ const unit = await page.evaluate(() => {
     // No-RBF + locktime 0 rules out Core/Electrum defaults
     const mobile = { version: 2, locktime: 0, vin: [{ sequence: 0xffffffff, prevout: { scriptpubkey_type: "v0_p2wpkh" } }], vout: [{ value: 100, scriptpubkey: "0014aa" }] };
     t("fingerprint: no-RBF + locktime-0 rules out Core/Electrum", /rules out current Core/.test(E.fingerprintTx(mobile).guess));
+
+    // Low-r signature grinding — the deterministic "not Core" tell (DER classifier)
+    const hx = h => new Uint8Array(h.match(/../g).map(x => parseInt(x, 16)));
+    const lowR = hx("30" + "44" + "0220" + "11".repeat(32) + "0220" + "22".repeat(32) + "01");
+    const highR = hx("30" + "45" + "0221" + "00" + "11".repeat(32) + "0220" + "22".repeat(32) + "01");
+    t("fingerprint: DER low-r sig is 71 bytes, not high-r", E._derSigInfo(lowR).len === 71 && E._derSigInfo(lowR).highR === false);
+    t("fingerprint: DER high-r sig is 72 bytes, flagged high-r", E._derSigInfo(highR).len === 72 && E._derSigInfo(highR).highR === true);
+    t("fingerprint: a 33-byte pubkey is not misread as a signature", E._derSigInfo(hx("02" + "ab".repeat(32))) === null);
+    // End-to-end: a real signed segwit tx hex (high-r sig) → parser captures the
+    // witness → fingerprint decisively rules out Core.
+    const signedHighR = "0200000000010100000000000000000000000000000000000000000000000000000000000000000000000000fdffffff018038010000000000160014abababababababababababababababababababab02483045022100111111111111111111111111111111111111111111111111111111111111111102202222222222222222222222222222222222222222222222222222222222222222012103cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd00000000";
+    const stx = E.parseRawTx(hx(signedHighR));
+    t("fingerprint: parser captures the witness stack", Array.isArray(stx.vin[0].witness) && stx.vin[0].witness.length === 2);
+    const sfp = E.fingerprintTx(stx);
+    t("fingerprint: high-r signed tx decisively rules out Core", sfp.signals.some(s => s.key === "lowr" && s.distinctive) && /not signed by Bitcoin Core/.test(sfp.guess));
   }
 
   // — xpub wallet scanner: BIP32 public derivation (validated end-to-end against
