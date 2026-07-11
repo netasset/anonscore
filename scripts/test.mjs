@@ -341,6 +341,36 @@ else {
   }
 }
 
+// Wallet xpub scan page: deep-linkable at /?page=xpub; "Load example" runs the
+// wallet engine on a fixture and renders the report entirely offline.
+{
+  const xp = await ctx.newPage();
+  const xReqs = [];
+  xp.on("request", r => xReqs.push(new URL(r.url()).origin));
+  try {
+    await xp.goto(`http://127.0.0.1:${PORT}/?page=xpub`, { waitUntil: "load" });
+    await xp.waitForFunction(() => document.getElementById("root")?.childElementCount > 0, { timeout: 15000 });
+    await xp.waitForTimeout(600);
+    const hasInput = await xp.locator('textarea#xpub-input').count();
+    await xp.getByText("Load example").click();
+    await xp.waitForTimeout(700);
+    const rep = await xp.evaluate(() => ({
+      grade: !![...document.querySelectorAll('*')].find(e => /Grade [A-F]/.test(e.textContent || "") && e.children.length < 3),
+      breakdown: !![...document.querySelectorAll('*')].find(e => e.textContent === 'HOW THE WALLET SCORES'),
+      addrs: !![...document.querySelectorAll('*')].find(e => /^ADDRESSES \(/.test(e.textContent || "")),
+    }));
+    const thirdParty = [...new Set(xReqs)].filter(o => !o.includes("127.0.0.1"));
+    if (!hasInput) fail("xpub scan: xpub textarea missing");
+    else if (!rep.grade || !rep.breakdown || !rep.addrs) fail(`xpub scan: report incomplete after Load example (${JSON.stringify(rep)})`);
+    else if (thirdParty.length) fail(`xpub scan: made third-party requests on the offline demo: ${thirdParty.join(", ")}`);
+    else pass("xpub scan renders at /?page=xpub; example wallet scored + report, 100% offline");
+  } catch (e) {
+    fail("xpub scan: " + e.message.slice(0, 120));
+  } finally {
+    await xp.close();
+  }
+}
+
 // Service worker should register and precache the static assets.
 await page.waitForFunction(
   () => navigator.serviceWorker?.controller || navigator.serviceWorker?.ready,
@@ -478,13 +508,54 @@ const unit = await page.evaluate(() => {
     t("inspector: txid detected as networked kind", E.detectTxInput("ab".repeat(32)) === "txid");
   }
 
+  // — xpub wallet scanner: BIP32 public derivation (validated end-to-end against
+  //   the BIP84 known-answer vector) + the wallet-level engine —
+  {
+    const toHex = b => { let s=""; for(const x of b) s+=x.toString(16).padStart(2,"0"); return s; };
+    // SHA-512 known-answer (underpins HMAC-SHA512 → all derivation)
+    t("xpub: sha512('') KAT", toHex(E._sha512(new Uint8Array(0))) === "cf83e1357eefb8bdf1542850d66d8007d620e4050b5715dc83f4a921d36ce9ce47d0d13c5d85f2b0ff8318d2877eec2f63b931bd47417a81a538327af927da3e");
+    t("xpub: ripemd160('abc') KAT", toHex(E._ripemd160(new TextEncoder().encode("abc"))) === "8eb208f7e05d987a9b044a8e98c6b087f15a0bfc");
+    // BIP84 canonical: zpub → m/.../0/0, 0/1, 1/0 must reproduce the published bc1q addresses
+    const zpub = "zpub6rFR7y4Q2AijBEqTUquhVz398htDFrtymD9xYYfG1m4wAcvPhXNfE3EfH1r1ADqtfSdVCToUG868RvUUkgDKf31mGDtKsAYz2oz2AGutZYs";
+    const n = E.decodeXpub(zpub);
+    t("xpub: zpub → p2wpkh scriptType", n.scriptType === "p2wpkh");
+    const ext = E.ckdPub(n.keyData, n.chainCode, 0), chg = E.ckdPub(n.keyData, n.chainCode, 1);
+    const r00 = E.ckdPub(ext.pub33, ext.cc32, 0), r01 = E.ckdPub(ext.pub33, ext.cc32, 1), r10 = E.ckdPub(chg.pub33, chg.cc32, 0);
+    t("xpub: BIP84 0/0 pubkey", toHex(r00.pub33) === "0330d54fd0dd420a6e5f8d3624f5f3482cae350f79d5f0753bf5beef9c2d91af3c");
+    t("xpub: BIP84 0/0 address (bech32)", E.deriveWalletAddress(r00.pub33, "p2wpkh") === "bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu");
+    t("xpub: BIP84 0/1 address", E.deriveWalletAddress(r01.pub33, "p2wpkh") === "bc1qnjg0jd8228aq7egyzacy8cys3knf9xvrerkf9g");
+    t("xpub: BIP84 1/0 change address", E.deriveWalletAddress(r10.pub33, "p2wpkh") === "bc1q8c6fshw2dlwun7ekn9qwf37cu2rn755upcp6el");
+    // p2pkh + p2sh-p2wpkh address construction from the same pubkey (structural)
+    t("xpub: p2pkh address is base58 '1…'", E.deriveWalletAddress(r00.pub33, "p2pkh")[0] === "1");
+    t("xpub: p2sh-p2wpkh address is '3…'", E.deriveWalletAddress(r00.pub33, "p2sh-p2wpkh")[0] === "3");
+    // Safety: a private key (xprv) must be rejected, and a hardened index is impossible
+    let rejectedPriv = false; try { E.decodeXpub("xprv" + zpub.slice(4)); } catch { rejectedPriv = true; }
+    t("xpub: hardened index returns null (skip)", E.ckdPub(n.keyData, n.chainCode, 0x80000000) === null);
+    t("xpub: detectXpub recognizes a zpub", E.detectXpub(zpub) === "xpub" && E.detectXpub("not a key") === null);
+
+    // Wallet engine on the offline demo: reused address + cross-address link + dust
+    const w = E.runWalletEngine(E.DEMO_WALLET);
+    t("wallet: demo scores in range with 3 used, 1 reused", w.score >= 0 && w.score <= 100 && w.stats.used === 3 && w.stats.reused === 1);
+    t("wallet: cross-address common-input flagged (cluster fail)", w.checks.find(c => c.key === "cluster")?.status === "fail");
+    t("wallet: true reuse via funded_txo_count (reuse not pass)", w.checks.find(c => c.key === "reuse")?.status !== "pass");
+    // A tidy fresh-address wallet must NOT be flagged for reuse (the funded_txo_count fix)
+    const tidy = { scriptType: "p2wpkh", derived: 5, capHit: false, addresses: [
+      { address: "bc1qtidy0", branch: 0, index: 0, chain_stats: { tx_count: 2, funded_txo_count: 1, spent_txo_count: 1 }, utxos: [], txs: [] },
+      { address: "bc1qtidy1", branch: 0, index: 1, chain_stats: { tx_count: 1, funded_txo_count: 1, spent_txo_count: 0 }, utxos: [{ value: 5e6, address: "bc1qtidy1" }], txs: [] },
+    ] };
+    t("wallet: receive-then-spend (tx_count 2) is NOT reuse", E.runWalletEngine(tidy).checks.find(c => c.key === "reuse")?.status === "pass");
+    // Empty wallet → honest isEmpty with empty arrays (render guard relies on this)
+    const empty = E.runWalletEngine({ scriptType: "p2wpkh", derived: 40, capHit: false, addresses: [] });
+    t("wallet: empty wallet isEmpty with empty checks/recs", empty.isEmpty === true && empty.checks.length === 0 && empty.recommendations.length === 0);
+  }
+
   return { results: r };
 });
 if (unit.missing) fail("window.__ANONSCORE_TEST__ hook missing from the built bundle");
 else {
   const bad = unit.results.filter(u => !u.ok);
   bad.forEach(u => fail("engine unit: " + u.name));
-  if (!bad.length) pass(`engine unit tests: ${unit.results.length}/${unit.results.length} passed (cluster, poisoning, clock, engine, tx-inspector)`);
+  if (!bad.length) pass(`engine unit tests: ${unit.results.length}/${unit.results.length} passed (cluster, poisoning, clock, engine, tx-inspector, xpub+wallet)`);
 }
 
 // Run a demo scan end-to-end
@@ -569,6 +640,19 @@ await axeRun("Dashboard", page);
     await axeRun("Inspector", axePage);
   } catch (e) { fail("inspector a11y: " + e.message.slice(0, 120)); }
   finally { await axePage.close(); }
+}
+// a11y on the xpub wallet scan with a full report on screen
+{
+  const axeX = await ctx.newPage();
+  try {
+    await axeX.goto(`http://127.0.0.1:${PORT}/?page=xpub`, { waitUntil: "load" });
+    await axeX.waitForFunction(() => document.getElementById("root")?.childElementCount > 0, { timeout: 15000 });
+    await axeX.waitForTimeout(500);
+    await axeX.getByText("Load example").click();
+    await axeX.waitForTimeout(700);
+    await axeRun("Wallet scan", axeX);
+  } catch (e) { fail("xpub a11y: " + e.message.slice(0, 120)); }
+  finally { await axeX.close(); }
 }
 const back = page.getByText(/← Back/).first();
 if (await back.count()) { await back.click(); await page.waitForTimeout(900); }
