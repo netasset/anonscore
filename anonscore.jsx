@@ -5732,7 +5732,10 @@ function AiAssistant({ checks, recommendations, score, grade, onClose, starters:
    timezone. Same technique, shown to the owner: 24 hourly bins from the
    sampled txs, the quietest 7-hour window (likely sleep), and — when the
    pattern is strong enough — the rough UTC offset an analyst would infer.
-   Purely educational: does not touch the privacy score.
+   Purely educational: does not touch the privacy score. Shown with an honest
+   caveat — block_time is a CONFIRMATION time (a noisy proxy for broadcast/local
+   time), and independent research (MIT DCI) found timing alone is often too weak
+   to pin a timezone. Framed as one weak signal, not proof.
 ───────────────────────────────────────────── */
 // Shared by the ActivityClock panel and the text-report export.
 function computeActivityClock(txs) {
@@ -5813,6 +5816,9 @@ function ActivityClock({ txs, isMobile, entity }) {
             {strong
               ? <>{third ? "This wallet's quiet hours" : "Your quiet hours"} run <strong style={{ color: T.text }}>{hh(qStart)}–{hh(qEnd)} UTC</strong>. If that's {third ? "when its owner sleeps, an analyst would place them" : "when you sleep, an analyst would place you"} around <strong style={{ color: T.text }}>{tz} (±2)</strong> — block timestamps are public, and time-of-day is one of the oldest deanonymization signals. Based on the {total} most recent transactions{total < 12 ? " (small sample — rough read)" : ""}.</>
               : <>No strong daily rhythm across the {total} most recent transactions — {third ? "this wallet's timing gives" : "good: your timing gives"} an analyst less to work with. (Wallets with automated or randomized broadcast times blur this signal on purpose.)</>}
+          </div>
+          <div style={{ fontSize: 11, color: T.textDim, lineHeight: 1.55, marginTop: 8 }}>
+            A hint, not proof: block timestamps record when a transaction <em>confirmed</em>, not when it was broadcast — a noisy proxy for local time. Independent research (<a href="https://www.dci.mit.edu/posts/coinjoin-timing-questions" target="_blank" rel="noopener noreferrer" style={{ color: T.textMid, textDecoration: "underline" }}>MIT DCI</a>) found timing alone often can't pin a timezone. Weigh it as one weak signal among many.
           </div>
         </>
       )}

@@ -12876,7 +12876,22 @@ function ActivityClock({
     style: {
       color: T.text
     }
-  }, tz, " (\xB12)"), " \u2014 block timestamps are public, and time-of-day is one of the oldest deanonymization signals. Based on the ", total, " most recent transactions", total < 12 ? " (small sample — rough read)" : "", ".") : React.createElement(React.Fragment, null, "No strong daily rhythm across the ", total, " most recent transactions \u2014 ", third ? "this wallet's timing gives" : "good: your timing gives", " an analyst less to work with. (Wallets with automated or randomized broadcast times blur this signal on purpose.)"))));
+  }, tz, " (\xB12)"), " \u2014 block timestamps are public, and time-of-day is one of the oldest deanonymization signals. Based on the ", total, " most recent transactions", total < 12 ? " (small sample — rough read)" : "", ".") : React.createElement(React.Fragment, null, "No strong daily rhythm across the ", total, " most recent transactions \u2014 ", third ? "this wallet's timing gives" : "good: your timing gives", " an analyst less to work with. (Wallets with automated or randomized broadcast times blur this signal on purpose.)")), React.createElement("div", {
+    style: {
+      fontSize: 11,
+      color: T.textDim,
+      lineHeight: 1.55,
+      marginTop: 8
+    }
+  }, "A hint, not proof: block timestamps record when a transaction ", React.createElement("em", null, "confirmed"), ", not when it was broadcast \u2014 a noisy proxy for local time. Independent research (", React.createElement("a", {
+    href: "https://www.dci.mit.edu/posts/coinjoin-timing-questions",
+    target: "_blank",
+    rel: "noopener noreferrer",
+    style: {
+      color: T.textMid,
+      textDecoration: "underline"
+    }
+  }, "MIT DCI"), ") found timing alone often can't pin a timezone. Weigh it as one weak signal among many.")));
 }
 function computeCluster(txs, address) {
   const links = new Map();
