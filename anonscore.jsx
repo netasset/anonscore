@@ -129,9 +129,12 @@ const RISK_META = {
 const scoreColor = s => s >= 80 ? T.green : s >= 60 ? T.amber : s >= 40 ? T.btc : T.red;
 const scoreLabel = s => s >= 80 ? "Low Risk" : s >= 60 ? "Moderate" : s >= 40 ? "High Risk" : "Critical";
 const scoreGrade = s => s >= 90 ? "A" : s >= 75 ? "B" : s >= 60 ? "C" : s >= 45 ? "D" : "F";
-// Shared width for the centered hero column (score bar, privacy panel, scan
-// console, history) so they stay aligned. Widened from 480 for more presence.
-const HERO_COL = 620;
+// Two widths for the hero. The supporting elements (score bar, privacy panel,
+// history) sit in a narrower column; the scan console — the actual tool — is
+// deliberately WIDER so it breaks out of that column and is the thing the eye
+// lands on. The gap between them is the point: don't collapse them back to one.
+const HERO_COL = 548;   // supporting elements — the narrow column
+const HERO_WIDE = 760;  // the scan console — juts out past the column, left + right
 
 /* ─────────────────────────────────────────────
    HOISTED CONSTANTS
@@ -2591,16 +2594,20 @@ function RelayToggle({ trustLine }) {
             style={{ color: T.cyan, textDecoration: "none", fontFamily: T.mono, fontSize: 11, whiteSpace: "nowrap" }}>{t("relay.verify")}</a>
         </div>
       </div>
-      {/* Explorer picker — both speak the same esplora API, direct or relayed */}
-      <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 9, paddingLeft: 51 }}>
+      {/* Explorer picker — both speak the same esplora API, direct or relayed.
+          Styled as an obvious two-way toggle so it reads as switchable. */}
+      <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 9, paddingLeft: 51, flexWrap: "wrap" }}>
         <span style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim, letterSpacing: 1 }}>{t("relay.explorer")}</span>
         {Object.entries(EXPLORERS).map(([id, e]) => (
           <button key={id} onClick={() => setExplorer(id)} aria-pressed={expId === id}
-            aria-label={`Use ${e.label} as the block explorer`}
-            style={{ background: expId === id ? T.cyanLo : "transparent", border: `1px solid ${expId === id ? T.cyan + "77" : T.border}`, borderRadius: 999, padding: "3px 10px", fontFamily: T.mono, fontSize: 10, color: expId === id ? T.cyan : T.textMid, cursor: "pointer", transition: "all .15s" }}>
+            aria-label={`Switch the block explorer to ${e.label}`} title={`Switch to ${e.label}`}
+            style={{ background: expId === id ? T.cyanLo : T.surface, border: `1px solid ${expId === id ? T.cyan + "aa" : T.border}`, borderRadius: 999, padding: "4px 12px", fontFamily: T.mono, fontSize: 10, color: expId === id ? T.cyan : T.textMid, cursor: "pointer", transition: "all .15s" }}
+            onMouseOver={e2 => { if (expId !== id) { e2.currentTarget.style.borderColor = T.cyan + "77"; e2.currentTarget.style.color = T.cyan; } }}
+            onMouseOut={e2 => { if (expId !== id) { e2.currentTarget.style.borderColor = T.border; e2.currentTarget.style.color = T.textMid; } }}>
             {e.label}
           </button>
         ))}
+        <span aria-hidden="true" style={{ fontFamily: T.mono, fontSize: 9.5, color: T.cyan, letterSpacing: 0.5, marginLeft: 2, whiteSpace: "nowrap" }}>⇄ tap to switch</span>
       </div>
     </div>
   );
@@ -3326,8 +3333,10 @@ function Landing({ onAnalyze, isMobile, onCases }) {
             ? <RelayToggle trustLine={isLn ? t("trust.ln") : t("trust.btc")} />
             : <div style={{ maxWidth: HERO_COL, margin: "0 auto 12px", animation: "fadeUp .5s ease .20s both", background: T.surface, border: `1px solid ${isLn ? T.ln + "44" : T.border}`, borderRadius: 10, padding: "10px 14px", fontFamily: T.sans, fontSize: 12, color: T.textMid, lineHeight: 1.5, textAlign: "left" }}>{isLn ? t("trust.ln") : t("trust.btc")}</div>}
 
-          {/* CTAs — wrapped in a glowing "scan console" panel so the tool stands out from the dark page */}
-          <div style={{ display: "flex", flexDirection: "column", gap: 10, maxWidth: HERO_COL, margin: "0 auto", animation: "fadeUp .5s ease .22s both, breathe 5s ease-in-out 1.2s infinite", background: T.card, border: `1px solid ${T.cyan}33`, borderRadius: 16, padding: isMobile ? "16px" : "20px 22px", boxShadow: `0 0 50px -14px ${T.cyan}40` }}>
+          {/* CTAs — wrapped in a glowing "scan console" panel. Intentionally the
+              WIDEST hero element (HERO_WIDE > HERO_COL) so it breaks out of the
+              supporting column and is unmistakably the main event. */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 12, maxWidth: HERO_WIDE, margin: "4px auto 0", animation: "fadeUp .5s ease .22s both, breathe 5s ease-in-out 1.2s infinite", background: T.card, border: `1px solid ${T.cyan}44`, borderRadius: 18, padding: isMobile ? "18px 16px" : "26px 30px", boxShadow: `0 0 60px -14px ${T.cyan}4d` }}>
             <div>
               {/* Type detection pill — appears when input is recognised */}
               {inputType && (

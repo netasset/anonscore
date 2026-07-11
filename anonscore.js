@@ -145,7 +145,8 @@ const RISK_META = {
 const scoreColor = s => s >= 80 ? T.green : s >= 60 ? T.amber : s >= 40 ? T.btc : T.red;
 const scoreLabel = s => s >= 80 ? "Low Risk" : s >= 60 ? "Moderate" : s >= 40 ? "High Risk" : "Critical";
 const scoreGrade = s => s >= 90 ? "A" : s >= 75 ? "B" : s >= 60 ? "C" : s >= 45 ? "D" : "F";
-const HERO_COL = 620;
+const HERO_COL = 548;
+const HERO_WIDE = 760;
 const LANDING_CHECKS = [{
   n: "01",
   k: "reuse",
@@ -4778,7 +4779,8 @@ function RelayToggle({
       alignItems: "center",
       gap: 6,
       marginTop: 9,
-      paddingLeft: 51
+      paddingLeft: 51,
+      flexWrap: "wrap"
     }
   }, React.createElement("span", {
     style: {
@@ -4791,19 +4793,42 @@ function RelayToggle({
     key: id,
     onClick: () => setExplorer(id),
     "aria-pressed": expId === id,
-    "aria-label": `Use ${e.label} as the block explorer`,
+    "aria-label": `Switch the block explorer to ${e.label}`,
+    title: `Switch to ${e.label}`,
     style: {
-      background: expId === id ? T.cyanLo : "transparent",
-      border: `1px solid ${expId === id ? T.cyan + "77" : T.border}`,
+      background: expId === id ? T.cyanLo : T.surface,
+      border: `1px solid ${expId === id ? T.cyan + "aa" : T.border}`,
       borderRadius: 999,
-      padding: "3px 10px",
+      padding: "4px 12px",
       fontFamily: T.mono,
       fontSize: 10,
       color: expId === id ? T.cyan : T.textMid,
       cursor: "pointer",
       transition: "all .15s"
+    },
+    onMouseOver: e2 => {
+      if (expId !== id) {
+        e2.currentTarget.style.borderColor = T.cyan + "77";
+        e2.currentTarget.style.color = T.cyan;
+      }
+    },
+    onMouseOut: e2 => {
+      if (expId !== id) {
+        e2.currentTarget.style.borderColor = T.border;
+        e2.currentTarget.style.color = T.textMid;
+      }
     }
-  }, e.label))));
+  }, e.label)), React.createElement("span", {
+    "aria-hidden": "true",
+    style: {
+      fontFamily: T.mono,
+      fontSize: 9.5,
+      color: T.cyan,
+      letterSpacing: 0.5,
+      marginLeft: 2,
+      whiteSpace: "nowrap"
+    }
+  }, "\u21C4 tap to switch")));
 }
 const REPO = "https://github.com/netasset/anonscore";
 const GUARANTEES = [{
@@ -6745,15 +6770,15 @@ function Landing({
     style: {
       display: "flex",
       flexDirection: "column",
-      gap: 10,
-      maxWidth: HERO_COL,
-      margin: "0 auto",
+      gap: 12,
+      maxWidth: HERO_WIDE,
+      margin: "4px auto 0",
       animation: "fadeUp .5s ease .22s both, breathe 5s ease-in-out 1.2s infinite",
       background: T.card,
-      border: `1px solid ${T.cyan}33`,
-      borderRadius: 16,
-      padding: isMobile ? "16px" : "20px 22px",
-      boxShadow: `0 0 50px -14px ${T.cyan}40`
+      border: `1px solid ${T.cyan}44`,
+      borderRadius: 18,
+      padding: isMobile ? "18px 16px" : "26px 30px",
+      boxShadow: `0 0 60px -14px ${T.cyan}4d`
     }
   }, React.createElement("div", null, inputType && React.createElement("div", {
     style: {
