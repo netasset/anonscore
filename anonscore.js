@@ -1957,6 +1957,112 @@ function detectSilentPayment(v) {
   if (!/^t?sp1[a-z0-9]+$/.test(s)) return null;
   return decodeSilentPayment(s) ? s.startsWith("tsp1") ? "tsp" : "sp" : null;
 }
+function _g5Int(g) {
+  let n = 0;
+  for (const x of g) n = n * 32 + x;
+  return n;
+}
+function _g5Bytes(g) {
+  let acc = 0,
+    bits = 0;
+  const out = [];
+  for (const x of g) {
+    acc = acc << 5 | x;
+    bits += 5;
+    if (bits >= 8) {
+      bits -= 8;
+      out.push(acc >> bits & 0xff);
+    }
+  }
+  return out;
+}
+const _BOLT_MULT = {
+  m: 1e8,
+  u: 1e5,
+  n: 1e2,
+  p: 0.1
+};
+function decodeBolt11(str) {
+  const d = _bech32Decode((str || "").trim());
+  if (!d || d.spec !== "bech32" || !d.hrp.startsWith("ln")) return null;
+  const m = d.hrp.slice(2).match(/^(bcrt|bcs|bc|tb|sb)([0-9]*)([munp]?)$/);
+  if (!m) return null;
+  const network = {
+    bc: "mainnet",
+    tb: "testnet",
+    bcs: "signet",
+    sb: "signet",
+    bcrt: "regtest"
+  }[m[1]];
+  let amountMsat = null;
+  if (m[2]) {
+    const num = parseInt(m[2], 10);
+    amountMsat = m[3] ? Math.round(num * _BOLT_MULT[m[3]]) : num * 1e11;
+  }
+  const data = d.data;
+  if (data.length < 7 + 104) return null;
+  const timestamp = _g5Int(data.slice(0, 7));
+  const end = data.length - 104;
+  const TYPE = {
+    1: "p",
+    16: "s",
+    13: "d",
+    19: "n",
+    23: "h",
+    6: "x",
+    3: "r",
+    9: "f",
+    5: "9",
+    27: "m",
+    24: "c"
+  };
+  const hex = a => a.map(x => x.toString(16).padStart(2, "0")).join("");
+  const f = {};
+  const routes = [];
+  let pos = 7;
+  while (pos + 3 <= end) {
+    const len = data[pos + 1] * 32 + data[pos + 2];
+    const name = TYPE[data[pos]];
+    pos += 3;
+    if (pos + len > end) break;
+    const g = data.slice(pos, pos + len);
+    pos += len;
+    if (name === "p" || name === "h") f[name] = hex(_g5Bytes(g)).slice(0, 64);else if (name === "n") f.n = hex(_g5Bytes(g)).slice(0, 66);else if (name === "d") {
+      try {
+        f.d = new TextDecoder().decode(new Uint8Array(_g5Bytes(g)));
+      } catch {
+        f.d = null;
+      }
+    } else if (name === "x") f.x = _g5Int(g);else if (name === "r") {
+      const b = _g5Bytes(g);
+      for (let i = 0; i + 51 <= b.length; i += 51) {
+        const o = i + 33;
+        routes.push({
+          pubkey: hex(b.slice(i, i + 33)),
+          block: b[o] << 16 | b[o + 1] << 8 | b[o + 2],
+          tx: b[o + 3] << 16 | b[o + 4] << 8 | b[o + 5],
+          out: b[o + 6] << 8 | b[o + 7]
+        });
+      }
+    }
+  }
+  return {
+    network,
+    amountMsat,
+    timestamp,
+    paymentHash: f.p,
+    description: f.d ?? null,
+    payeePubkey: f.n ?? null,
+    expiry: f.x ?? null,
+    descHash: f.h ?? null,
+    routes
+  };
+}
+function detectBolt11(v) {
+  const s = (v || "").trim().toLowerCase();
+  if (!/^ln(bc|tb|bcrt|bcs|sb)[0-9]*[munp]?1[a-z0-9]+$/.test(s)) return null;
+  return decodeBolt11(s) ? "bolt11" : null;
+}
 const _B58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
 function _base58encode(bytes) {
   let zeros = 0;
@@ -7099,6 +7205,7 @@ function Landing({
   const [input, setInput] = useState("");
   const [error, setError] = useState("");
   const [spInfo, setSpInfo] = useState(null);
+  const [lnInvoice, setLnInvoice] = useState(null);
   const [history, setHistory] = useState(() => getHistory());
   const deleteHistory = addr => {
     removeFromHistory(addr);
@@ -7175,6 +7282,7 @@ function Landing({
   const submit = (val, plain = false) => {
     const v = (val || input).trim();
     setSpInfo(null);
+    setLnInvoice(null);
     if (!v) {
       setError(t("err.empty"));
       return;
@@ -7185,6 +7293,12 @@ function Landing({
       if (sp) {
         setError("");
         setSpInfo(sp);
+        return;
+      }
+      const inv = decodeBolt11(v);
+      if (inv) {
+        setError("");
+        setLnInvoice(inv);
         return;
       }
       setError(t("err.invalid"));
@@ -7807,6 +7921,7 @@ function Landing({
       setInput(e.target.value);
       setError("");
       setSpInfo(null);
+      setLnInvoice(null);
     },
     onKeyDown: e => e.key === "Enter" && submit(null, true),
     "aria-label": "Paste a Bitcoin address, Lightning node pubkey, or silent payment address",
@@ -7957,7 +8072,104 @@ function Landing({
       lineHeight: 1.55,
       marginTop: 10
     }
-  }, "The two-key split is the elegance: the scan key can watch for payments online while the spend key stays offline. Decoded entirely in your browser.")))), React.createElement("div", {
+  }, "The two-key split is the elegance: the scan key can watch for payments online while the spend key stays offline. Decoded entirely in your browser."))), lnInvoice && (() => {
+    const inv = lnInvoice,
+      leaky = inv.routes.length > 0;
+    const sats = inv.amountMsat == null ? "any amount" : (inv.amountMsat / 1000).toLocaleString() + " sats";
+    const cut = s => !s ? "" : s.length > 20 ? s.slice(0, 10) + "…" + s.slice(-6) : s;
+    return React.createElement("div", {
+      style: {
+        marginTop: 12,
+        textAlign: "left",
+        background: (leaky ? T.red : T.ln) + "0e",
+        border: `1px solid ${leaky ? T.red : T.ln}40`,
+        borderRadius: 14,
+        padding: "14px 16px",
+        animation: "slideDown .25s ease"
+      }
+    }, React.createElement("div", {
+      style: {
+        fontFamily: T.mono,
+        fontSize: 9,
+        color: leaky ? T.red : T.ln,
+        letterSpacing: 1.5,
+        marginBottom: 8
+      }
+    }, "LIGHTNING INVOICE \xB7 BOLT11", inv.network !== "mainnet" ? " · " + inv.network.toUpperCase() : ""), React.createElement("div", {
+      style: {
+        display: "flex",
+        flexWrap: "wrap",
+        gap: 10,
+        marginBottom: 10
+      }
+    }, React.createElement("span", {
+      style: {
+        fontFamily: T.serif,
+        fontSize: 20,
+        color: T.text
+      }
+    }, sats), inv.description && React.createElement("span", {
+      style: {
+        fontSize: 12.5,
+        color: T.textMid,
+        alignSelf: "center"
+      }
+    }, "\u201C", inv.description, "\u201D")), leaky ? React.createElement("div", {
+      style: {
+        background: T.red + "10",
+        border: `1px solid ${T.red}33`,
+        borderRadius: 10,
+        padding: "10px 12px",
+        fontSize: 12.5,
+        color: T.textMid,
+        lineHeight: 1.6
+      }
+    }, React.createElement("strong", {
+      style: {
+        color: T.red
+      }
+    }, "This invoice exposes your channel's on-chain funding."), " To be paid over a private channel it carries routing hints, and each reveals a peer node plus a short-channel-ID \u2014 which ", React.createElement("em", null, "is"), " the location of the funding transaction on-chain:", React.createElement("div", {
+      style: {
+        display: "flex",
+        flexDirection: "column",
+        gap: 6,
+        marginTop: 8
+      }
+    }, inv.routes.slice(0, 4).map((r, i) => React.createElement("div", {
+      key: i,
+      style: {
+        background: T.surface,
+        border: `1px solid ${T.borderLo}`,
+        borderRadius: 8,
+        padding: "7px 10px",
+        fontFamily: T.mono,
+        fontSize: 11
+      }
+    }, React.createElement("div", {
+      style: {
+        color: T.text
+      }
+    }, "peer ", cut(r.pubkey)), React.createElement("div", {
+      style: {
+        color: T.textDim,
+        fontSize: 10,
+        marginTop: 2
+      }
+    }, "funding tx \u2192 block ", r.block.toLocaleString(), " \xB7 tx #", r.tx, " \xB7 output ", r.out))))) : React.createElement("div", {
+      style: {
+        fontSize: 12.5,
+        color: T.textMid,
+        lineHeight: 1.6
+      }
+    }, "No private-channel routing hints \u2014 good. It still discloses the amount", inv.description ? ", a description" : "", ", and your node pubkey is recoverable from the invoice signature, so an observer can probe your public channels' balances."), React.createElement("div", {
+      style: {
+        fontSize: 11.5,
+        color: T.textDim,
+        lineHeight: 1.55,
+        marginTop: 10
+      }
+    }, "Node balances are cheaply probeable \u2014 most channels' exact balances can be recovered in under a minute. Reuse invoices as little as possible; BOLT12 offers and blinded paths reduce this exposure. Decoded entirely in your browser."));
+  })()), React.createElement("div", {
     style: {
       display: "flex",
       alignItems: "center",
@@ -17871,6 +18083,8 @@ window.__ANONSCORE_TEST__ = Object.freeze({
   _bech32Decode,
   decodeSilentPayment,
   detectSilentPayment,
+  decodeBolt11,
+  detectBolt11,
   _sha512,
   _hmacSha512,
   _ripemd160,

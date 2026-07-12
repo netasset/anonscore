@@ -306,8 +306,16 @@ else {
     const card = await spPage.evaluate(() => !![...document.querySelectorAll('*')].find(e => /SILENT PAYMENT ADDRESS/.test(e.textContent || "") && e.children.length < 3));
     if (!card) fail("silent payments: BIP352 education card did not render for an sp1 address");
     else pass("silent payments: sp1 address shows the BIP352 education card (in-browser decode)");
+    // BOLT11 invoice (with routing hints) → Lightning invoice lint card
+    const INV = "lnbc20m1pvjluezsp5zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zygspp5qqqsyqcyq5rqwzqfqqqsyqcyq5rqwzqfqqqsyqcyq5rqwzqfqypqhp58yjmdan79s6qqdhdzgynm4zwqd5d7xmw5fk98klysy043l2ahrqsfpp3qjmp7lwpagxun9pygexvgpjdc4jdj85fr9yq20q82gphp2nflc7jtzrcazrra7wwgzxqc8u7754cdlpfrmccae92qgzqvzq2ps8pqqqqqqpqqqqq9qqqvpeuqafqxu92d8lr6fvg0r5gv0heeeqgcrqlnm6jhphu9y00rrhy4grqszsvpcgpy9qqqqqqgqqqqq7qqzq9qrsgqdfjcdk6w3ak5pca9hwfwfh63zrrz06wwfya0ydlzpgzxkn5xagsqz7x9j4jwe7yj7vaf2k9lqsdk45kts2fd0fkr28am0u4w95tt2nsq76cqw0";
+    await spPage.locator('input[aria-label*="silent payment"]').fill(INV);
+    await spPage.getByRole("button", { name: /Analy[sz]e|Reveal|Audit/i }).first().click();
+    await spPage.waitForTimeout(300);
+    const lnCard = await spPage.evaluate(() => !![...document.querySelectorAll('*')].find(e => /LIGHTNING INVOICE · BOLT11/.test(e.textContent || "") && e.children.length < 4));
+    if (!lnCard) fail("bolt11: Lightning invoice lint card did not render");
+    else pass("bolt11: invoice shows the Lightning lint card (funding-UTXO leak surfaced, in-browser)");
   } catch (e) {
-    fail("silent payments: " + e.message.slice(0, 120));
+    fail("silent payments / bolt11: " + e.message.slice(0, 120));
   } finally {
     await spPage.close();
   }
@@ -609,6 +617,21 @@ const unit = await page.evaluate(() => {
     // bech32m decoder still validates a normal p2tr address (checksum round-trip)
     const tr = E._bech32Decode("bc1p0xlxvlhemja6c4dqv22uapctqupfhlxm9h8z3k2e72q4k9hcz7vqzk5jj0");
     t("silentpay: _bech32Decode verifies a p2tr checksum (bech32m)", tr && tr.hrp === "bc" && tr.spec === "bech32m");
+  }
+
+  // — BOLT11 Lightning invoice decode + privacy lint — validated against the
+  //   BOLT11 spec's routing-hint example (SCID → funding-tx location) —
+  {
+    const INV = "lnbc20m1pvjluezsp5zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zygspp5qqqsyqcyq5rqwzqfqqqsyqcyq5rqwzqfqqqsyqcyq5rqwzqfqypqhp58yjmdan79s6qqdhdzgynm4zwqd5d7xmw5fk98klysy043l2ahrqsfpp3qjmp7lwpagxun9pygexvgpjdc4jdj85fr9yq20q82gphp2nflc7jtzrcazrra7wwgzxqc8u7754cdlpfrmccae92qgzqvzq2ps8pqqqqqqpqqqqq9qqqvpeuqafqxu92d8lr6fvg0r5gv0heeeqgcrqlnm6jhphu9y00rrhy4grqszsvpcgpy9qqqqqqgqqqqq7qqzq9qrsgqdfjcdk6w3ak5pca9hwfwfh63zrrz06wwfya0ydlzpgzxkn5xagsqz7x9j4jwe7yj7vaf2k9lqsdk45kts2fd0fkr28am0u4w95tt2nsq76cqw0";
+    const inv = E.decodeBolt11(INV);
+    t("bolt11: amount 20m = 2,000,000,000 msat, mainnet, timestamp", inv && inv.network === "mainnet" && inv.amountMsat === 2000000000 && inv.timestamp === 1496314658);
+    t("bolt11: payment hash decoded", inv && inv.paymentHash === "0001020304050607080900010203040506070809000102030405060708090102");
+    t("bolt11: 2 routing hops → peer pubkey + SCID funding-tx location", inv && inv.routes.length === 2
+      && inv.routes[0].pubkey === "029e03a901b85534ff1e92c43c74431f7ce72046060fcf7a95c37e148f78c77255"
+      && inv.routes[0].block === 66051 && inv.routes[0].tx === 263430 && inv.routes[0].out === 1800
+      && inv.routes[1].block === 197637 && inv.routes[1].tx === 395016 && inv.routes[1].out === 2314);
+    t("bolt11: detector recognizes an invoice, rejects a normal address", E.detectBolt11(INV) === "bolt11" && E.detectBolt11("bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4") === null);
+    t("bolt11: garbage / silent-payment address rejected", E.decodeBolt11("lnbc1garbage") === null && E.decodeBolt11("sp1qq") === null);
   }
 
   // — xpub wallet scanner: BIP32 public derivation (validated end-to-end against
