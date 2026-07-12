@@ -1193,6 +1193,60 @@ function decodeSilentPayment(str) {
 }
 function detectSilentPayment(v) { const s = (v || "").trim().toLowerCase(); if (!/^t?sp1[a-z0-9]+$/.test(s)) return null; return decodeSilentPayment(s) ? (s.startsWith("tsp1") ? "tsp" : "sp") : null; }
 
+/* BOLT11 LIGHTNING INVOICE decode + privacy lint (pure JS, no network). The big
+   leak: to be paid over a PRIVATE channel, an invoice MUST carry routing hints —
+   the peer's node pubkey plus a short-channel-ID, and a SCID is defined (BOLT7)
+   as block_height × tx_index × output_index of the channel's FUNDING transaction.
+   So anyone you hand the invoice to learns the exact on-chain UTXO backing your
+   channel. Decoded here purely by parsing the invoice; validated against the
+   BOLT11 spec's routing-hint example. */
+function _g5Int(g) { let n = 0; for (const x of g) n = n * 32 + x; return n; }               // 5-bit groups → int (≤~45 bits)
+function _g5Bytes(g) { let acc = 0, bits = 0; const out = []; for (const x of g) { acc = (acc << 5) | x; bits += 5; if (bits >= 8) { bits -= 8; out.push((acc >> bits) & 0xff); } } return out; }
+const _BOLT_MULT = { m: 1e8, u: 1e5, n: 1e2, p: 0.1 };   // multiplier → msat per unit (1 BTC = 1e11 msat)
+function decodeBolt11(str) {
+  const d = _bech32Decode((str || "").trim());
+  if (!d || d.spec !== "bech32" || !d.hrp.startsWith("ln")) return null;
+  const m = d.hrp.slice(2).match(/^(bcrt|bcs|bc|tb|sb)([0-9]*)([munp]?)$/);
+  if (!m) return null;
+  const network = { bc: "mainnet", tb: "testnet", bcs: "signet", sb: "signet", bcrt: "regtest" }[m[1]];
+  let amountMsat = null;
+  if (m[2]) { const num = parseInt(m[2], 10); amountMsat = m[3] ? Math.round(num * _BOLT_MULT[m[3]]) : num * 1e11; }
+  const data = d.data;
+  if (data.length < 7 + 104) return null;                 // timestamp(7) + 520-bit sig(104)
+  const timestamp = _g5Int(data.slice(0, 7));
+  const end = data.length - 104;
+  const TYPE = { 1: "p", 16: "s", 13: "d", 19: "n", 23: "h", 6: "x", 3: "r", 9: "f", 5: "9", 27: "m", 24: "c" };
+  const hex = a => a.map(x => x.toString(16).padStart(2, "0")).join("");
+  const f = {}; const routes = [];
+  let pos = 7;
+  while (pos + 3 <= end) {
+    const len = data[pos + 1] * 32 + data[pos + 2];
+    const name = TYPE[data[pos]];
+    pos += 3;
+    if (pos + len > end) break;
+    const g = data.slice(pos, pos + len); pos += len;
+    if (name === "p" || name === "h") f[name] = hex(_g5Bytes(g)).slice(0, 64);
+    else if (name === "n") f.n = hex(_g5Bytes(g)).slice(0, 66);
+    else if (name === "d") { try { f.d = new TextDecoder().decode(new Uint8Array(_g5Bytes(g))); } catch { f.d = null; } }
+    else if (name === "x") f.x = _g5Int(g);
+    else if (name === "r") {
+      const b = _g5Bytes(g);
+      for (let i = 0; i + 51 <= b.length; i += 51) {
+        // SCID (BOLT7) = 3-byte block_height · 3-byte tx_index · 2-byte output_index
+        // of the funding tx. Read each field straight from the bytes (the full
+        // 8-byte value exceeds 2^53, so never form it as a Number).
+        const o = i + 33;
+        routes.push({ pubkey: hex(b.slice(i, i + 33)),
+          block: (b[o] << 16) | (b[o + 1] << 8) | b[o + 2],
+          tx: (b[o + 3] << 16) | (b[o + 4] << 8) | b[o + 5],
+          out: (b[o + 6] << 8) | b[o + 7] });
+      }
+    }
+  }
+  return { network, amountMsat, timestamp, paymentHash: f.p, description: f.d ?? null, payeePubkey: f.n ?? null, expiry: f.x ?? null, descHash: f.h ?? null, routes };
+}
+function detectBolt11(v) { const s = (v || "").trim().toLowerCase(); if (!/^ln(bc|tb|bcrt|bcs|sb)[0-9]*[munp]?1[a-z0-9]+$/.test(s)) return null; return decodeBolt11(s) ? "bolt11" : null; }
+
 // -- base58check (P2PKH / P2SH) --
 const _B58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
 function _base58encode(bytes){let zeros=0;while(zeros<bytes.length&&bytes[zeros]===0)zeros++;const digits=[0];for(let i=zeros;i<bytes.length;i++){let carry=bytes[i];for(let j=0;j<digits.length;j++){carry+=digits[j]<<8;digits[j]=carry%58;carry=(carry/58)|0;}while(carry){digits.push(carry%58);carry=(carry/58)|0;}}let s="";for(let i=0;i<zeros;i++)s+="1";for(let i=digits.length-1;i>=0;i--)s+=_B58[digits[i]];return s;}
@@ -3610,6 +3664,7 @@ function Landing({ onAnalyze, isMobile, onCases }) {
   const [input, setInput] = useState("");
   const [error, setError] = useState("");
   const [spInfo, setSpInfo] = useState(null);   // decoded Silent Payments (BIP352) address, if entered
+  const [lnInvoice, setLnInvoice] = useState(null);   // decoded BOLT11 Lightning invoice, if entered
   const [history, setHistory] = useState(() => getHistory());
   const deleteHistory = (addr) => { removeFromHistory(addr); setHistory(getHistory()); };
   const wipeHistory = () => { clearAllHistory(); setHistory([]); };
@@ -3677,12 +3732,14 @@ function Landing({ onAnalyze, isMobile, onCases }) {
 
   const submit = (val, plain = false) => {
     const v = (val || input).trim();
-    setSpInfo(null);
+    setSpInfo(null); setLnInvoice(null);
     if (!v) { setError(t("err.empty")); return; }
     const detected = detectInputType(v);
     if (!detected) {
       const sp = decodeSilentPayment(v);
       if (sp) { setError(""); setSpInfo(sp); return; }   // not scannable — it's a reusable BIP352 address; educate instead
+      const inv = decodeBolt11(v);
+      if (inv) { setError(""); setLnInvoice(inv); return; }   // a Lightning invoice — decode + lint what it leaks
       setError(t("err.invalid"));
       return;
     }
@@ -3873,7 +3930,7 @@ function Landing({ onAnalyze, isMobile, onCases }) {
                     <circle cx="11" cy="11" r="7" stroke={inputType ? (isLn ? T.ln : T.btc) : T.cyan} strokeWidth="2" opacity="0.9" />
                     <line x1="16.5" y1="16.5" x2="21" y2="21" stroke={inputType ? (isLn ? T.ln : T.btc) : T.cyan} strokeWidth="2" strokeLinecap="round" opacity="0.9" />
                   </svg>
-                  <input ref={inputRef} value={input} onChange={e => { setInput(e.target.value); setError(""); setSpInfo(null); }}
+                  <input ref={inputRef} value={input} onChange={e => { setInput(e.target.value); setError(""); setSpInfo(null); setLnInvoice(null); }}
                     onKeyDown={e => e.key === "Enter" && submit(null, true)}
                     aria-label="Paste a Bitcoin address, Lightning node pubkey, or silent payment address"
                     placeholder={isLn ? "03abc… (66-char node pubkey)" : "Paste an address or pubkey…"}
@@ -3932,6 +3989,40 @@ function Landing({ onAnalyze, isMobile, onCases }) {
                   )}
                 </div>
               )}
+              {lnInvoice && (() => {
+                const inv = lnInvoice, leaky = inv.routes.length > 0;
+                const sats = inv.amountMsat == null ? "any amount" : (inv.amountMsat / 1000).toLocaleString() + " sats";
+                const cut = s => !s ? "" : s.length > 20 ? s.slice(0, 10) + "…" + s.slice(-6) : s;
+                return (
+                  <div style={{ marginTop: 12, textAlign: "left", background: (leaky ? T.red : T.ln) + "0e", border: `1px solid ${(leaky ? T.red : T.ln)}40`, borderRadius: 14, padding: "14px 16px", animation: "slideDown .25s ease" }}>
+                    <div style={{ fontFamily: T.mono, fontSize: 9, color: leaky ? T.red : T.ln, letterSpacing: 1.5, marginBottom: 8 }}>LIGHTNING INVOICE · BOLT11{inv.network !== "mainnet" ? " · " + inv.network.toUpperCase() : ""}</div>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 10 }}>
+                      <span style={{ fontFamily: T.serif, fontSize: 20, color: T.text }}>{sats}</span>
+                      {inv.description && <span style={{ fontSize: 12.5, color: T.textMid, alignSelf: "center" }}>“{inv.description}”</span>}
+                    </div>
+                    {leaky ? (
+                      <div style={{ background: T.red + "10", border: `1px solid ${T.red}33`, borderRadius: 10, padding: "10px 12px", fontSize: 12.5, color: T.textMid, lineHeight: 1.6 }}>
+                        <strong style={{ color: T.red }}>This invoice exposes your channel's on-chain funding.</strong> To be paid over a private channel it carries routing hints, and each reveals a peer node plus a short-channel-ID — which <em>is</em> the location of the funding transaction on-chain:
+                        <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 8 }}>
+                          {inv.routes.slice(0, 4).map((r, i) => (
+                            <div key={i} style={{ background: T.surface, border: `1px solid ${T.borderLo}`, borderRadius: 8, padding: "7px 10px", fontFamily: T.mono, fontSize: 11 }}>
+                              <div style={{ color: T.text }}>peer {cut(r.pubkey)}</div>
+                              <div style={{ color: T.textDim, fontSize: 10, marginTop: 2 }}>funding tx → block {r.block.toLocaleString()} · tx #{r.tx} · output {r.out}</div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : (
+                      <div style={{ fontSize: 12.5, color: T.textMid, lineHeight: 1.6 }}>
+                        No private-channel routing hints — good. It still discloses the amount{inv.description ? ", a description" : ""}, and your node pubkey is recoverable from the invoice signature, so an observer can probe your public channels' balances.
+                      </div>
+                    )}
+                    <div style={{ fontSize: 11.5, color: T.textDim, lineHeight: 1.55, marginTop: 10 }}>
+                      Node balances are cheaply probeable — most channels' exact balances can be recovered in under a minute. Reuse invoices as little as possible; BOLT12 offers and blinded paths reduce this exposure. Decoded entirely in your browser.
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
               <div style={{ flex: 1, height: 1, background: T.borderLo }} />
@@ -7793,6 +7884,8 @@ window.__ANONSCORE_TEST__ = Object.freeze({
   fingerprintTx, _derSigInfo,
   // Silent Payments (BIP352) decode/validate — validated vs the spec test vector
   _bech32Decode, decodeSilentPayment, detectSilentPayment,
+  // BOLT11 Lightning invoice decode/lint — validated vs the BOLT11 spec vector
+  decodeBolt11, detectBolt11,
   // xpub wallet scanner — crypto (validated against BIP32 TV1 + BIP84 vectors)
   _sha512, _hmacSha512, _ripemd160, decodeXpub, ckdPub, deriveWalletAddress, detectXpub,
   runWalletEngine, DEMO_WALLET,
