@@ -1887,6 +1887,76 @@ function _segwitAddress(version, program) {
   const data = [version].concat(_convertBits(Array.from(program), 8, 5, true));
   return _bechEncode("bc", data, version === 0 ? "bech32" : "bech32m");
 }
+const _BECHKEY = (() => {
+  const m = {};
+  for (let i = 0; i < _BECH.length; i++) m[_BECH[i]] = i;
+  return m;
+})();
+function _bech32Decode(str) {
+  if (typeof str !== "string" || str.length < 8 || str.length > 1023) return null;
+  const low = str.toLowerCase(),
+    up = str.toUpperCase();
+  if (str !== low && str !== up) return null;
+  str = low;
+  const pos = str.lastIndexOf("1");
+  if (pos < 1 || pos + 7 > str.length) return null;
+  const hrp = str.slice(0, pos),
+    vals = [];
+  for (const c of str.slice(pos + 1)) {
+    const v = _BECHKEY[c];
+    if (v === undefined) return null;
+    vals.push(v);
+  }
+  const poly = _bechPolymod(_hrpExpand(hrp).concat(vals));
+  const spec = poly === 1 ? "bech32" : poly === 0x2bc830a3 ? "bech32m" : null;
+  if (!spec) return null;
+  return {
+    hrp,
+    data: vals.slice(0, -6),
+    spec
+  };
+}
+function decodeSilentPayment(str) {
+  const d = _bech32Decode((str || "").trim());
+  if (!d || d.spec !== "bech32m") return null;
+  const network = d.hrp === "sp" ? "mainnet" : d.hrp === "tsp" ? "testnet" : null;
+  if (!network || d.data.length < 1) return null;
+  const version = d.data[0];
+  if (version === 31) return {
+    network,
+    version,
+    error: "v31"
+  };
+  let acc = 0,
+    bits = 0;
+  const out = [];
+  for (const v of d.data.slice(1)) {
+    acc = acc << 5 | v;
+    bits += 5;
+    while (bits >= 8) {
+      bits -= 8;
+      out.push(acc >> bits & 0xff);
+    }
+  }
+  if (bits >= 5 || acc & (1 << bits) - 1) return null;
+  if (out.length < 66) return null;
+  const scan = out.slice(0, 33),
+    spend = out.slice(33, 66);
+  const ok = b => b[0] === 0x02 || b[0] === 0x03;
+  if (!ok(scan) || !ok(spend)) return null;
+  const hex = a => a.map(x => x.toString(16).padStart(2, "0")).join("");
+  return {
+    network,
+    version,
+    scanKey: hex(scan),
+    spendKey: hex(spend)
+  };
+}
+function detectSilentPayment(v) {
+  const s = (v || "").trim().toLowerCase();
+  if (!/^t?sp1[a-z0-9]+$/.test(s)) return null;
+  return decodeSilentPayment(s) ? s.startsWith("tsp1") ? "tsp" : "sp" : null;
+}
 const _B58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
 function _base58encode(bytes) {
   let zeros = 0;
@@ -7028,6 +7098,7 @@ function Landing({
   }, []);
   const [input, setInput] = useState("");
   const [error, setError] = useState("");
+  const [spInfo, setSpInfo] = useState(null);
   const [history, setHistory] = useState(() => getHistory());
   const deleteHistory = addr => {
     removeFromHistory(addr);
@@ -7103,12 +7174,19 @@ function Landing({
   const isLn = inputType === "ln_pubkey" || inputType === "ln_address";
   const submit = (val, plain = false) => {
     const v = (val || input).trim();
+    setSpInfo(null);
     if (!v) {
       setError(t("err.empty"));
       return;
     }
     const detected = detectInputType(v);
     if (!detected) {
+      const sp = decodeSilentPayment(v);
+      if (sp) {
+        setError("");
+        setSpInfo(sp);
+        return;
+      }
       setError(t("err.invalid"));
       return;
     }
@@ -7728,8 +7806,10 @@ function Landing({
     onChange: e => {
       setInput(e.target.value);
       setError("");
+      setSpInfo(null);
     },
     onKeyDown: e => e.key === "Enter" && submit(null, true),
+    "aria-label": "Paste a Bitcoin address, Lightning node pubkey, or silent payment address",
     placeholder: isLn ? "03abc… (66-char node pubkey)" : "Paste an address or pubkey…",
     style: {
       width: "100%",
@@ -7791,7 +7871,93 @@ function Landing({
       marginTop: 6,
       animation: "slideDown .2s ease"
     }
-  }, "\u26A0 ", error)), React.createElement("div", {
+  }, "\u26A0 ", error), spInfo && React.createElement("div", {
+    style: {
+      marginTop: 12,
+      textAlign: "left",
+      background: T.green + "0e",
+      border: `1px solid ${T.green}40`,
+      borderRadius: 14,
+      padding: "14px 16px",
+      animation: "slideDown .25s ease"
+    }
+  }, React.createElement("div", {
+    style: {
+      fontFamily: T.mono,
+      fontSize: 9,
+      color: T.green,
+      letterSpacing: 1.5,
+      marginBottom: 8
+    }
+  }, "SILENT PAYMENT ADDRESS \xB7 BIP352", spInfo.network === "testnet" ? " · TESTNET" : ""), spInfo.error === "v31" ? React.createElement("div", {
+    style: {
+      fontSize: 13,
+      color: T.textMid,
+      lineHeight: 1.6
+    }
+  }, "This is a valid Silent Payment address, but it uses a future version (v31) this tool doesn't decode yet. Newer software will read it.") : React.createElement(React.Fragment, null, React.createElement("div", {
+    style: {
+      fontSize: 13.5,
+      color: T.textMid,
+      lineHeight: 1.65,
+      marginBottom: 10
+    }
+  }, "There's nothing here to scan \u2014 and that's the whole point. A Silent Payment address is ", React.createElement("strong", {
+    style: {
+      color: T.text
+    }
+  }, "reusable but never reuses on-chain"), ": every payment to it lands on a fresh, unlinkable output derived just for that sender. Address-reuse clustering \u2014 the heuristic most of this site is about \u2014 simply ", React.createElement("strong", {
+    style: {
+      color: T.text
+    }
+  }, "can't touch it"), ". You can post one address publicly and still get an unlinkable set of payments."), React.createElement("div", {
+    style: {
+      display: "flex",
+      flexDirection: "column",
+      gap: 6
+    }
+  }, [["Scan key", spInfo.scanKey, "kept online — detects incoming payments"], ["Spend key", spInfo.spendKey, "kept in cold storage — authorizes spends"]].map(([k, key, note]) => React.createElement("div", {
+    key: k,
+    style: {
+      background: T.surface,
+      border: `1px solid ${T.borderLo}`,
+      borderRadius: 9,
+      padding: "8px 11px"
+    }
+  }, React.createElement("div", {
+    style: {
+      display: "flex",
+      justifyContent: "space-between",
+      gap: 8,
+      alignItems: "baseline"
+    }
+  }, React.createElement("span", {
+    style: {
+      fontFamily: T.sans,
+      fontSize: 12,
+      color: T.text,
+      fontWeight: 600
+    }
+  }, k), React.createElement("span", {
+    style: {
+      fontFamily: T.mono,
+      fontSize: 10,
+      color: T.textDim
+    }
+  }, key.slice(0, 10), "\u2026", key.slice(-6))), React.createElement("div", {
+    style: {
+      fontSize: 11,
+      color: T.textDim,
+      marginTop: 2
+    }
+  }, note)))), React.createElement("div", {
+    style: {
+      fontSize: 11.5,
+      color: T.textDim,
+      lineHeight: 1.55,
+      marginTop: 10
+    }
+  }, "The two-key split is the elegance: the scan key can watch for payments online while the spend key stays offline. Decoded entirely in your browser.")))), React.createElement("div", {
     style: {
       display: "flex",
       alignItems: "center",
@@ -17702,6 +17868,9 @@ window.__ANONSCORE_TEST__ = Object.freeze({
   txLinkability,
   fingerprintTx,
   _derSigInfo,
+  _bech32Decode,
+  decodeSilentPayment,
+  detectSilentPayment,
   _sha512,
   _hmacSha512,
   _ripemd160,

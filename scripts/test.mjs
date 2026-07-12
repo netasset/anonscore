@@ -291,6 +291,28 @@ else {
   await page.waitForTimeout(200);
 }
 
+// Silent Payments: entering an sp1… address in the hero shows the BIP352
+// education card (not a "scan"), decoded entirely in-browser.
+{
+  const spPage = await ctx.newPage();
+  try {
+    await spPage.goto(`http://127.0.0.1:${PORT}/`, { waitUntil: "load" });
+    await spPage.waitForFunction(() => document.getElementById("root")?.childElementCount > 0, { timeout: 15000 });
+    await spPage.waitForTimeout(400);
+    const ADDR = "sp1qqgste7k9hx0qftg6qmwlkqtwuy6cycyavzmzj85c6qdfhjdpdjtdgqjuexzk6murw56suy3e0rd2cgqvycxttddwsvgxe2usfpxumr70xc9pkqwv";
+    await spPage.locator('input[aria-label*="silent payment"]').fill(ADDR);
+    await spPage.getByRole("button", { name: /Analy[sz]e|Reveal|Audit/i }).first().click();
+    await spPage.waitForTimeout(300);
+    const card = await spPage.evaluate(() => !![...document.querySelectorAll('*')].find(e => /SILENT PAYMENT ADDRESS/.test(e.textContent || "") && e.children.length < 3));
+    if (!card) fail("silent payments: BIP352 education card did not render for an sp1 address");
+    else pass("silent payments: sp1 address shows the BIP352 education card (in-browser decode)");
+  } catch (e) {
+    fail("silent payments: " + e.message.slice(0, 120));
+  } finally {
+    await spPage.close();
+  }
+}
+
 // Wallet directory page: deep-linkable at /?page=wallets, renders ≥10 reviews.
 {
   const dirPage = await ctx.newPage();
@@ -571,6 +593,22 @@ const unit = await page.evaluate(() => {
     t("fingerprint: parser captures the witness stack", Array.isArray(stx.vin[0].witness) && stx.vin[0].witness.length === 2);
     const sfp = E.fingerprintTx(stx);
     t("fingerprint: high-r signed tx decisively rules out Core", sfp.signals.some(s => s.key === "lowr" && s.distinctive) && /not signed by Bitcoin Core/.test(sfp.guess));
+  }
+
+  // — Silent Payments (BIP352) decode/validate — validated against the spec's
+  //   "Simple send" test-vector address (must reproduce its scan + spend keys) —
+  {
+    const ADDR = "sp1qqgste7k9hx0qftg6qmwlkqtwuy6cycyavzmzj85c6qdfhjdpdjtdgqjuexzk6murw56suy3e0rd2cgqvycxttddwsvgxe2usfpxumr70xc9pkqwv";
+    const sp = E.decodeSilentPayment(ADDR);
+    t("silentpay: BIP352 vector → mainnet v0", sp && sp.network === "mainnet" && sp.version === 0);
+    t("silentpay: BIP352 vector → exact scan key", sp && sp.scanKey === "0220bcfac5b99e04ad1a06ddfb016ee13582609d60b6291e98d01a9bc9a16c96d4");
+    t("silentpay: BIP352 vector → exact spend key", sp && sp.spendKey === "025cc9856d6f8375350e123978daac200c260cb5b5ae83106cab90484dcd8fcf36");
+    t("silentpay: detectSilentPayment recognizes the address", E.detectSilentPayment(ADDR) === "sp" && E.detectSilentPayment("bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4") === null);
+    // A normal segwit address is NOT a silent payment; garbage rejected
+    t("silentpay: bech32 (not bech32m) / wrong hrp rejected", E.decodeSilentPayment("bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4") === null && E.decodeSilentPayment("sp1qqqqqqqqqqq") === null);
+    // bech32m decoder still validates a normal p2tr address (checksum round-trip)
+    const tr = E._bech32Decode("bc1p0xlxvlhemja6c4dqv22uapctqupfhlxm9h8z3k2e72q4k9hcz7vqzk5jj0");
+    t("silentpay: _bech32Decode verifies a p2tr checksum (bech32m)", tr && tr.hrp === "bc" && tr.spec === "bech32m");
   }
 
   // — xpub wallet scanner: BIP32 public derivation (validated end-to-end against
