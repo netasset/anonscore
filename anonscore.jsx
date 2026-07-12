@@ -1148,6 +1148,50 @@ function _bechChecksum(hrp,data,spec){const C=spec==="bech32m"?0x2bc830a3:1;cons
 function _bechEncode(hrp,data,spec){const c=data.concat(_bechChecksum(hrp,data,spec));let s=hrp+"1";for(const d of c)s+=_BECH[d];return s;}
 function _convertBits(data,from,to,pad){let acc=0,bits=0;const r=[];const maxv=(1<<to)-1;for(const val of data){acc=((acc<<from)|val)&0xffffffff;bits+=from;while(bits>=to){bits-=to;r.push((acc>>bits)&maxv);}}if(pad&&bits)r.push((acc<<(to-bits))&maxv);return r;}
 function _segwitAddress(version,program){const data=[version].concat(_convertBits(Array.from(program),8,5,true));return _bechEncode("bc",data,version===0?"bech32":"bech32m");}
+// bech32 / bech32m DECODE (checksum-verified) → { hrp, data(5-bit, no checksum),
+// spec } or null. No 90-char cap (BIP352 addresses run 117+ chars).
+const _BECHKEY = (() => { const m = {}; for (let i = 0; i < _BECH.length; i++) m[_BECH[i]] = i; return m; })();
+function _bech32Decode(str) {
+  if (typeof str !== "string" || str.length < 8 || str.length > 1023) return null;
+  const low = str.toLowerCase(), up = str.toUpperCase();
+  if (str !== low && str !== up) return null;                 // mixed case is invalid
+  str = low;
+  const pos = str.lastIndexOf("1");
+  if (pos < 1 || pos + 7 > str.length) return null;
+  const hrp = str.slice(0, pos), vals = [];
+  for (const c of str.slice(pos + 1)) { const v = _BECHKEY[c]; if (v === undefined) return null; vals.push(v); }
+  const poly = _bechPolymod(_hrpExpand(hrp).concat(vals));
+  const spec = poly === 1 ? "bech32" : poly === 0x2bc830a3 ? "bech32m" : null;
+  if (!spec) return null;
+  return { hrp, data: vals.slice(0, -6), spec };
+}
+
+/* SILENT PAYMENTS (BIP352) — decode/validate an sp1…/tsp1… address entirely in
+   the browser. A silent payment address is a REUSABLE address that never reuses
+   on-chain: each payment derives a fresh, unlinkable output, so address-reuse
+   clustering simply can't touch it. It encodes two keys — a scan key (kept
+   online to detect payments) and a spend key (kept in cold storage). bech32m,
+   hrp "sp"/"tsp", version 0 = char 'q', 66-byte payload = ser(B_scan)‖ser(B_spend).
+   Validated against the BIP352 "Simple send" test-vector address. */
+function decodeSilentPayment(str) {
+  const d = _bech32Decode((str || "").trim());
+  if (!d || d.spec !== "bech32m") return null;
+  const network = d.hrp === "sp" ? "mainnet" : d.hrp === "tsp" ? "testnet" : null;
+  if (!network || d.data.length < 1) return null;
+  const version = d.data[0];
+  if (version === 31) return { network, version, error: "v31" };   // reserved breaking change
+  // strict 5→8 bit unpacking (reject bad padding / stray bits)
+  let acc = 0, bits = 0; const out = [];
+  for (const v of d.data.slice(1)) { acc = (acc << 5) | v; bits += 5; while (bits >= 8) { bits -= 8; out.push((acc >> bits) & 0xff); } }
+  if (bits >= 5 || (acc & ((1 << bits) - 1))) return null;
+  if (out.length < 66) return null;                 // v1–30 may append; read the first 66
+  const scan = out.slice(0, 33), spend = out.slice(33, 66);
+  const ok = b => b[0] === 0x02 || b[0] === 0x03;
+  if (!ok(scan) || !ok(spend)) return null;
+  const hex = a => a.map(x => x.toString(16).padStart(2, "0")).join("");
+  return { network, version, scanKey: hex(scan), spendKey: hex(spend) };
+}
+function detectSilentPayment(v) { const s = (v || "").trim().toLowerCase(); if (!/^t?sp1[a-z0-9]+$/.test(s)) return null; return decodeSilentPayment(s) ? (s.startsWith("tsp1") ? "tsp" : "sp") : null; }
 
 // -- base58check (P2PKH / P2SH) --
 const _B58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
@@ -3565,6 +3609,7 @@ function Landing({ onAnalyze, isMobile, onCases }) {
   }, []);
   const [input, setInput] = useState("");
   const [error, setError] = useState("");
+  const [spInfo, setSpInfo] = useState(null);   // decoded Silent Payments (BIP352) address, if entered
   const [history, setHistory] = useState(() => getHistory());
   const deleteHistory = (addr) => { removeFromHistory(addr); setHistory(getHistory()); };
   const wipeHistory = () => { clearAllHistory(); setHistory([]); };
@@ -3632,9 +3677,12 @@ function Landing({ onAnalyze, isMobile, onCases }) {
 
   const submit = (val, plain = false) => {
     const v = (val || input).trim();
+    setSpInfo(null);
     if (!v) { setError(t("err.empty")); return; }
     const detected = detectInputType(v);
     if (!detected) {
+      const sp = decodeSilentPayment(v);
+      if (sp) { setError(""); setSpInfo(sp); return; }   // not scannable — it's a reusable BIP352 address; educate instead
       setError(t("err.invalid"));
       return;
     }
@@ -3825,8 +3873,9 @@ function Landing({ onAnalyze, isMobile, onCases }) {
                     <circle cx="11" cy="11" r="7" stroke={inputType ? (isLn ? T.ln : T.btc) : T.cyan} strokeWidth="2" opacity="0.9" />
                     <line x1="16.5" y1="16.5" x2="21" y2="21" stroke={inputType ? (isLn ? T.ln : T.btc) : T.cyan} strokeWidth="2" strokeLinecap="round" opacity="0.9" />
                   </svg>
-                  <input ref={inputRef} value={input} onChange={e => { setInput(e.target.value); setError(""); }}
+                  <input ref={inputRef} value={input} onChange={e => { setInput(e.target.value); setError(""); setSpInfo(null); }}
                     onKeyDown={e => e.key === "Enter" && submit(null, true)}
+                    aria-label="Paste a Bitcoin address, Lightning node pubkey, or silent payment address"
                     placeholder={isLn ? "03abc… (66-char node pubkey)" : "Paste an address or pubkey…"}
                     style={{ width: "100%", boxSizing: "border-box", background: "#070910",
                       border: `2px solid ${error ? T.red : inputType ? (isLn ? T.ln : T.btc) : T.cyan + "77"}`,
@@ -3855,6 +3904,34 @@ function Landing({ onAnalyze, isMobile, onCases }) {
                 </div>
               )}
               {error && <div style={{ fontSize: 12, color: T.red, marginTop: 6, animation: "slideDown .2s ease" }}>⚠ {error}</div>}
+              {spInfo && (
+                <div style={{ marginTop: 12, textAlign: "left", background: T.green + "0e", border: `1px solid ${T.green}40`, borderRadius: 14, padding: "14px 16px", animation: "slideDown .25s ease" }}>
+                  <div style={{ fontFamily: T.mono, fontSize: 9, color: T.green, letterSpacing: 1.5, marginBottom: 8 }}>SILENT PAYMENT ADDRESS · BIP352{spInfo.network === "testnet" ? " · TESTNET" : ""}</div>
+                  {spInfo.error === "v31" ? (
+                    <div style={{ fontSize: 13, color: T.textMid, lineHeight: 1.6 }}>This is a valid Silent Payment address, but it uses a future version (v31) this tool doesn't decode yet. Newer software will read it.</div>
+                  ) : (
+                    <>
+                      <div style={{ fontSize: 13.5, color: T.textMid, lineHeight: 1.65, marginBottom: 10 }}>
+                        There's nothing here to scan — and that's the whole point. A Silent Payment address is <strong style={{ color: T.text }}>reusable but never reuses on-chain</strong>: every payment to it lands on a fresh, unlinkable output derived just for that sender. Address-reuse clustering — the heuristic most of this site is about — simply <strong style={{ color: T.text }}>can't touch it</strong>. You can post one address publicly and still get an unlinkable set of payments.
+                      </div>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                        {[["Scan key", spInfo.scanKey, "kept online — detects incoming payments"], ["Spend key", spInfo.spendKey, "kept in cold storage — authorizes spends"]].map(([k, key, note]) => (
+                          <div key={k} style={{ background: T.surface, border: `1px solid ${T.borderLo}`, borderRadius: 9, padding: "8px 11px" }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "baseline" }}>
+                              <span style={{ fontFamily: T.sans, fontSize: 12, color: T.text, fontWeight: 600 }}>{k}</span>
+                              <span style={{ fontFamily: T.mono, fontSize: 10, color: T.textDim }}>{key.slice(0, 10)}…{key.slice(-6)}</span>
+                            </div>
+                            <div style={{ fontSize: 11, color: T.textDim, marginTop: 2 }}>{note}</div>
+                          </div>
+                        ))}
+                      </div>
+                      <div style={{ fontSize: 11.5, color: T.textDim, lineHeight: 1.55, marginTop: 10 }}>
+                        The two-key split is the elegance: the scan key can watch for payments online while the spend key stays offline. Decoded entirely in your browser.
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
               <div style={{ flex: 1, height: 1, background: T.borderLo }} />
@@ -7714,6 +7791,8 @@ window.__ANONSCORE_TEST__ = Object.freeze({
   txInterpretations, txLinkability,
   // wallet fingerprint (structural tells: version/locktime/RBF/BIP69/script-mix/low-r)
   fingerprintTx, _derSigInfo,
+  // Silent Payments (BIP352) decode/validate — validated vs the spec test vector
+  _bech32Decode, decodeSilentPayment, detectSilentPayment,
   // xpub wallet scanner — crypto (validated against BIP32 TV1 + BIP84 vectors)
   _sha512, _hmacSha512, _ripemd160, decodeXpub, ckdPub, deriveWalletAddress, detectXpub,
   runWalletEngine, DEMO_WALLET,
