@@ -1077,6 +1077,29 @@ function isCoinJoinShape(vin, vout) {
   outs.forEach(o => { if (o && o.value != null) dn[o.value] = (dn[o.value] || 0) + 1; });
   return Math.max(0, ...Object.values(dn)) >= 3;
 }
+// Identify the specific CoinJoin protocol from structure alone (cited thresholds).
+// Whirlpool: exactly 5-in/5-out, all outputs equal (Samourai fixed-pool design).
+// Wasabi/ZeroLink equal-value: ≥10 equal outputs, ≥2 distinct output values, and
+//   ≥ as many inputs as the equal-output count — ~99% accurate structurally
+//   (Tironsakkul/Maarek, ACM EICC 2022). NOT WabiSabi (variable-amount) — we
+//   don't claim to detect modern Wasabi 2.0 rounds. Else a generic equal-output
+//   CoinJoin. Returns null when the shape doesn't qualify.
+function classifyCoinjoin(vin, vout) {
+  const ins = (vin || []).length, outs = vout || [];
+  if (ins < 2 || outs.length < 3) return null;
+  const dn = {};
+  outs.forEach(o => { if (o && o.value != null) dn[o.value] = (dn[o.value] || 0) + 1; });
+  const vals = Object.keys(dn);
+  if (!vals.length) return null;
+  let denom = 0, equal = 0;
+  for (const v of vals) { if (dn[v] > equal || (dn[v] === equal && +v > denom)) { equal = dn[v]; denom = +v; } }
+  const distinct = vals.length;
+  if (equal < 3) return null;
+  if (ins === 5 && outs.length === 5 && equal === 5) return { type: "Whirlpool", denom, participants: 5 };
+  if (equal >= 10 && distinct >= 2 && ins >= equal) return { type: "Wasabi", denom, participants: equal };
+  if (ins >= 3 && outs.length >= 5) return { type: "CoinJoin", denom, participants: equal };
+  return null;
+}
 
 /* ─────────────────────────────────────────────
    TRANSACTION INSPECTOR — parse a PSBT / raw tx entirely in the browser and
@@ -1246,6 +1269,134 @@ function decodeBolt11(str) {
   return { network, amountMsat, timestamp, paymentHash: f.p, description: f.d ?? null, payeePubkey: f.n ?? null, expiry: f.x ?? null, descHash: f.h ?? null, routes };
 }
 function detectBolt11(v) { const s = (v || "").trim().toLowerCase(); if (!/^ln(bc|tb|bcrt|bcs|sb)[0-9]*[munp]?1[a-z0-9]+$/.test(s)) return null; return decodeBolt11(s) ? "bolt11" : null; }
+
+/* BOLT12 OFFER decode + privacy lint (pure JS, no network). Offers are the
+   privacy upgrade to BOLT11: reusable without a static invoice/payment-hash to
+   correlate, and when they carry BLINDED PATHS (offer_paths, TLV 16) the payee's
+   node identity is hidden behind intermediaries. The lint: blinded paths = good
+   (identity hidden); a bare offer_issuer_id (TLV 22) with no paths exposes the
+   node pubkey. bech32 WITHOUT a checksum, hrp "lno", '+'/whitespace stripped;
+   a TLV stream of BigSize type·BigSize length·value. Validated vs a BOLT12
+   spec test-vector offer. */
+function _bech32NoChecksum(str) {
+  str = (str || "").toLowerCase().replace(/[+\s]/g, "");
+  const pos = str.lastIndexOf("1");
+  if (pos < 1) return null;
+  const hrp = str.slice(0, pos), vals = [];
+  for (const c of str.slice(pos + 1)) { const v = _BECHKEY[c]; if (v === undefined) return null; vals.push(v); }
+  return { hrp, bytes: _g5Bytes(vals) };
+}
+function _bigSize(b, pos) {
+  const f = b[pos];
+  if (f === undefined) return null;
+  if (f < 0xfd) return [f, pos + 1];
+  if (f === 0xfd) return [(b[pos + 1] << 8) | b[pos + 2], pos + 3];
+  if (f === 0xfe) return [((b[pos + 1] << 24) | (b[pos + 2] << 16) | (b[pos + 3] << 8) | b[pos + 4]) >>> 0, pos + 5];
+  let v = 0; for (let i = 1; i <= 8; i++) v = v * 256 + b[pos + i]; return [v, pos + 9];
+}
+function decodeBolt12Offer(str) {
+  const d = _bech32NoChecksum((str || "").trim());
+  if (!d || d.hrp !== "lno") return null;
+  const b = d.bytes; const tlv = {}; let pos = 0;
+  while (pos < b.length) {
+    let r = _bigSize(b, pos); if (!r) return null; const type = r[0]; pos = r[1];
+    r = _bigSize(b, pos); if (!r) return null; const len = r[0]; pos = r[1];
+    if (pos + len > b.length) return null;
+    tlv[type] = b.slice(pos, pos + len); pos += len;
+  }
+  if (!Object.keys(tlv).length) return null;
+  const hex = a => a.map(x => x.toString(16).padStart(2, "0")).join("");
+  const utf8 = a => { try { return new TextDecoder().decode(new Uint8Array(a)); } catch { return null; } };
+  const beInt = a => { let n = 0; for (const x of a) n = n * 256 + x; return n; };
+  const out = { hasBlindedPaths: 16 in tlv, tlvTypes: Object.keys(tlv).map(Number).sort((a, b) => a - b) };
+  if (8 in tlv) out.amountMsat = beInt(tlv[8]);
+  if (6 in tlv) out.currency = utf8(tlv[6]);
+  if (10 in tlv) out.description = utf8(tlv[10]);
+  if (18 in tlv) out.issuer = utf8(tlv[18]);
+  if (22 in tlv) out.issuerId = hex(tlv[22]);
+  return out;
+}
+function detectBolt12(v) { const s = (v || "").trim().toLowerCase().replace(/[+\s]/g, ""); if (!/^lno1[a-z0-9]+$/.test(s)) return null; return decodeBolt12Offer(s) ? "bolt12" : null; }
+
+/* LNURL (LUD-01) decode + Lightning address (LUD-16). Both funnel payments
+   through an HTTPS endpoint the operator controls — a metadata chokepoint that
+   sees your IP and every request. bech32-encoded https URL for LNURL; user@host
+   → https://host/.well-known/lnurlp/user for a Lightning address. */
+function decodeLnurl(str) {
+  const d = _bech32Decode((str || "").trim());
+  if (!d || d.spec !== "bech32" || d.hrp !== "lnurl") return null;
+  let url; try { url = new TextDecoder().decode(new Uint8Array(_g5Bytes(d.data))); } catch { return null; }
+  if (!/^https?:\/\//i.test(url)) return null;
+  try { return { url, host: new URL(url).host }; } catch { return null; }
+}
+function resolveLnAddress(str) {
+  const s = (str || "").trim();
+  const m = s.match(/^([a-z0-9._%+-]+)@([a-z0-9.-]+\.[a-z]{2,})$/i);
+  if (!m) return null;
+  return { user: m[1], host: m[2].toLowerCase(), endpoint: `https://${m[2].toLowerCase()}/.well-known/lnurlp/${m[1]}` };
+}
+
+/* CASHU ECASH token decode + privacy note (pure JS, no network). Cashu is
+   Chaumian ecash on top of Lightning: a mint issues blind-signed tokens, so it
+   can't link who withdrew a token to who redeemed it (strong sender/receiver
+   unlinkability) — but the mint is a TRUSTED CUSTODIAN that holds the funds and
+   knows total balances, and tokens pasted in cleartext (chat, email) can be
+   stolen or correlated by anyone who sees them. Two serializations: V3
+   "cashuA" = base64url JSON, V4 "cashuB" = base64url CBOR (minimal pure-JS CBOR
+   decoder below). Validated against the NUT-00 V4 example token. */
+function _b64urlBytes(s) {
+  s = (s || "").replace(/-/g, "+").replace(/_/g, "/");
+  while (s.length % 4) s += "=";
+  let bin; try { bin = atob(s); } catch { return null; }
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+function _cborDecode(b) {
+  let p = 0;
+  const rlen = ai => {
+    if (ai < 24) return ai;
+    if (ai === 24) return b[p++];
+    if (ai === 25) { const v = (b[p] << 8) | b[p + 1]; p += 2; return v; }
+    if (ai === 26) { const v = ((b[p] << 24) | (b[p + 1] << 16) | (b[p + 2] << 8) | b[p + 3]) >>> 0; p += 4; return v; }
+    if (ai === 27) { let v = 0; for (let i = 0; i < 8; i++) v = v * 256 + b[p++]; return v; }
+    throw new Error("cbor");
+  };
+  function item() {
+    const ib = b[p++], major = ib >> 5, ai = ib & 0x1f;
+    if (major === 0) return rlen(ai);
+    if (major === 1) return -1 - rlen(ai);
+    if (major === 2) { const n = rlen(ai); const s = b.slice(p, p + n); p += n; return s; }
+    if (major === 3) { const n = rlen(ai); const s = new TextDecoder().decode(b.slice(p, p + n)); p += n; return s; }
+    if (major === 4) { const n = rlen(ai); const a = []; for (let i = 0; i < n; i++) a.push(item()); return a; }
+    if (major === 5) { const n = rlen(ai); const m = {}; for (let i = 0; i < n; i++) { const k = item(); m[k] = item(); } return m; }
+    if (major === 7) { if (ai === 20) return false; if (ai === 21) return true; if (ai === 22) return null; }
+    throw new Error("cbor");
+  }
+  return item();
+}
+function decodeCashu(str) {
+  str = (str || "").trim();
+  const hex = a => Array.from(a).map(x => x.toString(16).padStart(2, "0")).join("");
+  if (/^cashuA/.test(str)) {
+    const bytes = _b64urlBytes(str.slice(6)); if (!bytes) return null;
+    let obj; try { obj = JSON.parse(new TextDecoder().decode(bytes)); } catch { return null; }
+    if (!obj || !Array.isArray(obj.token)) return null;
+    const mints = [], proofs = [];
+    for (const t of obj.token) { if (t.mint) mints.push(t.mint); for (const pr of (t.proofs || [])) proofs.push(pr.amount || 0); }
+    return { version: 3, mints: [...new Set(mints)], unit: obj.unit || "sat", memo: obj.memo || null, count: proofs.length, total: proofs.reduce((a, x) => a + x, 0) };
+  }
+  if (/^cashuB/.test(str)) {
+    const bytes = _b64urlBytes(str.slice(6)); if (!bytes) return null;
+    let m; try { m = _cborDecode(bytes); } catch { return null; }
+    if (!m || !Array.isArray(m.t)) return null;
+    const proofs = [];
+    for (const t of m.t) for (const pr of (t.p || [])) proofs.push(pr.a || 0);
+    return { version: 4, mints: m.m ? [m.m] : [], unit: m.u || "sat", memo: m.d || null, count: proofs.length, total: proofs.reduce((a, x) => a + x, 0) };
+  }
+  return null;
+}
+function detectCashu(v) { const s = (v || "").trim(); if (!/^cashu[AB][A-Za-z0-9_-]+=*$/.test(s)) return null; return decodeCashu(s) ? "cashu" : null; }
 
 // -- base58check (P2PKH / P2SH) --
 const _B58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
@@ -3665,6 +3816,7 @@ function Landing({ onAnalyze, isMobile, onCases }) {
   const [error, setError] = useState("");
   const [spInfo, setSpInfo] = useState(null);   // decoded Silent Payments (BIP352) address, if entered
   const [lnInvoice, setLnInvoice] = useState(null);   // decoded BOLT11 Lightning invoice, if entered
+  const [lnPay, setLnPay] = useState(null);           // { kind: "offer"|"lnurl"|"lnaddress", ...decoded }
   const [history, setHistory] = useState(() => getHistory());
   const deleteHistory = (addr) => { removeFromHistory(addr); setHistory(getHistory()); };
   const wipeHistory = () => { clearAllHistory(); setHistory([]); };
@@ -3732,7 +3884,7 @@ function Landing({ onAnalyze, isMobile, onCases }) {
 
   const submit = (val, plain = false) => {
     const v = (val || input).trim();
-    setSpInfo(null); setLnInvoice(null);
+    setSpInfo(null); setLnInvoice(null); setLnPay(null);
     if (!v) { setError(t("err.empty")); return; }
     const detected = detectInputType(v);
     if (!detected) {
@@ -3740,11 +3892,20 @@ function Landing({ onAnalyze, isMobile, onCases }) {
       if (sp) { setError(""); setSpInfo(sp); return; }   // not scannable — it's a reusable BIP352 address; educate instead
       const inv = decodeBolt11(v);
       if (inv) { setError(""); setLnInvoice(inv); return; }   // a Lightning invoice — decode + lint what it leaks
+      const off = decodeBolt12Offer(v);
+      if (off) { setError(""); setLnPay({ kind: "offer", ...off }); return; }   // BOLT12 offer — blinded-path privacy lint
+      const lu = decodeLnurl(v);
+      if (lu) { setError(""); setLnPay({ kind: "lnurl", ...lu }); return; }     // LNURL — metadata chokepoint lint
+      const cs = decodeCashu(v);
+      if (cs) { setError(""); setLnPay({ kind: "cashu", ...cs }); return; }     // Cashu ecash token — custodial + cleartext-bearer lint
       setError(t("err.invalid"));
       return;
     }
     if (detected === "ln_address") {
-      // Lightning addresses (user@domain) can't be resolved to a node — don't pretend to scan one.
+      // A Lightning address (user@domain) can't be scanned — but we can decode
+      // where it resolves and explain the metadata exposure, rather than just error.
+      const la = resolveLnAddress(v);
+      if (la) { setError(""); setLnPay({ kind: "lnaddress", ...la }); return; }
       setError(t("err.lnaddress"));
       return;
     }
@@ -3930,7 +4091,7 @@ function Landing({ onAnalyze, isMobile, onCases }) {
                     <circle cx="11" cy="11" r="7" stroke={inputType ? (isLn ? T.ln : T.btc) : T.cyan} strokeWidth="2" opacity="0.9" />
                     <line x1="16.5" y1="16.5" x2="21" y2="21" stroke={inputType ? (isLn ? T.ln : T.btc) : T.cyan} strokeWidth="2" strokeLinecap="round" opacity="0.9" />
                   </svg>
-                  <input ref={inputRef} value={input} onChange={e => { setInput(e.target.value); setError(""); setSpInfo(null); setLnInvoice(null); }}
+                  <input ref={inputRef} value={input} onChange={e => { setInput(e.target.value); setError(""); setSpInfo(null); setLnInvoice(null); setLnPay(null); }}
                     onKeyDown={e => e.key === "Enter" && submit(null, true)}
                     aria-label="Paste a Bitcoin address, Lightning node pubkey, or silent payment address"
                     placeholder={isLn ? "03abc… (66-char node pubkey)" : "Paste an address or pubkey…"}
@@ -4020,6 +4181,56 @@ function Landing({ onAnalyze, isMobile, onCases }) {
                     <div style={{ fontSize: 11.5, color: T.textDim, lineHeight: 1.55, marginTop: 10 }}>
                       Node balances are cheaply probeable — most channels' exact balances can be recovered in under a minute. Reuse invoices as little as possible; BOLT12 offers and blinded paths reduce this exposure. Decoded entirely in your browser.
                     </div>
+                  </div>
+                );
+              })()}
+              {lnPay && (() => {
+                const p = lnPay, cut = s => !s ? "" : s.length > 22 ? s.slice(0, 11) + "…" + s.slice(-6) : s;
+                // offer: blinded paths = good (hidden node); bare issuer id = exposed
+                const good = p.kind === "offer" ? p.hasBlindedPaths : false;
+                const accent = good ? T.green : p.kind === "cashu" ? T.btc : T.ln;
+                const head = p.kind === "offer" ? "BOLT12 OFFER" : p.kind === "lnurl" ? "LNURL" : p.kind === "lnaddress" ? "LIGHTNING ADDRESS" : "CASHU ECASH TOKEN";
+                return (
+                  <div style={{ marginTop: 12, textAlign: "left", background: accent + "0e", border: `1px solid ${accent}40`, borderRadius: 14, padding: "14px 16px", animation: "slideDown .25s ease" }}>
+                    <div style={{ fontFamily: T.mono, fontSize: 9, color: accent, letterSpacing: 1.5, marginBottom: 8 }}>{head}{p.kind === "offer" && p.currency ? " · " + p.currency : ""}</div>
+                    {p.kind === "offer" && (
+                      <>
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 10 }}>
+                          {p.amountMsat != null && <span style={{ fontFamily: T.serif, fontSize: 19, color: T.text }}>{p.currency ? (p.amountMsat + " " + p.currency) : (p.amountMsat / 1000).toLocaleString() + " sats"}</span>}
+                          {p.description && <span style={{ fontSize: 12.5, color: T.textMid, alignSelf: "center" }}>“{p.description}”</span>}
+                        </div>
+                        {p.hasBlindedPaths ? (
+                          <div style={{ fontSize: 12.5, color: T.textMid, lineHeight: 1.6 }}>
+                            <strong style={{ color: T.green }}>Uses blinded paths — the payee's node identity is hidden.</strong> This is BOLT12's privacy win over BOLT11 invoices: reusable without a static payment hash to correlate, and no node pubkey or funding UTXO exposed. {p.issuer ? "Issuer: " + p.issuer + "." : ""}
+                          </div>
+                        ) : (
+                          <div style={{ fontSize: 12.5, color: T.textMid, lineHeight: 1.6 }}>
+                            <strong style={{ color: T.ln }}>Exposes the payee's node pubkey directly</strong>{p.issuerId ? <> (<span style={{ fontFamily: T.mono, fontSize: 11 }}>{cut(p.issuerId)}</span>)</> : ""} — no blinded paths. An observer can look the node up, map its public channels and probe balances. Still better than a BOLT11 invoice (reusable, no static payment hash), but a blinded-path offer would hide the identity. {p.issuer ? "Issuer: " + p.issuer + "." : ""}
+                          </div>
+                        )}
+                      </>
+                    )}
+                    {(p.kind === "lnurl" || p.kind === "lnaddress") && (
+                      <>
+                        <div style={{ fontFamily: T.mono, fontSize: 12, color: T.text, wordBreak: "break-all", marginBottom: 8 }}>{p.kind === "lnaddress" ? p.user + "@" + p.host : p.host}</div>
+                        <div style={{ fontSize: 12.5, color: T.textMid, lineHeight: 1.6 }}>
+                          Payments funnel through <strong style={{ color: T.text }}>{p.host}</strong>{p.kind === "lnaddress" ? <> — it resolves to <span style={{ fontFamily: T.mono, fontSize: 11, color: T.textDim, wordBreak: "break-all" }}>{p.endpoint}</span></> : ""}. That server is a <strong style={{ color: T.ln }}>metadata chokepoint</strong>: it sees your IP and every payment request, and can log who pays you and when. Convenient, but the operator (and its host) can build a payment profile — not private the way an on-chain or blinded-path payment is.
+                        </div>
+                      </>
+                    )}
+                    {p.kind === "cashu" && (
+                      <>
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 8 }}>
+                          <span style={{ fontFamily: T.serif, fontSize: 19, color: T.text }}>{p.total.toLocaleString()} {p.unit}</span>
+                          <span style={{ fontSize: 12, color: T.textDim, alignSelf: "center" }}>· {p.count} proof{p.count !== 1 ? "s" : ""} · Cashu V{p.version}</span>
+                        </div>
+                        <div style={{ fontFamily: T.mono, fontSize: 11.5, color: T.textMid, wordBreak: "break-all", marginBottom: 8 }}>mint: {p.mints[0] || "—"}</div>
+                        <div style={{ fontSize: 12.5, color: T.textMid, lineHeight: 1.6 }}>
+                          Chaumian ecash: the mint blind-signs tokens, so it <strong style={{ color: T.green }}>can't link who withdrew a token to who redeemed it</strong> — strong payment unlinkability. The trade-off: the mint is a <strong style={{ color: T.ln }}>trusted custodian</strong> that holds the funds and can vanish or censor, and this token is a <strong style={{ color: T.red }}>cleartext bearer note</strong> — anyone who sees this string (chat, email, screen) can redeem it first. Treat it like cash on the table.
+                        </div>
+                      </>
+                    )}
+                    <div style={{ fontSize: 11.5, color: T.textDim, lineHeight: 1.55, marginTop: 10 }}>Decoded entirely in your browser.</div>
                   </div>
                 );
               })()}
@@ -4847,6 +5058,7 @@ function TransactionInspector({ onBack, isMobile, onScan }) {
     const link = txLinkability(tx);
     const ent = link.available ? (link.N === 1 ? { c: T.red, t: "Fully deterministic" } : link.entropy < 1 ? { c: T.red, t: "Very low ambiguity" } : link.entropy < 1.585 ? { c: T.amber, t: "Low ambiguity" } : link.entropy < 3 ? { c: T.cyan, t: "Ambiguous" } : { c: T.green, t: "Strongly ambiguous" }) : null;
     const fp = fingerprintTx(tx);
+    const cj = classifyCoinjoin(tx.vin, tx.vout);
     const lpCell = v => Math.abs(v - 1) < 1e-9 ? { bg: T.red, fg: T.bg, txt: "1" } : v === 0 ? { bg: T.surface, fg: T.textDim, txt: "0" } : { bg: T.red + Math.round(18 + v * 60).toString(16).padStart(2, "0"), fg: T.text, txt: v.toFixed(2).replace(/^0/, "") };
     const inAddrs = new Set((tx.vin || []).map(v => v.prevout && v.prevout.scriptpubkey_address).filter(Boolean));
     const outColor = (o, i) => _txDust(o) ? T.red : (o.scriptpubkey_address && inAddrs.has(o.scriptpubkey_address)) ? T.red
@@ -4918,6 +5130,19 @@ function TransactionInspector({ onBack, isMobile, onScan }) {
               {link.reason === "too-many"
                 ? "This transaction has " + link.n + " inputs and " + link.m + " outputs — beyond the 12×12 limit for exact link analysis (the same bound the reference Boltzmann tool uses). Very large transactions have astronomically many interpretations, which on its own means strong ambiguity."
                 : "This transaction has too many valid interpretations to count exactly in the browser — which itself signals very high entropy and strong input→output ambiguity (typical of a CoinJoin)."}
+            </div>
+          </div>
+        )}
+
+        {/* coinjoin classification + post-mix consolidation warning */}
+        {cj && (
+          <div style={panel({ borderColor: T.green + "3a" })}>
+            <div style={{ ...label, color: T.green }}>{cj.type === "Whirlpool" ? "WHIRLPOOL COINJOIN" : cj.type === "Wasabi" ? "WASABI COINJOIN" : "COINJOIN DETECTED"}</div>
+            <div style={{ fontSize: 13, color: T.textMid, lineHeight: 1.6 }}>
+              {cj.participants} equal outputs of <strong style={{ color: T.text }}>{sats(cj.denom)}</strong>{cj.type === "Whirlpool" ? " in a 5×5 pool" : cj.type === "Wasabi" ? " — an equal-value (ZeroLink) round, ~99% detectable by its structure alone" : ""}. Good: equal outputs break the deterministic input→output trail for everyone in the round.
+            </div>
+            <div style={{ background: T.amber + "10", border: `1px solid ${T.amber}33`, borderRadius: 10, padding: "9px 12px", fontSize: 12.5, color: T.textMid, lineHeight: 1.6, marginTop: 10 }}>
+              <strong style={{ color: T.amber }}>Don't undo it by consolidating.</strong> If you later spend several of these mixed outputs together, the common-input heuristic re-links them into one cluster — measured to erode a mix's anonymity set by <strong style={{ color: T.text }}>10–50%</strong>, worst in the first day. Spend mixed coins one output at a time, and let them rest.
             </div>
           </div>
         )}
@@ -5010,6 +5235,25 @@ function TransactionInspector({ onBack, isMobile, onScan }) {
             {a.coinjoin && <Tag label="CoinJoin shape" color={T.green} size={9} />}
             <span style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim, marginLeft: "auto" }}>{(tx.vin || []).length} in · {(tx.vout || []).length} out{tx.txid ? "" : " · unsigned"}</span>
           </div>
+        </div>
+
+        {/* broadcast-layer (network) exposure — the leak that isn't in the bytes */}
+        <div style={panel({ borderColor: T.amber + "2e" })}>
+          <div style={{ ...label, color: T.amber }}>WHEN YOU BROADCAST IT</div>
+          <div style={{ fontSize: 13, color: T.textMid, lineHeight: 1.6 }}>
+            Everything above is in the transaction itself. One leak isn't: the moment you broadcast, the first nodes that see it can tie the transaction to <strong style={{ color: T.text }}>your IP address</strong> — Bitcoin's default relay links a tx to its origin with near-certainty, and surveillance firms run hundreds of listening nodes to harvest exactly that. An IP↔tx link can undo all the on-chain care above.
+          </div>
+          <ul style={{ listStyle: "none", display: "flex", flexDirection: "column", gap: 7, padding: 0, margin: "10px 0 0" }}>
+            {[
+              "Broadcast through your OWN full node — it has no wallet to correlate the tx with.",
+              "Or broadcast over Tor (a Tor-routed node, or paste the signed hex into a broadcaster in Tor Browser) so no peer sees your real IP.",
+              "Don't rely on wallet \"private broadcast\" toggles blindly — even Bitcoin Core's -privatebroadcast leaked the sender's IP in 2026 when the encrypted connection was forced to downgrade.",
+            ].map((tline, i) => (
+              <li key={i} style={{ display: "flex", gap: 8, alignItems: "flex-start", fontSize: 12.5, color: T.textMid, lineHeight: 1.55 }}>
+                <span style={{ color: T.amber, flexShrink: 0, marginTop: 1, fontFamily: T.mono }}>→</span>{tline}
+              </li>
+            ))}
+          </ul>
         </div>
 
         <div style={{ fontSize: 11.5, color: T.textDim, lineHeight: 1.6, textAlign: "center" }}>
@@ -7879,13 +8123,17 @@ window.__ANONSCORE_TEST__ = Object.freeze({
   parsePsbt, parseRawTx, classifyScript, parseTransactionInput, detectTxInput,
   analyzeTx, guessChange, clusterUnification, feeRate, DEMO_PSBT,
   // transaction entropy / linkability (Boltzmann · validated vs LaurentMT vectors)
-  txInterpretations, txLinkability,
+  txInterpretations, txLinkability, isCoinJoinShape, classifyCoinjoin,
   // wallet fingerprint (structural tells: version/locktime/RBF/BIP69/script-mix/low-r)
   fingerprintTx, _derSigInfo,
   // Silent Payments (BIP352) decode/validate — validated vs the spec test vector
   _bech32Decode, decodeSilentPayment, detectSilentPayment,
   // BOLT11 Lightning invoice decode/lint — validated vs the BOLT11 spec vector
   decodeBolt11, detectBolt11,
+  // BOLT12 offer + LNURL + Lightning-address decode/lint (payment-string linter)
+  decodeBolt12Offer, detectBolt12, decodeLnurl, resolveLnAddress,
+  // Cashu ecash token decode (V3 base64-JSON / V4 CBOR) — validated vs NUT-00
+  decodeCashu, detectCashu,
   // xpub wallet scanner — crypto (validated against BIP32 TV1 + BIP84 vectors)
   _sha512, _hmacSha512, _ripemd160, decodeXpub, ckdPub, deriveWalletAddress, detectXpub,
   runWalletEngine, DEMO_WALLET,

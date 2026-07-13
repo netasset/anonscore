@@ -1745,6 +1745,43 @@ function isCoinJoinShape(vin, vout) {
   });
   return Math.max(0, ...Object.values(dn)) >= 3;
 }
+function classifyCoinjoin(vin, vout) {
+  const ins = (vin || []).length,
+    outs = vout || [];
+  if (ins < 2 || outs.length < 3) return null;
+  const dn = {};
+  outs.forEach(o => {
+    if (o && o.value != null) dn[o.value] = (dn[o.value] || 0) + 1;
+  });
+  const vals = Object.keys(dn);
+  if (!vals.length) return null;
+  let denom = 0,
+    equal = 0;
+  for (const v of vals) {
+    if (dn[v] > equal || dn[v] === equal && +v > denom) {
+      equal = dn[v];
+      denom = +v;
+    }
+  }
+  const distinct = vals.length;
+  if (equal < 3) return null;
+  if (ins === 5 && outs.length === 5 && equal === 5) return {
+    type: "Whirlpool",
+    denom,
+    participants: 5
+  };
+  if (equal >= 10 && distinct >= 2 && ins >= equal) return {
+    type: "Wasabi",
+    denom,
+    participants: equal
+  };
+  if (ins >= 3 && outs.length >= 5) return {
+    type: "CoinJoin",
+    denom,
+    participants: equal
+  };
+  return null;
+}
 function _hexToBytes(h) {
   h = (h || "").trim().replace(/^0x/i, "");
   if (h.length % 2) throw new Error("odd-length hex");
@@ -2062,6 +2099,243 @@ function detectBolt11(v) {
   const s = (v || "").trim().toLowerCase();
   if (!/^ln(bc|tb|bcrt|bcs|sb)[0-9]*[munp]?1[a-z0-9]+$/.test(s)) return null;
   return decodeBolt11(s) ? "bolt11" : null;
+}
+function _bech32NoChecksum(str) {
+  str = (str || "").toLowerCase().replace(/[+\s]/g, "");
+  const pos = str.lastIndexOf("1");
+  if (pos < 1) return null;
+  const hrp = str.slice(0, pos),
+    vals = [];
+  for (const c of str.slice(pos + 1)) {
+    const v = _BECHKEY[c];
+    if (v === undefined) return null;
+    vals.push(v);
+  }
+  return {
+    hrp,
+    bytes: _g5Bytes(vals)
+  };
+}
+function _bigSize(b, pos) {
+  const f = b[pos];
+  if (f === undefined) return null;
+  if (f < 0xfd) return [f, pos + 1];
+  if (f === 0xfd) return [b[pos + 1] << 8 | b[pos + 2], pos + 3];
+  if (f === 0xfe) return [(b[pos + 1] << 24 | b[pos + 2] << 16 | b[pos + 3] << 8 | b[pos + 4]) >>> 0, pos + 5];
+  let v = 0;
+  for (let i = 1; i <= 8; i++) v = v * 256 + b[pos + i];
+  return [v, pos + 9];
+}
+function decodeBolt12Offer(str) {
+  const d = _bech32NoChecksum((str || "").trim());
+  if (!d || d.hrp !== "lno") return null;
+  const b = d.bytes;
+  const tlv = {};
+  let pos = 0;
+  while (pos < b.length) {
+    let r = _bigSize(b, pos);
+    if (!r) return null;
+    const type = r[0];
+    pos = r[1];
+    r = _bigSize(b, pos);
+    if (!r) return null;
+    const len = r[0];
+    pos = r[1];
+    if (pos + len > b.length) return null;
+    tlv[type] = b.slice(pos, pos + len);
+    pos += len;
+  }
+  if (!Object.keys(tlv).length) return null;
+  const hex = a => a.map(x => x.toString(16).padStart(2, "0")).join("");
+  const utf8 = a => {
+    try {
+      return new TextDecoder().decode(new Uint8Array(a));
+    } catch {
+      return null;
+    }
+  };
+  const beInt = a => {
+    let n = 0;
+    for (const x of a) n = n * 256 + x;
+    return n;
+  };
+  const out = {
+    hasBlindedPaths: 16 in tlv,
+    tlvTypes: Object.keys(tlv).map(Number).sort((a, b) => a - b)
+  };
+  if (8 in tlv) out.amountMsat = beInt(tlv[8]);
+  if (6 in tlv) out.currency = utf8(tlv[6]);
+  if (10 in tlv) out.description = utf8(tlv[10]);
+  if (18 in tlv) out.issuer = utf8(tlv[18]);
+  if (22 in tlv) out.issuerId = hex(tlv[22]);
+  return out;
+}
+function detectBolt12(v) {
+  const s = (v || "").trim().toLowerCase().replace(/[+\s]/g, "");
+  if (!/^lno1[a-z0-9]+$/.test(s)) return null;
+  return decodeBolt12Offer(s) ? "bolt12" : null;
+}
+function decodeLnurl(str) {
+  const d = _bech32Decode((str || "").trim());
+  if (!d || d.spec !== "bech32" || d.hrp !== "lnurl") return null;
+  let url;
+  try {
+    url = new TextDecoder().decode(new Uint8Array(_g5Bytes(d.data)));
+  } catch {
+    return null;
+  }
+  if (!/^https?:\/\//i.test(url)) return null;
+  try {
+    return {
+      url,
+      host: new URL(url).host
+    };
+  } catch {
+    return null;
+  }
+}
+function resolveLnAddress(str) {
+  const s = (str || "").trim();
+  const m = s.match(/^([a-z0-9._%+-]+)@([a-z0-9.-]+\.[a-z]{2,})$/i);
+  if (!m) return null;
+  return {
+    user: m[1],
+    host: m[2].toLowerCase(),
+    endpoint: `https://${m[2].toLowerCase()}/.well-known/lnurlp/${m[1]}`
+  };
+}
+function _b64urlBytes(s) {
+  s = (s || "").replace(/-/g, "+").replace(/_/g, "/");
+  while (s.length % 4) s += "=";
+  let bin;
+  try {
+    bin = atob(s);
+  } catch {
+    return null;
+  }
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+function _cborDecode(b) {
+  let p = 0;
+  const rlen = ai => {
+    if (ai < 24) return ai;
+    if (ai === 24) return b[p++];
+    if (ai === 25) {
+      const v = b[p] << 8 | b[p + 1];
+      p += 2;
+      return v;
+    }
+    if (ai === 26) {
+      const v = (b[p] << 24 | b[p + 1] << 16 | b[p + 2] << 8 | b[p + 3]) >>> 0;
+      p += 4;
+      return v;
+    }
+    if (ai === 27) {
+      let v = 0;
+      for (let i = 0; i < 8; i++) v = v * 256 + b[p++];
+      return v;
+    }
+    throw new Error("cbor");
+  };
+  function item() {
+    const ib = b[p++],
+      major = ib >> 5,
+      ai = ib & 0x1f;
+    if (major === 0) return rlen(ai);
+    if (major === 1) return -1 - rlen(ai);
+    if (major === 2) {
+      const n = rlen(ai);
+      const s = b.slice(p, p + n);
+      p += n;
+      return s;
+    }
+    if (major === 3) {
+      const n = rlen(ai);
+      const s = new TextDecoder().decode(b.slice(p, p + n));
+      p += n;
+      return s;
+    }
+    if (major === 4) {
+      const n = rlen(ai);
+      const a = [];
+      for (let i = 0; i < n; i++) a.push(item());
+      return a;
+    }
+    if (major === 5) {
+      const n = rlen(ai);
+      const m = {};
+      for (let i = 0; i < n; i++) {
+        const k = item();
+        m[k] = item();
+      }
+      return m;
+    }
+    if (major === 7) {
+      if (ai === 20) return false;
+      if (ai === 21) return true;
+      if (ai === 22) return null;
+    }
+    throw new Error("cbor");
+  }
+  return item();
+}
+function decodeCashu(str) {
+  str = (str || "").trim();
+  const hex = a => Array.from(a).map(x => x.toString(16).padStart(2, "0")).join("");
+  if (/^cashuA/.test(str)) {
+    const bytes = _b64urlBytes(str.slice(6));
+    if (!bytes) return null;
+    let obj;
+    try {
+      obj = JSON.parse(new TextDecoder().decode(bytes));
+    } catch {
+      return null;
+    }
+    if (!obj || !Array.isArray(obj.token)) return null;
+    const mints = [],
+      proofs = [];
+    for (const t of obj.token) {
+      if (t.mint) mints.push(t.mint);
+      for (const pr of t.proofs || []) proofs.push(pr.amount || 0);
+    }
+    return {
+      version: 3,
+      mints: [...new Set(mints)],
+      unit: obj.unit || "sat",
+      memo: obj.memo || null,
+      count: proofs.length,
+      total: proofs.reduce((a, x) => a + x, 0)
+    };
+  }
+  if (/^cashuB/.test(str)) {
+    const bytes = _b64urlBytes(str.slice(6));
+    if (!bytes) return null;
+    let m;
+    try {
+      m = _cborDecode(bytes);
+    } catch {
+      return null;
+    }
+    if (!m || !Array.isArray(m.t)) return null;
+    const proofs = [];
+    for (const t of m.t) for (const pr of t.p || []) proofs.push(pr.a || 0);
+    return {
+      version: 4,
+      mints: m.m ? [m.m] : [],
+      unit: m.u || "sat",
+      memo: m.d || null,
+      count: proofs.length,
+      total: proofs.reduce((a, x) => a + x, 0)
+    };
+  }
+  return null;
+}
+function detectCashu(v) {
+  const s = (v || "").trim();
+  if (!/^cashu[AB][A-Za-z0-9_-]+=*$/.test(s)) return null;
+  return decodeCashu(s) ? "cashu" : null;
 }
 const _B58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
 function _base58encode(bytes) {
@@ -7206,6 +7480,7 @@ function Landing({
   const [error, setError] = useState("");
   const [spInfo, setSpInfo] = useState(null);
   const [lnInvoice, setLnInvoice] = useState(null);
+  const [lnPay, setLnPay] = useState(null);
   const [history, setHistory] = useState(() => getHistory());
   const deleteHistory = addr => {
     removeFromHistory(addr);
@@ -7283,6 +7558,7 @@ function Landing({
     const v = (val || input).trim();
     setSpInfo(null);
     setLnInvoice(null);
+    setLnPay(null);
     if (!v) {
       setError(t("err.empty"));
       return;
@@ -7301,10 +7577,46 @@ function Landing({
         setLnInvoice(inv);
         return;
       }
+      const off = decodeBolt12Offer(v);
+      if (off) {
+        setError("");
+        setLnPay({
+          kind: "offer",
+          ...off
+        });
+        return;
+      }
+      const lu = decodeLnurl(v);
+      if (lu) {
+        setError("");
+        setLnPay({
+          kind: "lnurl",
+          ...lu
+        });
+        return;
+      }
+      const cs = decodeCashu(v);
+      if (cs) {
+        setError("");
+        setLnPay({
+          kind: "cashu",
+          ...cs
+        });
+        return;
+      }
       setError(t("err.invalid"));
       return;
     }
     if (detected === "ln_address") {
+      const la = resolveLnAddress(v);
+      if (la) {
+        setError("");
+        setLnPay({
+          kind: "lnaddress",
+          ...la
+        });
+        return;
+      }
       setError(t("err.lnaddress"));
       return;
     }
@@ -7922,6 +8234,7 @@ function Landing({
       setError("");
       setSpInfo(null);
       setLnInvoice(null);
+      setLnPay(null);
     },
     onKeyDown: e => e.key === "Enter" && submit(null, true),
     "aria-label": "Paste a Bitcoin address, Lightning node pubkey, or silent payment address",
@@ -8169,6 +8482,156 @@ function Landing({
         marginTop: 10
       }
     }, "Node balances are cheaply probeable \u2014 most channels' exact balances can be recovered in under a minute. Reuse invoices as little as possible; BOLT12 offers and blinded paths reduce this exposure. Decoded entirely in your browser."));
+  })(), lnPay && (() => {
+    const p = lnPay,
+      cut = s => !s ? "" : s.length > 22 ? s.slice(0, 11) + "…" + s.slice(-6) : s;
+    const good = p.kind === "offer" ? p.hasBlindedPaths : false;
+    const accent = good ? T.green : p.kind === "cashu" ? T.btc : T.ln;
+    const head = p.kind === "offer" ? "BOLT12 OFFER" : p.kind === "lnurl" ? "LNURL" : p.kind === "lnaddress" ? "LIGHTNING ADDRESS" : "CASHU ECASH TOKEN";
+    return React.createElement("div", {
+      style: {
+        marginTop: 12,
+        textAlign: "left",
+        background: accent + "0e",
+        border: `1px solid ${accent}40`,
+        borderRadius: 14,
+        padding: "14px 16px",
+        animation: "slideDown .25s ease"
+      }
+    }, React.createElement("div", {
+      style: {
+        fontFamily: T.mono,
+        fontSize: 9,
+        color: accent,
+        letterSpacing: 1.5,
+        marginBottom: 8
+      }
+    }, head, p.kind === "offer" && p.currency ? " · " + p.currency : ""), p.kind === "offer" && React.createElement(React.Fragment, null, React.createElement("div", {
+      style: {
+        display: "flex",
+        flexWrap: "wrap",
+        gap: 10,
+        marginBottom: 10
+      }
+    }, p.amountMsat != null && React.createElement("span", {
+      style: {
+        fontFamily: T.serif,
+        fontSize: 19,
+        color: T.text
+      }
+    }, p.currency ? p.amountMsat + " " + p.currency : (p.amountMsat / 1000).toLocaleString() + " sats"), p.description && React.createElement("span", {
+      style: {
+        fontSize: 12.5,
+        color: T.textMid,
+        alignSelf: "center"
+      }
+    }, "\u201C", p.description, "\u201D")), p.hasBlindedPaths ? React.createElement("div", {
+      style: {
+        fontSize: 12.5,
+        color: T.textMid,
+        lineHeight: 1.6
+      }
+    }, React.createElement("strong", {
+      style: {
+        color: T.green
+      }
+    }, "Uses blinded paths \u2014 the payee's node identity is hidden."), " This is BOLT12's privacy win over BOLT11 invoices: reusable without a static payment hash to correlate, and no node pubkey or funding UTXO exposed. ", p.issuer ? "Issuer: " + p.issuer + "." : "") : React.createElement("div", {
+      style: {
+        fontSize: 12.5,
+        color: T.textMid,
+        lineHeight: 1.6
+      }
+    }, React.createElement("strong", {
+      style: {
+        color: T.ln
+      }
+    }, "Exposes the payee's node pubkey directly"), p.issuerId ? React.createElement(React.Fragment, null, " (", React.createElement("span", {
+      style: {
+        fontFamily: T.mono,
+        fontSize: 11
+      }
+    }, cut(p.issuerId)), ")") : "", " \u2014 no blinded paths. An observer can look the node up, map its public channels and probe balances. Still better than a BOLT11 invoice (reusable, no static payment hash), but a blinded-path offer would hide the identity. ", p.issuer ? "Issuer: " + p.issuer + "." : "")), (p.kind === "lnurl" || p.kind === "lnaddress") && React.createElement(React.Fragment, null, React.createElement("div", {
+      style: {
+        fontFamily: T.mono,
+        fontSize: 12,
+        color: T.text,
+        wordBreak: "break-all",
+        marginBottom: 8
+      }
+    }, p.kind === "lnaddress" ? p.user + "@" + p.host : p.host), React.createElement("div", {
+      style: {
+        fontSize: 12.5,
+        color: T.textMid,
+        lineHeight: 1.6
+      }
+    }, "Payments funnel through ", React.createElement("strong", {
+      style: {
+        color: T.text
+      }
+    }, p.host), p.kind === "lnaddress" ? React.createElement(React.Fragment, null, " \u2014 it resolves to ", React.createElement("span", {
+      style: {
+        fontFamily: T.mono,
+        fontSize: 11,
+        color: T.textDim,
+        wordBreak: "break-all"
+      }
+    }, p.endpoint)) : "", ". That server is a ", React.createElement("strong", {
+      style: {
+        color: T.ln
+      }
+    }, "metadata chokepoint"), ": it sees your IP and every payment request, and can log who pays you and when. Convenient, but the operator (and its host) can build a payment profile \u2014 not private the way an on-chain or blinded-path payment is.")), p.kind === "cashu" && React.createElement(React.Fragment, null, React.createElement("div", {
+      style: {
+        display: "flex",
+        flexWrap: "wrap",
+        gap: 10,
+        marginBottom: 8
+      }
+    }, React.createElement("span", {
+      style: {
+        fontFamily: T.serif,
+        fontSize: 19,
+        color: T.text
+      }
+    }, p.total.toLocaleString(), " ", p.unit), React.createElement("span", {
+      style: {
+        fontSize: 12,
+        color: T.textDim,
+        alignSelf: "center"
+      }
+    }, "\xB7 ", p.count, " proof", p.count !== 1 ? "s" : "", " \xB7 Cashu V", p.version)), React.createElement("div", {
+      style: {
+        fontFamily: T.mono,
+        fontSize: 11.5,
+        color: T.textMid,
+        wordBreak: "break-all",
+        marginBottom: 8
+      }
+    }, "mint: ", p.mints[0] || "—"), React.createElement("div", {
+      style: {
+        fontSize: 12.5,
+        color: T.textMid,
+        lineHeight: 1.6
+      }
+    }, "Chaumian ecash: the mint blind-signs tokens, so it ", React.createElement("strong", {
+      style: {
+        color: T.green
+      }
+    }, "can't link who withdrew a token to who redeemed it"), " \u2014 strong payment unlinkability. The trade-off: the mint is a ", React.createElement("strong", {
+      style: {
+        color: T.ln
+      }
+    }, "trusted custodian"), " that holds the funds and can vanish or censor, and this token is a ", React.createElement("strong", {
+      style: {
+        color: T.red
+      }
+    }, "cleartext bearer note"), " \u2014 anyone who sees this string (chat, email, screen) can redeem it first. Treat it like cash on the table.")), React.createElement("div", {
+      style: {
+        fontSize: 11.5,
+        color: T.textDim,
+        lineHeight: 1.55,
+        marginTop: 10
+      }
+    }, "Decoded entirely in your browser."));
   })()), React.createElement("div", {
     style: {
       display: "flex",
@@ -10224,6 +10687,7 @@ function TransactionInspector({
       t: "Strongly ambiguous"
     } : null;
     const fp = fingerprintTx(tx);
+    const cj = classifyCoinjoin(tx.vin, tx.vout);
     const lpCell = v => Math.abs(v - 1) < 1e-9 ? {
       bg: T.red,
       fg: T.bg,
@@ -10430,7 +10894,45 @@ function TransactionInspector({
         color: T.textMid,
         lineHeight: 1.6
       }
-    }, link.reason === "too-many" ? "This transaction has " + link.n + " inputs and " + link.m + " outputs — beyond the 12×12 limit for exact link analysis (the same bound the reference Boltzmann tool uses). Very large transactions have astronomically many interpretations, which on its own means strong ambiguity." : "This transaction has too many valid interpretations to count exactly in the browser — which itself signals very high entropy and strong input→output ambiguity (typical of a CoinJoin).")), fp.available && fp.signals.length > 0 && React.createElement("div", {
+    }, link.reason === "too-many" ? "This transaction has " + link.n + " inputs and " + link.m + " outputs — beyond the 12×12 limit for exact link analysis (the same bound the reference Boltzmann tool uses). Very large transactions have astronomically many interpretations, which on its own means strong ambiguity." : "This transaction has too many valid interpretations to count exactly in the browser — which itself signals very high entropy and strong input→output ambiguity (typical of a CoinJoin).")), cj && React.createElement("div", {
+      style: panel({
+        borderColor: T.green + "3a"
+      })
+    }, React.createElement("div", {
+      style: {
+        ...label,
+        color: T.green
+      }
+    }, cj.type === "Whirlpool" ? "WHIRLPOOL COINJOIN" : cj.type === "Wasabi" ? "WASABI COINJOIN" : "COINJOIN DETECTED"), React.createElement("div", {
+      style: {
+        fontSize: 13,
+        color: T.textMid,
+        lineHeight: 1.6
+      }
+    }, cj.participants, " equal outputs of ", React.createElement("strong", {
+      style: {
+        color: T.text
+      }
+    }, sats(cj.denom)), cj.type === "Whirlpool" ? " in a 5×5 pool" : cj.type === "Wasabi" ? " — an equal-value (ZeroLink) round, ~99% detectable by its structure alone" : "", ". Good: equal outputs break the deterministic input\u2192output trail for everyone in the round."), React.createElement("div", {
+      style: {
+        background: T.amber + "10",
+        border: `1px solid ${T.amber}33`,
+        borderRadius: 10,
+        padding: "9px 12px",
+        fontSize: 12.5,
+        color: T.textMid,
+        lineHeight: 1.6,
+        marginTop: 10
+      }
+    }, React.createElement("strong", {
+      style: {
+        color: T.amber
+      }
+    }, "Don't undo it by consolidating."), " If you later spend several of these mixed outputs together, the common-input heuristic re-links them into one cluster \u2014 measured to erode a mix's anonymity set by ", React.createElement("strong", {
+      style: {
+        color: T.text
+      }
+    }, "10\u201350%"), ", worst in the first day. Spend mixed coins one output at a time, and let them rest.")), fp.available && fp.signals.length > 0 && React.createElement("div", {
       style: panel({
         borderColor: fp.distinctive > 0 ? T.amber + "33" : T.border
       })
@@ -10700,6 +11202,51 @@ function TransactionInspector({
         marginLeft: "auto"
       }
     }, (tx.vin || []).length, " in \xB7 ", (tx.vout || []).length, " out", tx.txid ? "" : " · unsigned"))), React.createElement("div", {
+      style: panel({
+        borderColor: T.amber + "2e"
+      })
+    }, React.createElement("div", {
+      style: {
+        ...label,
+        color: T.amber
+      }
+    }, "WHEN YOU BROADCAST IT"), React.createElement("div", {
+      style: {
+        fontSize: 13,
+        color: T.textMid,
+        lineHeight: 1.6
+      }
+    }, "Everything above is in the transaction itself. One leak isn't: the moment you broadcast, the first nodes that see it can tie the transaction to ", React.createElement("strong", {
+      style: {
+        color: T.text
+      }
+    }, "your IP address"), " \u2014 Bitcoin's default relay links a tx to its origin with near-certainty, and surveillance firms run hundreds of listening nodes to harvest exactly that. An IP\u2194tx link can undo all the on-chain care above."), React.createElement("ul", {
+      style: {
+        listStyle: "none",
+        display: "flex",
+        flexDirection: "column",
+        gap: 7,
+        padding: 0,
+        margin: "10px 0 0"
+      }
+    }, ["Broadcast through your OWN full node — it has no wallet to correlate the tx with.", "Or broadcast over Tor (a Tor-routed node, or paste the signed hex into a broadcaster in Tor Browser) so no peer sees your real IP.", "Don't rely on wallet \"private broadcast\" toggles blindly — even Bitcoin Core's -privatebroadcast leaked the sender's IP in 2026 when the encrypted connection was forced to downgrade."].map((tline, i) => React.createElement("li", {
+      key: i,
+      style: {
+        display: "flex",
+        gap: 8,
+        alignItems: "flex-start",
+        fontSize: 12.5,
+        color: T.textMid,
+        lineHeight: 1.55
+      }
+    }, React.createElement("span", {
+      style: {
+        color: T.amber,
+        flexShrink: 0,
+        marginTop: 1,
+        fontFamily: T.mono
+      }
+    }, "\u2192"), tline)))), React.createElement("div", {
       style: {
         fontSize: 11.5,
         color: T.textDim,
@@ -18078,6 +18625,8 @@ window.__ANONSCORE_TEST__ = Object.freeze({
   DEMO_PSBT,
   txInterpretations,
   txLinkability,
+  isCoinJoinShape,
+  classifyCoinjoin,
   fingerprintTx,
   _derSigInfo,
   _bech32Decode,
@@ -18085,6 +18634,12 @@ window.__ANONSCORE_TEST__ = Object.freeze({
   detectSilentPayment,
   decodeBolt11,
   detectBolt11,
+  decodeBolt12Offer,
+  detectBolt12,
+  decodeLnurl,
+  resolveLnAddress,
+  decodeCashu,
+  detectCashu,
   _sha512,
   _hmacSha512,
   _ripemd160,

@@ -314,8 +314,24 @@ else {
     const lnCard = await spPage.evaluate(() => !![...document.querySelectorAll('*')].find(e => /LIGHTNING INVOICE · BOLT11/.test(e.textContent || "") && e.children.length < 4));
     if (!lnCard) fail("bolt11: Lightning invoice lint card did not render");
     else pass("bolt11: invoice shows the Lightning lint card (funding-UTXO leak surfaced, in-browser)");
+    // BOLT12 offer → offer lint card
+    const OFFER = "lno1pqps7sjqpgtyzm3qv4uxzmtsd3jjqer9wd3hy6tsw35k7msjzfpy7nz5yqcnygrfdej82um5wf5k2uckyypwa3eyt44h6txtxquqh7lz5djge4afgfjn7k4rgrkuag0jsd5xvxg";
+    await spPage.locator('input[aria-label*="silent payment"]').fill(OFFER);
+    await spPage.getByRole("button", { name: /Analy[sz]e|Reveal|Audit/i }).first().click();
+    await spPage.waitForTimeout(300);
+    const offerCard = await spPage.evaluate(() => !![...document.querySelectorAll('*')].find(e => /BOLT12 OFFER/.test(e.textContent || "") && e.children.length < 4));
+    if (!offerCard) fail("bolt12: offer lint card did not render");
+    else pass("bolt12: offer shows the lint card (node-id exposure vs blinded paths, in-browser)");
+    // Cashu ecash token → ecash lint card
+    const CASHU = "cashuBo2F0gqJhaUgA_9SLj17PgGFwgaNhYQFhc3hAYWNjMTI0MzVlN2I4NDg0YzNjZjE4NTAxNDkyMThhZjkwZjcxNmE1MmJmNGE1ZWQzNDdlNDhlY2MxM2Y3NzM4OGFjWCECRFODGd5IXVW-07KaZCvuWHk3WrnnpiDhHki6SCQh88-iYWlIAK0mjE0fWCZhcIKjYWECYXN4QDEzMjNkM2Q0NzA3YTU4YWQyZTIzYWRhNGU5ZjFmNDlmNWE1YjRhYzdiNzA4ZWIwZDYxZjczOGY0ODMwN2U4ZWVhY1ghAjRWqhENhLSsdHrr2Cw7AFrKUL9Ffr1XN6RBT6w659lNo2FhAWFzeEA1NmJjYmNiYjdjYzY0MDZiM2ZhNWQ1N2QyMTc0ZjRlZmY4YjQ0MDJiMTc2OTI2ZDNhNTdkM2MzZGNiYjU5ZDU3YWNYIQJzEpxXGeWZN5qXSmJjY8MzxWyvwObQGr5G1YCCgHicY2FtdWh0dHA6Ly9sb2NhbGhvc3Q6MzMzOGF1Y3NhdA";
+    await spPage.locator('input[aria-label*="silent payment"]').fill(CASHU);
+    await spPage.getByRole("button", { name: /Analy[sz]e|Reveal|Audit/i }).first().click();
+    await spPage.waitForTimeout(300);
+    const cashuCard = await spPage.evaluate(() => !![...document.querySelectorAll('*')].find(e => /CASHU ECASH TOKEN/.test(e.textContent || "") && e.children.length < 4));
+    if (!cashuCard) fail("cashu: ecash token lint card did not render");
+    else pass("cashu: token shows the ecash lint card (custodial + bearer-note, in-browser)");
   } catch (e) {
-    fail("silent payments / bolt11: " + e.message.slice(0, 120));
+    fail("silent payments / lightning / cashu: " + e.message.slice(0, 120));
   } finally {
     await spPage.close();
   }
@@ -361,10 +377,11 @@ else {
       entropy: !![...document.querySelectorAll('*')].find(e => e.textContent === 'INTERPRETATION ENTROPY'),
       provable: !![...document.querySelectorAll('*')].find(e => (e.textContent || '').includes('provably from these inputs')),
       fingerprint: !![...document.querySelectorAll('*')].find(e => e.textContent === 'WALLET FINGERPRINT'),
+      broadcast: !![...document.querySelectorAll('*')].find(e => e.textContent === 'WHEN YOU BROADCAST IT'),
     }));
     const thirdParty = [...new Set(insReqs)].filter(o => !o.includes("127.0.0.1"));
     if (!hasInput || !hasH1) fail("inspector: input textarea or sr-only h1 missing");
-    else if (!report.verdict || !report.cluster || !report.io || !report.entropy || !report.provable || !report.fingerprint) fail(`inspector: report incomplete after Load example (${JSON.stringify(report)})`);
+    else if (!report.verdict || !report.cluster || !report.io || !report.entropy || !report.provable || !report.fingerprint || !report.broadcast) fail(`inspector: report incomplete after Load example (${JSON.stringify(report)})`);
     else if (thirdParty.length) fail(`inspector: made third-party requests (must be fully offline): ${thirdParty.join(", ")}`);
     else pass("inspector renders at /?page=inspector; example PSBT parsed + full report (incl. entropy), 100% offline");
   } catch (e) {
@@ -569,6 +586,24 @@ const unit = await page.evaluate(() => {
     t("entropy: missing input values → unavailable (no guessing)", E.txLinkability(noVals).available === false && E.txLinkability(noVals).reason === "input-values-unknown");
   }
 
+  // — CoinJoin classifier (cited structural thresholds) —
+  {
+    const eq = (n, v) => Array.from({ length: n }, () => ({ value: v }));
+    // Whirlpool: exactly 5-in / 5-out, all equal
+    const wp = E.classifyCoinjoin(eq(5, 111), eq(5, 5000000));
+    t("coinjoin: Whirlpool 5×5 identified", wp && wp.type === "Whirlpool" && wp.denom === 5000000 && wp.participants === 5);
+    // Wasabi ZeroLink: ≥10 equal outputs + ≥2 distinct values + ins ≥ equal count
+    const wa = E.classifyCoinjoin(eq(12, 1), [...eq(11, 10000000), { value: 37 }, { value: 42 }]);
+    t("coinjoin: Wasabi equal-value round identified", wa && wa.type === "Wasabi" && wa.participants === 11);
+    // Generic equal-output CoinJoin (3 in, 5 out, 3 equal)
+    const gc = E.classifyCoinjoin(eq(3, 1), [...eq(3, 500000), { value: 7 }, { value: 9 }]);
+    t("coinjoin: generic equal-output CoinJoin identified", gc && gc.type === "CoinJoin" && gc.participants === 3);
+    // A plain 2-out payment is NOT a coinjoin
+    t("coinjoin: plain payment is not a CoinJoin", E.classifyCoinjoin([{ value: 1 }], [{ value: 60000 }, { value: 39000 }]) === null);
+    // Consistency with the boolean shape gate for a clear coinjoin
+    t("coinjoin: classifier agrees with isCoinJoinShape on a clear mix", !!E.classifyCoinjoin(eq(5, 1), eq(5, 100000)) && E.isCoinJoinShape(eq(5, 1), eq(5, 100000)) === true);
+  }
+
   // — wallet fingerprint: structural tells (version / locktime / RBF / BIP69 / mix) —
   {
     // Demo PSBT: v2, all-0xfffffffd sequences (RBF default), locktime 0 (no anti-snipe)
@@ -632,6 +667,39 @@ const unit = await page.evaluate(() => {
       && inv.routes[1].block === 197637 && inv.routes[1].tx === 395016 && inv.routes[1].out === 2314);
     t("bolt11: detector recognizes an invoice, rejects a normal address", E.detectBolt11(INV) === "bolt11" && E.detectBolt11("bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4") === null);
     t("bolt11: garbage / silent-payment address rejected", E.decodeBolt11("lnbc1garbage") === null && E.decodeBolt11("sp1qq") === null);
+  }
+
+  // — BOLT12 offer + LNURL + Lightning address decode/lint —
+  {
+    // BOLT12 spec test-vector offer: decodes to amount/description/issuer + node id
+    const OFFER = "lno1pqps7sjqpgtyzm3qv4uxzmtsd3jjqer9wd3hy6tsw35k7msjzfpy7nz5yqcnygrfdej82um5wf5k2uckyypwa3eyt44h6txtxquqh7lz5djge4afgfjn7k4rgrkuag0jsd5xvxg";
+    const off = E.decodeBolt12Offer(OFFER);
+    t("bolt12: offer decodes amount/description/issuer", off && off.amountMsat === 1000000 && off.description === "An example description" && off.issuer === "BOLT 12 industries");
+    t("bolt12: offer exposes node id (no blinded paths)", off && off.hasBlindedPaths === false && off.issuerId === "02eec7245d6b7d2ccb30380bfbe2a3648cd7a942653f5aa340edcea1f283686619");
+    t("bolt12: detector recognizes lno1, rejects a bolt11 invoice", E.detectBolt12(OFFER) === "bolt12" && E.detectBolt12("lnbc20m1pvjluez") === null);
+    // LNURL (LUD-01 canonical vector) → https URL + host
+    const LNURL = "LNURL1DP68GURN8GHJ7UM9WFMXJCM99E3K7MF0V9CXJ0M385EKVCENXC6R2C35XVUKXEFCV5MKVV34X5EKZD3EV56NYD3HXQURZEPEXEJXXEPNXSCRVWFNV9NXZCN9XQ6XYEFHVGCXXCMYXYMNSERXFQ5FNS";
+    const lu = E.decodeLnurl(LNURL);
+    t("lnurl: LUD-01 vector → exact URL + host", lu && lu.url === "https://service.com/api?q=3fc3645b439ce8e7f2553a69e5267081d96dcd340693afabe04be7b0ccd178df" && lu.host === "service.com");
+    // Lightning address (LUD-16) resolves to the .well-known endpoint
+    const la = E.resolveLnAddress("alice@wallet.example");
+    t("lnaddress: resolves to LUD-16 well-known endpoint", la && la.host === "wallet.example" && la.endpoint === "https://wallet.example/.well-known/lnurlp/alice");
+    t("lnaddress: rejects non-addresses", E.resolveLnAddress("not an address") === null && E.resolveLnAddress("bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4") === null);
+  }
+
+  // — Cashu ecash token decode (V3 base64-JSON / V4 CBOR) — validated against
+  //   the NUT-00 V4 example token (pure-JS CBOR decoder) —
+  {
+    const V4 = "cashuBo2F0gqJhaUgA_9SLj17PgGFwgaNhYQFhc3hAYWNjMTI0MzVlN2I4NDg0YzNjZjE4NTAxNDkyMThhZjkwZjcxNmE1MmJmNGE1ZWQzNDdlNDhlY2MxM2Y3NzM4OGFjWCECRFODGd5IXVW-07KaZCvuWHk3WrnnpiDhHki6SCQh88-iYWlIAK0mjE0fWCZhcIKjYWECYXN4QDEzMjNkM2Q0NzA3YTU4YWQyZTIzYWRhNGU5ZjFmNDlmNWE1YjRhYzdiNzA4ZWIwZDYxZjczOGY0ODMwN2U4ZWVhY1ghAjRWqhENhLSsdHrr2Cw7AFrKUL9Ffr1XN6RBT6w659lNo2FhAWFzeEA1NmJjYmNiYjdjYzY0MDZiM2ZhNWQ1N2QyMTc0ZjRlZmY4YjQ0MDJiMTc2OTI2ZDNhNTdkM2MzZGNiYjU5ZDU3YWNYIQJzEpxXGeWZN5qXSmJjY8MzxWyvwObQGr5G1YCCgHicY2FtdWh0dHA6Ly9sb2NhbGhvc3Q6MzMzOGF1Y3NhdA";
+    const c4 = E.decodeCashu(V4);
+    t("cashu: V4 (cashuB/CBOR) → mint, unit, total", c4 && c4.version === 4 && c4.mints[0] === "http://localhost:3338" && c4.unit === "sat" && c4.total === 4 && c4.count === 3);
+    // V3 (cashuA/base64-JSON): build a token and decode it (btoa — browser ctx)
+    const b64url = s => btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+    const json = JSON.stringify({ token: [{ mint: "https://mint.example", proofs: [{ amount: 2, id: "00ad", secret: "x", C: "02aa" }, { amount: 8, id: "00ad", secret: "y", C: "02bb" }] }], unit: "sat", memo: "hi" });
+    const c3 = E.decodeCashu("cashuA" + b64url(json));
+    t("cashu: V3 (cashuA/JSON) → mint, total, memo", c3 && c3.version === 3 && c3.mints[0] === "https://mint.example" && c3.total === 10 && c3.count === 2 && c3.memo === "hi");
+    t("cashu: detector recognizes a token, rejects a bolt11 invoice", E.detectCashu(V4) === "cashu" && E.detectCashu("lnbc20m1pvjluez") === null);
+    t("cashu: garbage rejected", E.decodeCashu("cashuBnotvalid!!") === null && E.decodeCashu("hello") === null);
   }
 
   // — xpub wallet scanner: BIP32 public derivation (validated end-to-end against
