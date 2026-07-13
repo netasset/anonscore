@@ -8457,7 +8457,15 @@ function Landing({
         borderRadius: 8,
         padding: "7px 10px",
         fontFamily: T.mono,
-        fontSize: 11
+        fontSize: 11,
+        display: "flex",
+        alignItems: "center",
+        gap: 10
+      }
+    }, React.createElement("div", {
+      style: {
+        minWidth: 0,
+        flex: 1
       }
     }, React.createElement("div", {
       style: {
@@ -8469,7 +8477,24 @@ function Landing({
         fontSize: 10,
         marginTop: 2
       }
-    }, "funding tx \u2192 block ", r.block.toLocaleString(), " \xB7 tx #", r.tx, " \xB7 output ", r.out))))) : React.createElement("div", {
+    }, "funding tx \u2192 block ", r.block.toLocaleString(), " \xB7 tx #", r.tx, " \xB7 output ", r.out)), isValidLightningPubkey(r.pubkey) && React.createElement("button", {
+      onClick: () => onAnalyze(r.pubkey, false, "ln_pubkey"),
+      "aria-label": "Audit peer node " + r.pubkey,
+      style: {
+        flexShrink: 0,
+        background: "transparent",
+        border: `1px solid ${T.ln}55`,
+        borderRadius: 7,
+        padding: "4px 10px",
+        color: T.ln,
+        fontFamily: T.sans,
+        fontSize: 11,
+        fontWeight: 600,
+        cursor: "pointer"
+      },
+      onMouseOver: e => e.currentTarget.style.background = T.ln + "14",
+      onMouseOut: e => e.currentTarget.style.background = "transparent"
+    }, "Audit \u2192"))))) : React.createElement("div", {
       style: {
         fontSize: 12.5,
         color: T.textMid,
@@ -8551,7 +8576,27 @@ function Landing({
         fontFamily: T.mono,
         fontSize: 11
       }
-    }, cut(p.issuerId)), ")") : "", " \u2014 no blinded paths. An observer can look the node up, map its public channels and probe balances. Still better than a BOLT11 invoice (reusable, no static payment hash), but a blinded-path offer would hide the identity. ", p.issuer ? "Issuer: " + p.issuer + "." : "")), (p.kind === "lnurl" || p.kind === "lnaddress") && React.createElement(React.Fragment, null, React.createElement("div", {
+    }, cut(p.issuerId)), ")") : "", " \u2014 no blinded paths. An observer can look the node up, map its public channels and probe balances. Still better than a BOLT11 invoice (reusable, no static payment hash), but a blinded-path offer would hide the identity. ", p.issuer ? "Issuer: " + p.issuer + "." : "", p.issuerId && isValidLightningPubkey(p.issuerId) && React.createElement("div", {
+      style: {
+        marginTop: 8
+      }
+    }, React.createElement("button", {
+      onClick: () => onAnalyze(p.issuerId, false, "ln_pubkey"),
+      "aria-label": "Audit issuer node " + p.issuerId,
+      style: {
+        background: "transparent",
+        border: `1px solid ${T.ln}55`,
+        borderRadius: 7,
+        padding: "4px 12px",
+        color: T.ln,
+        fontFamily: T.sans,
+        fontSize: 11.5,
+        fontWeight: 600,
+        cursor: "pointer"
+      },
+      onMouseOver: e => e.currentTarget.style.background = T.ln + "14",
+      onMouseOut: e => e.currentTarget.style.background = "transparent"
+    }, "Audit this node \u2192")))), (p.kind === "lnurl" || p.kind === "lnaddress") && React.createElement(React.Fragment, null, React.createElement("div", {
       style: {
         fontFamily: T.mono,
         fontSize: 12,
