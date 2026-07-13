@@ -2167,6 +2167,139 @@ function resolveLnAddress(str) {
     endpoint: `https://${m[2].toLowerCase()}/.well-known/lnurlp/${m[1]}`
   };
 }
+function _b64urlBytes(s) {
+  s = (s || "").replace(/-/g, "+").replace(/_/g, "/");
+  while (s.length % 4) s += "=";
+  let bin;
+  try {
+    bin = atob(s);
+  } catch {
+    return null;
+  }
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+function _cborDecode(b) {
+  let p = 0;
+  const rlen = ai => {
+    if (ai < 24) return ai;
+    if (ai === 24) return b[p++];
+    if (ai === 25) {
+      const v = b[p] << 8 | b[p + 1];
+      p += 2;
+      return v;
+    }
+    if (ai === 26) {
+      const v = (b[p] << 24 | b[p + 1] << 16 | b[p + 2] << 8 | b[p + 3]) >>> 0;
+      p += 4;
+      return v;
+    }
+    if (ai === 27) {
+      let v = 0;
+      for (let i = 0; i < 8; i++) v = v * 256 + b[p++];
+      return v;
+    }
+    throw new Error("cbor");
+  };
+  function item() {
+    const ib = b[p++],
+      major = ib >> 5,
+      ai = ib & 0x1f;
+    if (major === 0) return rlen(ai);
+    if (major === 1) return -1 - rlen(ai);
+    if (major === 2) {
+      const n = rlen(ai);
+      const s = b.slice(p, p + n);
+      p += n;
+      return s;
+    }
+    if (major === 3) {
+      const n = rlen(ai);
+      const s = new TextDecoder().decode(b.slice(p, p + n));
+      p += n;
+      return s;
+    }
+    if (major === 4) {
+      const n = rlen(ai);
+      const a = [];
+      for (let i = 0; i < n; i++) a.push(item());
+      return a;
+    }
+    if (major === 5) {
+      const n = rlen(ai);
+      const m = {};
+      for (let i = 0; i < n; i++) {
+        const k = item();
+        m[k] = item();
+      }
+      return m;
+    }
+    if (major === 7) {
+      if (ai === 20) return false;
+      if (ai === 21) return true;
+      if (ai === 22) return null;
+    }
+    throw new Error("cbor");
+  }
+  return item();
+}
+function decodeCashu(str) {
+  str = (str || "").trim();
+  const hex = a => Array.from(a).map(x => x.toString(16).padStart(2, "0")).join("");
+  if (/^cashuA/.test(str)) {
+    const bytes = _b64urlBytes(str.slice(6));
+    if (!bytes) return null;
+    let obj;
+    try {
+      obj = JSON.parse(new TextDecoder().decode(bytes));
+    } catch {
+      return null;
+    }
+    if (!obj || !Array.isArray(obj.token)) return null;
+    const mints = [],
+      proofs = [];
+    for (const t of obj.token) {
+      if (t.mint) mints.push(t.mint);
+      for (const pr of t.proofs || []) proofs.push(pr.amount || 0);
+    }
+    return {
+      version: 3,
+      mints: [...new Set(mints)],
+      unit: obj.unit || "sat",
+      memo: obj.memo || null,
+      count: proofs.length,
+      total: proofs.reduce((a, x) => a + x, 0)
+    };
+  }
+  if (/^cashuB/.test(str)) {
+    const bytes = _b64urlBytes(str.slice(6));
+    if (!bytes) return null;
+    let m;
+    try {
+      m = _cborDecode(bytes);
+    } catch {
+      return null;
+    }
+    if (!m || !Array.isArray(m.t)) return null;
+    const proofs = [];
+    for (const t of m.t) for (const pr of t.p || []) proofs.push(pr.a || 0);
+    return {
+      version: 4,
+      mints: m.m ? [m.m] : [],
+      unit: m.u || "sat",
+      memo: m.d || null,
+      count: proofs.length,
+      total: proofs.reduce((a, x) => a + x, 0)
+    };
+  }
+  return null;
+}
+function detectCashu(v) {
+  const s = (v || "").trim();
+  if (!/^cashu[AB][A-Za-z0-9_-]+=*$/.test(s)) return null;
+  return decodeCashu(s) ? "cashu" : null;
+}
 const _B58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
 function _base58encode(bytes) {
   let zeros = 0;
@@ -7425,6 +7558,15 @@ function Landing({
         });
         return;
       }
+      const cs = decodeCashu(v);
+      if (cs) {
+        setError("");
+        setLnPay({
+          kind: "cashu",
+          ...cs
+        });
+        return;
+      }
       setError(t("err.invalid"));
       return;
     }
@@ -8307,8 +8449,8 @@ function Landing({
     const p = lnPay,
       cut = s => !s ? "" : s.length > 22 ? s.slice(0, 11) + "…" + s.slice(-6) : s;
     const good = p.kind === "offer" ? p.hasBlindedPaths : false;
-    const accent = good ? T.green : T.ln;
-    const head = p.kind === "offer" ? "BOLT12 OFFER" : p.kind === "lnurl" ? "LNURL" : "LIGHTNING ADDRESS";
+    const accent = good ? T.green : p.kind === "cashu" ? T.btc : T.ln;
+    const head = p.kind === "offer" ? "BOLT12 OFFER" : p.kind === "lnurl" ? "LNURL" : p.kind === "lnaddress" ? "LIGHTNING ADDRESS" : "CASHU ECASH TOKEN";
     return React.createElement("div", {
       style: {
         marginTop: 12,
@@ -8400,7 +8542,52 @@ function Landing({
       style: {
         color: T.ln
       }
-    }, "metadata chokepoint"), ": it sees your IP and every payment request, and can log who pays you and when. Convenient, but the operator (and its host) can build a payment profile \u2014 not private the way an on-chain or blinded-path payment is.")), React.createElement("div", {
+    }, "metadata chokepoint"), ": it sees your IP and every payment request, and can log who pays you and when. Convenient, but the operator (and its host) can build a payment profile \u2014 not private the way an on-chain or blinded-path payment is.")), p.kind === "cashu" && React.createElement(React.Fragment, null, React.createElement("div", {
+      style: {
+        display: "flex",
+        flexWrap: "wrap",
+        gap: 10,
+        marginBottom: 8
+      }
+    }, React.createElement("span", {
+      style: {
+        fontFamily: T.serif,
+        fontSize: 19,
+        color: T.text
+      }
+    }, p.total.toLocaleString(), " ", p.unit), React.createElement("span", {
+      style: {
+        fontSize: 12,
+        color: T.textDim,
+        alignSelf: "center"
+      }
+    }, "\xB7 ", p.count, " proof", p.count !== 1 ? "s" : "", " \xB7 Cashu V", p.version)), React.createElement("div", {
+      style: {
+        fontFamily: T.mono,
+        fontSize: 11.5,
+        color: T.textMid,
+        wordBreak: "break-all",
+        marginBottom: 8
+      }
+    }, "mint: ", p.mints[0] || "—"), React.createElement("div", {
+      style: {
+        fontSize: 12.5,
+        color: T.textMid,
+        lineHeight: 1.6
+      }
+    }, "Chaumian ecash: the mint blind-signs tokens, so it ", React.createElement("strong", {
+      style: {
+        color: T.green
+      }
+    }, "can't link who withdrew a token to who redeemed it"), " \u2014 strong payment unlinkability. The trade-off: the mint is a ", React.createElement("strong", {
+      style: {
+        color: T.ln
+      }
+    }, "trusted custodian"), " that holds the funds and can vanish or censor, and this token is a ", React.createElement("strong", {
+      style: {
+        color: T.red
+      }
+    }, "cleartext bearer note"), " \u2014 anyone who sees this string (chat, email, screen) can redeem it first. Treat it like cash on the table.")), React.createElement("div", {
       style: {
         fontSize: 11.5,
         color: T.textDim,
@@ -18328,6 +18515,8 @@ window.__ANONSCORE_TEST__ = Object.freeze({
   detectBolt12,
   decodeLnurl,
   resolveLnAddress,
+  decodeCashu,
+  detectCashu,
   _sha512,
   _hmacSha512,
   _ripemd160,

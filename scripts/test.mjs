@@ -322,8 +322,16 @@ else {
     const offerCard = await spPage.evaluate(() => !![...document.querySelectorAll('*')].find(e => /BOLT12 OFFER/.test(e.textContent || "") && e.children.length < 4));
     if (!offerCard) fail("bolt12: offer lint card did not render");
     else pass("bolt12: offer shows the lint card (node-id exposure vs blinded paths, in-browser)");
+    // Cashu ecash token → ecash lint card
+    const CASHU = "cashuBo2F0gqJhaUgA_9SLj17PgGFwgaNhYQFhc3hAYWNjMTI0MzVlN2I4NDg0YzNjZjE4NTAxNDkyMThhZjkwZjcxNmE1MmJmNGE1ZWQzNDdlNDhlY2MxM2Y3NzM4OGFjWCECRFODGd5IXVW-07KaZCvuWHk3WrnnpiDhHki6SCQh88-iYWlIAK0mjE0fWCZhcIKjYWECYXN4QDEzMjNkM2Q0NzA3YTU4YWQyZTIzYWRhNGU5ZjFmNDlmNWE1YjRhYzdiNzA4ZWIwZDYxZjczOGY0ODMwN2U4ZWVhY1ghAjRWqhENhLSsdHrr2Cw7AFrKUL9Ffr1XN6RBT6w659lNo2FhAWFzeEA1NmJjYmNiYjdjYzY0MDZiM2ZhNWQ1N2QyMTc0ZjRlZmY4YjQ0MDJiMTc2OTI2ZDNhNTdkM2MzZGNiYjU5ZDU3YWNYIQJzEpxXGeWZN5qXSmJjY8MzxWyvwObQGr5G1YCCgHicY2FtdWh0dHA6Ly9sb2NhbGhvc3Q6MzMzOGF1Y3NhdA";
+    await spPage.locator('input[aria-label*="silent payment"]').fill(CASHU);
+    await spPage.getByRole("button", { name: /Analy[sz]e|Reveal|Audit/i }).first().click();
+    await spPage.waitForTimeout(300);
+    const cashuCard = await spPage.evaluate(() => !![...document.querySelectorAll('*')].find(e => /CASHU ECASH TOKEN/.test(e.textContent || "") && e.children.length < 4));
+    if (!cashuCard) fail("cashu: ecash token lint card did not render");
+    else pass("cashu: token shows the ecash lint card (custodial + bearer-note, in-browser)");
   } catch (e) {
-    fail("silent payments / lightning: " + e.message.slice(0, 120));
+    fail("silent payments / lightning / cashu: " + e.message.slice(0, 120));
   } finally {
     await spPage.close();
   }
@@ -658,6 +666,21 @@ const unit = await page.evaluate(() => {
     const la = E.resolveLnAddress("alice@wallet.example");
     t("lnaddress: resolves to LUD-16 well-known endpoint", la && la.host === "wallet.example" && la.endpoint === "https://wallet.example/.well-known/lnurlp/alice");
     t("lnaddress: rejects non-addresses", E.resolveLnAddress("not an address") === null && E.resolveLnAddress("bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4") === null);
+  }
+
+  // — Cashu ecash token decode (V3 base64-JSON / V4 CBOR) — validated against
+  //   the NUT-00 V4 example token (pure-JS CBOR decoder) —
+  {
+    const V4 = "cashuBo2F0gqJhaUgA_9SLj17PgGFwgaNhYQFhc3hAYWNjMTI0MzVlN2I4NDg0YzNjZjE4NTAxNDkyMThhZjkwZjcxNmE1MmJmNGE1ZWQzNDdlNDhlY2MxM2Y3NzM4OGFjWCECRFODGd5IXVW-07KaZCvuWHk3WrnnpiDhHki6SCQh88-iYWlIAK0mjE0fWCZhcIKjYWECYXN4QDEzMjNkM2Q0NzA3YTU4YWQyZTIzYWRhNGU5ZjFmNDlmNWE1YjRhYzdiNzA4ZWIwZDYxZjczOGY0ODMwN2U4ZWVhY1ghAjRWqhENhLSsdHrr2Cw7AFrKUL9Ffr1XN6RBT6w659lNo2FhAWFzeEA1NmJjYmNiYjdjYzY0MDZiM2ZhNWQ1N2QyMTc0ZjRlZmY4YjQ0MDJiMTc2OTI2ZDNhNTdkM2MzZGNiYjU5ZDU3YWNYIQJzEpxXGeWZN5qXSmJjY8MzxWyvwObQGr5G1YCCgHicY2FtdWh0dHA6Ly9sb2NhbGhvc3Q6MzMzOGF1Y3NhdA";
+    const c4 = E.decodeCashu(V4);
+    t("cashu: V4 (cashuB/CBOR) → mint, unit, total", c4 && c4.version === 4 && c4.mints[0] === "http://localhost:3338" && c4.unit === "sat" && c4.total === 4 && c4.count === 3);
+    // V3 (cashuA/base64-JSON): build a token and decode it (btoa — browser ctx)
+    const b64url = s => btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+    const json = JSON.stringify({ token: [{ mint: "https://mint.example", proofs: [{ amount: 2, id: "00ad", secret: "x", C: "02aa" }, { amount: 8, id: "00ad", secret: "y", C: "02bb" }] }], unit: "sat", memo: "hi" });
+    const c3 = E.decodeCashu("cashuA" + b64url(json));
+    t("cashu: V3 (cashuA/JSON) → mint, total, memo", c3 && c3.version === 3 && c3.mints[0] === "https://mint.example" && c3.total === 10 && c3.count === 2 && c3.memo === "hi");
+    t("cashu: detector recognizes a token, rejects a bolt11 invoice", E.detectCashu(V4) === "cashu" && E.detectCashu("lnbc20m1pvjluez") === null);
+    t("cashu: garbage rejected", E.decodeCashu("cashuBnotvalid!!") === null && E.decodeCashu("hello") === null);
   }
 
   // — xpub wallet scanner: BIP32 public derivation (validated end-to-end against
