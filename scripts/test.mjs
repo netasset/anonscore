@@ -586,6 +586,24 @@ const unit = await page.evaluate(() => {
     t("entropy: missing input values → unavailable (no guessing)", E.txLinkability(noVals).available === false && E.txLinkability(noVals).reason === "input-values-unknown");
   }
 
+  // — CoinJoin classifier (cited structural thresholds) —
+  {
+    const eq = (n, v) => Array.from({ length: n }, () => ({ value: v }));
+    // Whirlpool: exactly 5-in / 5-out, all equal
+    const wp = E.classifyCoinjoin(eq(5, 111), eq(5, 5000000));
+    t("coinjoin: Whirlpool 5×5 identified", wp && wp.type === "Whirlpool" && wp.denom === 5000000 && wp.participants === 5);
+    // Wasabi ZeroLink: ≥10 equal outputs + ≥2 distinct values + ins ≥ equal count
+    const wa = E.classifyCoinjoin(eq(12, 1), [...eq(11, 10000000), { value: 37 }, { value: 42 }]);
+    t("coinjoin: Wasabi equal-value round identified", wa && wa.type === "Wasabi" && wa.participants === 11);
+    // Generic equal-output CoinJoin (3 in, 5 out, 3 equal)
+    const gc = E.classifyCoinjoin(eq(3, 1), [...eq(3, 500000), { value: 7 }, { value: 9 }]);
+    t("coinjoin: generic equal-output CoinJoin identified", gc && gc.type === "CoinJoin" && gc.participants === 3);
+    // A plain 2-out payment is NOT a coinjoin
+    t("coinjoin: plain payment is not a CoinJoin", E.classifyCoinjoin([{ value: 1 }], [{ value: 60000 }, { value: 39000 }]) === null);
+    // Consistency with the boolean shape gate for a clear coinjoin
+    t("coinjoin: classifier agrees with isCoinJoinShape on a clear mix", !!E.classifyCoinjoin(eq(5, 1), eq(5, 100000)) && E.isCoinJoinShape(eq(5, 1), eq(5, 100000)) === true);
+  }
+
   // — wallet fingerprint: structural tells (version / locktime / RBF / BIP69 / mix) —
   {
     // Demo PSBT: v2, all-0xfffffffd sequences (RBF default), locktime 0 (no anti-snipe)

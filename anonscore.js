@@ -1745,6 +1745,43 @@ function isCoinJoinShape(vin, vout) {
   });
   return Math.max(0, ...Object.values(dn)) >= 3;
 }
+function classifyCoinjoin(vin, vout) {
+  const ins = (vin || []).length,
+    outs = vout || [];
+  if (ins < 2 || outs.length < 3) return null;
+  const dn = {};
+  outs.forEach(o => {
+    if (o && o.value != null) dn[o.value] = (dn[o.value] || 0) + 1;
+  });
+  const vals = Object.keys(dn);
+  if (!vals.length) return null;
+  let denom = 0,
+    equal = 0;
+  for (const v of vals) {
+    if (dn[v] > equal || dn[v] === equal && +v > denom) {
+      equal = dn[v];
+      denom = +v;
+    }
+  }
+  const distinct = vals.length;
+  if (equal < 3) return null;
+  if (ins === 5 && outs.length === 5 && equal === 5) return {
+    type: "Whirlpool",
+    denom,
+    participants: 5
+  };
+  if (equal >= 10 && distinct >= 2 && ins >= equal) return {
+    type: "Wasabi",
+    denom,
+    participants: equal
+  };
+  if (ins >= 3 && outs.length >= 5) return {
+    type: "CoinJoin",
+    denom,
+    participants: equal
+  };
+  return null;
+}
 function _hexToBytes(h) {
   h = (h || "").trim().replace(/^0x/i, "");
   if (h.length % 2) throw new Error("odd-length hex");
@@ -10650,6 +10687,7 @@ function TransactionInspector({
       t: "Strongly ambiguous"
     } : null;
     const fp = fingerprintTx(tx);
+    const cj = classifyCoinjoin(tx.vin, tx.vout);
     const lpCell = v => Math.abs(v - 1) < 1e-9 ? {
       bg: T.red,
       fg: T.bg,
@@ -10856,7 +10894,45 @@ function TransactionInspector({
         color: T.textMid,
         lineHeight: 1.6
       }
-    }, link.reason === "too-many" ? "This transaction has " + link.n + " inputs and " + link.m + " outputs — beyond the 12×12 limit for exact link analysis (the same bound the reference Boltzmann tool uses). Very large transactions have astronomically many interpretations, which on its own means strong ambiguity." : "This transaction has too many valid interpretations to count exactly in the browser — which itself signals very high entropy and strong input→output ambiguity (typical of a CoinJoin).")), fp.available && fp.signals.length > 0 && React.createElement("div", {
+    }, link.reason === "too-many" ? "This transaction has " + link.n + " inputs and " + link.m + " outputs — beyond the 12×12 limit for exact link analysis (the same bound the reference Boltzmann tool uses). Very large transactions have astronomically many interpretations, which on its own means strong ambiguity." : "This transaction has too many valid interpretations to count exactly in the browser — which itself signals very high entropy and strong input→output ambiguity (typical of a CoinJoin).")), cj && React.createElement("div", {
+      style: panel({
+        borderColor: T.green + "3a"
+      })
+    }, React.createElement("div", {
+      style: {
+        ...label,
+        color: T.green
+      }
+    }, cj.type === "Whirlpool" ? "WHIRLPOOL COINJOIN" : cj.type === "Wasabi" ? "WASABI COINJOIN" : "COINJOIN DETECTED"), React.createElement("div", {
+      style: {
+        fontSize: 13,
+        color: T.textMid,
+        lineHeight: 1.6
+      }
+    }, cj.participants, " equal outputs of ", React.createElement("strong", {
+      style: {
+        color: T.text
+      }
+    }, sats(cj.denom)), cj.type === "Whirlpool" ? " in a 5×5 pool" : cj.type === "Wasabi" ? " — an equal-value (ZeroLink) round, ~99% detectable by its structure alone" : "", ". Good: equal outputs break the deterministic input\u2192output trail for everyone in the round."), React.createElement("div", {
+      style: {
+        background: T.amber + "10",
+        border: `1px solid ${T.amber}33`,
+        borderRadius: 10,
+        padding: "9px 12px",
+        fontSize: 12.5,
+        color: T.textMid,
+        lineHeight: 1.6,
+        marginTop: 10
+      }
+    }, React.createElement("strong", {
+      style: {
+        color: T.amber
+      }
+    }, "Don't undo it by consolidating."), " If you later spend several of these mixed outputs together, the common-input heuristic re-links them into one cluster \u2014 measured to erode a mix's anonymity set by ", React.createElement("strong", {
+      style: {
+        color: T.text
+      }
+    }, "10\u201350%"), ", worst in the first day. Spend mixed coins one output at a time, and let them rest.")), fp.available && fp.signals.length > 0 && React.createElement("div", {
       style: panel({
         borderColor: fp.distinctive > 0 ? T.amber + "33" : T.border
       })
@@ -18549,6 +18625,8 @@ window.__ANONSCORE_TEST__ = Object.freeze({
   DEMO_PSBT,
   txInterpretations,
   txLinkability,
+  isCoinJoinShape,
+  classifyCoinjoin,
   fingerprintTx,
   _derSigInfo,
   _bech32Decode,

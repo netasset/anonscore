@@ -1077,6 +1077,29 @@ function isCoinJoinShape(vin, vout) {
   outs.forEach(o => { if (o && o.value != null) dn[o.value] = (dn[o.value] || 0) + 1; });
   return Math.max(0, ...Object.values(dn)) >= 3;
 }
+// Identify the specific CoinJoin protocol from structure alone (cited thresholds).
+// Whirlpool: exactly 5-in/5-out, all outputs equal (Samourai fixed-pool design).
+// Wasabi/ZeroLink equal-value: ≥10 equal outputs, ≥2 distinct output values, and
+//   ≥ as many inputs as the equal-output count — ~99% accurate structurally
+//   (Tironsakkul/Maarek, ACM EICC 2022). NOT WabiSabi (variable-amount) — we
+//   don't claim to detect modern Wasabi 2.0 rounds. Else a generic equal-output
+//   CoinJoin. Returns null when the shape doesn't qualify.
+function classifyCoinjoin(vin, vout) {
+  const ins = (vin || []).length, outs = vout || [];
+  if (ins < 2 || outs.length < 3) return null;
+  const dn = {};
+  outs.forEach(o => { if (o && o.value != null) dn[o.value] = (dn[o.value] || 0) + 1; });
+  const vals = Object.keys(dn);
+  if (!vals.length) return null;
+  let denom = 0, equal = 0;
+  for (const v of vals) { if (dn[v] > equal || (dn[v] === equal && +v > denom)) { equal = dn[v]; denom = +v; } }
+  const distinct = vals.length;
+  if (equal < 3) return null;
+  if (ins === 5 && outs.length === 5 && equal === 5) return { type: "Whirlpool", denom, participants: 5 };
+  if (equal >= 10 && distinct >= 2 && ins >= equal) return { type: "Wasabi", denom, participants: equal };
+  if (ins >= 3 && outs.length >= 5) return { type: "CoinJoin", denom, participants: equal };
+  return null;
+}
 
 /* ─────────────────────────────────────────────
    TRANSACTION INSPECTOR — parse a PSBT / raw tx entirely in the browser and
@@ -5035,6 +5058,7 @@ function TransactionInspector({ onBack, isMobile, onScan }) {
     const link = txLinkability(tx);
     const ent = link.available ? (link.N === 1 ? { c: T.red, t: "Fully deterministic" } : link.entropy < 1 ? { c: T.red, t: "Very low ambiguity" } : link.entropy < 1.585 ? { c: T.amber, t: "Low ambiguity" } : link.entropy < 3 ? { c: T.cyan, t: "Ambiguous" } : { c: T.green, t: "Strongly ambiguous" }) : null;
     const fp = fingerprintTx(tx);
+    const cj = classifyCoinjoin(tx.vin, tx.vout);
     const lpCell = v => Math.abs(v - 1) < 1e-9 ? { bg: T.red, fg: T.bg, txt: "1" } : v === 0 ? { bg: T.surface, fg: T.textDim, txt: "0" } : { bg: T.red + Math.round(18 + v * 60).toString(16).padStart(2, "0"), fg: T.text, txt: v.toFixed(2).replace(/^0/, "") };
     const inAddrs = new Set((tx.vin || []).map(v => v.prevout && v.prevout.scriptpubkey_address).filter(Boolean));
     const outColor = (o, i) => _txDust(o) ? T.red : (o.scriptpubkey_address && inAddrs.has(o.scriptpubkey_address)) ? T.red
@@ -5106,6 +5130,19 @@ function TransactionInspector({ onBack, isMobile, onScan }) {
               {link.reason === "too-many"
                 ? "This transaction has " + link.n + " inputs and " + link.m + " outputs — beyond the 12×12 limit for exact link analysis (the same bound the reference Boltzmann tool uses). Very large transactions have astronomically many interpretations, which on its own means strong ambiguity."
                 : "This transaction has too many valid interpretations to count exactly in the browser — which itself signals very high entropy and strong input→output ambiguity (typical of a CoinJoin)."}
+            </div>
+          </div>
+        )}
+
+        {/* coinjoin classification + post-mix consolidation warning */}
+        {cj && (
+          <div style={panel({ borderColor: T.green + "3a" })}>
+            <div style={{ ...label, color: T.green }}>{cj.type === "Whirlpool" ? "WHIRLPOOL COINJOIN" : cj.type === "Wasabi" ? "WASABI COINJOIN" : "COINJOIN DETECTED"}</div>
+            <div style={{ fontSize: 13, color: T.textMid, lineHeight: 1.6 }}>
+              {cj.participants} equal outputs of <strong style={{ color: T.text }}>{sats(cj.denom)}</strong>{cj.type === "Whirlpool" ? " in a 5×5 pool" : cj.type === "Wasabi" ? " — an equal-value (ZeroLink) round, ~99% detectable by its structure alone" : ""}. Good: equal outputs break the deterministic input→output trail for everyone in the round.
+            </div>
+            <div style={{ background: T.amber + "10", border: `1px solid ${T.amber}33`, borderRadius: 10, padding: "9px 12px", fontSize: 12.5, color: T.textMid, lineHeight: 1.6, marginTop: 10 }}>
+              <strong style={{ color: T.amber }}>Don't undo it by consolidating.</strong> If you later spend several of these mixed outputs together, the common-input heuristic re-links them into one cluster — measured to erode a mix's anonymity set by <strong style={{ color: T.text }}>10–50%</strong>, worst in the first day. Spend mixed coins one output at a time, and let them rest.
             </div>
           </div>
         )}
@@ -8086,7 +8123,7 @@ window.__ANONSCORE_TEST__ = Object.freeze({
   parsePsbt, parseRawTx, classifyScript, parseTransactionInput, detectTxInput,
   analyzeTx, guessChange, clusterUnification, feeRate, DEMO_PSBT,
   // transaction entropy / linkability (Boltzmann · validated vs LaurentMT vectors)
-  txInterpretations, txLinkability,
+  txInterpretations, txLinkability, isCoinJoinShape, classifyCoinjoin,
   // wallet fingerprint (structural tells: version/locktime/RBF/BIP69/script-mix/low-r)
   fingerprintTx, _derSigInfo,
   // Silent Payments (BIP352) decode/validate — validated vs the spec test vector
