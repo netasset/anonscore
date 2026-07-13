@@ -5200,6 +5200,25 @@ function TransactionInspector({ onBack, isMobile, onScan }) {
           </div>
         </div>
 
+        {/* broadcast-layer (network) exposure — the leak that isn't in the bytes */}
+        <div style={panel({ borderColor: T.amber + "2e" })}>
+          <div style={{ ...label, color: T.amber }}>WHEN YOU BROADCAST IT</div>
+          <div style={{ fontSize: 13, color: T.textMid, lineHeight: 1.6 }}>
+            Everything above is in the transaction itself. One leak isn't: the moment you broadcast, the first nodes that see it can tie the transaction to <strong style={{ color: T.text }}>your IP address</strong> — Bitcoin's default relay links a tx to its origin with near-certainty, and surveillance firms run hundreds of listening nodes to harvest exactly that. An IP↔tx link can undo all the on-chain care above.
+          </div>
+          <ul style={{ listStyle: "none", display: "flex", flexDirection: "column", gap: 7, padding: 0, margin: "10px 0 0" }}>
+            {[
+              "Broadcast through your OWN full node — it has no wallet to correlate the tx with.",
+              "Or broadcast over Tor (a Tor-routed node, or paste the signed hex into a broadcaster in Tor Browser) so no peer sees your real IP.",
+              "Don't rely on wallet \"private broadcast\" toggles blindly — even Bitcoin Core's -privatebroadcast leaked the sender's IP in 2026 when the encrypted connection was forced to downgrade.",
+            ].map((tline, i) => (
+              <li key={i} style={{ display: "flex", gap: 8, alignItems: "flex-start", fontSize: 12.5, color: T.textMid, lineHeight: 1.55 }}>
+                <span style={{ color: T.amber, flexShrink: 0, marginTop: 1, fontFamily: T.mono }}>→</span>{tline}
+              </li>
+            ))}
+          </ul>
+        </div>
+
         <div style={{ fontSize: 11.5, color: T.textDim, lineHeight: 1.6, textAlign: "center" }}>
           Heuristics, not proof — PayJoin and batching can change these readings. This transaction was analyzed entirely in your browser; nothing was sent anywhere.
         </div>

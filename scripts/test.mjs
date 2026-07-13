@@ -377,10 +377,11 @@ else {
       entropy: !![...document.querySelectorAll('*')].find(e => e.textContent === 'INTERPRETATION ENTROPY'),
       provable: !![...document.querySelectorAll('*')].find(e => (e.textContent || '').includes('provably from these inputs')),
       fingerprint: !![...document.querySelectorAll('*')].find(e => e.textContent === 'WALLET FINGERPRINT'),
+      broadcast: !![...document.querySelectorAll('*')].find(e => e.textContent === 'WHEN YOU BROADCAST IT'),
     }));
     const thirdParty = [...new Set(insReqs)].filter(o => !o.includes("127.0.0.1"));
     if (!hasInput || !hasH1) fail("inspector: input textarea or sr-only h1 missing");
-    else if (!report.verdict || !report.cluster || !report.io || !report.entropy || !report.provable || !report.fingerprint) fail(`inspector: report incomplete after Load example (${JSON.stringify(report)})`);
+    else if (!report.verdict || !report.cluster || !report.io || !report.entropy || !report.provable || !report.fingerprint || !report.broadcast) fail(`inspector: report incomplete after Load example (${JSON.stringify(report)})`);
     else if (thirdParty.length) fail(`inspector: made third-party requests (must be fully offline): ${thirdParty.join(", ")}`);
     else pass("inspector renders at /?page=inspector; example PSBT parsed + full report (incl. entropy), 100% offline");
   } catch (e) {
