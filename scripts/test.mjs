@@ -312,16 +312,20 @@ else {
     await spPage.getByRole("button", { name: /Analy[sz]e|Reveal|Audit/i }).first().click();
     await spPage.waitForTimeout(300);
     const lnCard = await spPage.evaluate(() => !![...document.querySelectorAll('*')].find(e => /LIGHTNING INVOICE · BOLT11/.test(e.textContent || "") && e.children.length < 4));
+    const peerJump = await spPage.evaluate(() => [...document.querySelectorAll('button')].some(b => /^Audit →$/.test((b.textContent || "").trim()) && b.getAttribute('aria-label')?.includes('peer node')));
     if (!lnCard) fail("bolt11: Lightning invoice lint card did not render");
-    else pass("bolt11: invoice shows the Lightning lint card (funding-UTXO leak surfaced, in-browser)");
+    else if (!peerJump) fail("bolt11: routing-hint peer 'Audit →' jump did not render");
+    else pass("bolt11: invoice shows the lint card + routing-hint peer Audit jump (in-browser)");
     // BOLT12 offer → offer lint card
     const OFFER = "lno1pqps7sjqpgtyzm3qv4uxzmtsd3jjqer9wd3hy6tsw35k7msjzfpy7nz5yqcnygrfdej82um5wf5k2uckyypwa3eyt44h6txtxquqh7lz5djge4afgfjn7k4rgrkuag0jsd5xvxg";
     await spPage.locator('input[aria-label*="silent payment"]').fill(OFFER);
     await spPage.getByRole("button", { name: /Analy[sz]e|Reveal|Audit/i }).first().click();
     await spPage.waitForTimeout(300);
     const offerCard = await spPage.evaluate(() => !![...document.querySelectorAll('*')].find(e => /BOLT12 OFFER/.test(e.textContent || "") && e.children.length < 4));
+    const offerJump = await spPage.evaluate(() => [...document.querySelectorAll('button')].some(b => /Audit this node →/.test(b.textContent || "")));
     if (!offerCard) fail("bolt12: offer lint card did not render");
-    else pass("bolt12: offer shows the lint card (node-id exposure vs blinded paths, in-browser)");
+    else if (!offerJump) fail("bolt12: 'Audit this node →' jump to the issuer node did not render");
+    else pass("bolt12: offer shows the lint card + issuer-node Audit jump (in-browser)");
     // Cashu ecash token → ecash lint card
     const CASHU = "cashuBo2F0gqJhaUgA_9SLj17PgGFwgaNhYQFhc3hAYWNjMTI0MzVlN2I4NDg0YzNjZjE4NTAxNDkyMThhZjkwZjcxNmE1MmJmNGE1ZWQzNDdlNDhlY2MxM2Y3NzM4OGFjWCECRFODGd5IXVW-07KaZCvuWHk3WrnnpiDhHki6SCQh88-iYWlIAK0mjE0fWCZhcIKjYWECYXN4QDEzMjNkM2Q0NzA3YTU4YWQyZTIzYWRhNGU5ZjFmNDlmNWE1YjRhYzdiNzA4ZWIwZDYxZjczOGY0ODMwN2U4ZWVhY1ghAjRWqhENhLSsdHrr2Cw7AFrKUL9Ffr1XN6RBT6w659lNo2FhAWFzeEA1NmJjYmNiYjdjYzY0MDZiM2ZhNWQ1N2QyMTc0ZjRlZmY4YjQ0MDJiMTc2OTI2ZDNhNTdkM2MzZGNiYjU5ZDU3YWNYIQJzEpxXGeWZN5qXSmJjY8MzxWyvwObQGr5G1YCCgHicY2FtdWh0dHA6Ly9sb2NhbGhvc3Q6MzMzOGF1Y3NhdA";
     await spPage.locator('input[aria-label*="silent payment"]').fill(CASHU);
@@ -378,10 +382,14 @@ else {
       provable: !![...document.querySelectorAll('*')].find(e => (e.textContent || '').includes('provably from these inputs')),
       fingerprint: !![...document.querySelectorAll('*')].find(e => e.textContent === 'WALLET FINGERPRINT'),
       broadcast: !![...document.querySelectorAll('*')].find(e => e.textContent === 'WHEN YOU BROADCAST IT'),
+      flowEdges: document.querySelectorAll('svg path').length,
+      auditJump: [...document.querySelectorAll('button')].some(b => /Audit →/.test(b.textContent || '')),
     }));
     const thirdParty = [...new Set(insReqs)].filter(o => !o.includes("127.0.0.1"));
     if (!hasInput || !hasH1) fail("inspector: input textarea or sr-only h1 missing");
     else if (!report.verdict || !report.cluster || !report.io || !report.entropy || !report.provable || !report.fingerprint || !report.broadcast) fail(`inspector: report incomplete after Load example (${JSON.stringify(report)})`);
+    else if (report.flowEdges < 1) fail(`inspector: FlowGraph bezier connectors did not render (svg paths=${report.flowEdges})`);
+    else if (!report.auditJump) fail("inspector: output 'Audit →' jump did not render");
     else if (thirdParty.length) fail(`inspector: made third-party requests (must be fully offline): ${thirdParty.join(", ")}`);
     else pass("inspector renders at /?page=inspector; example PSBT parsed + full report (incl. entropy), 100% offline");
   } catch (e) {
