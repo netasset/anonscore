@@ -314,8 +314,16 @@ else {
     const lnCard = await spPage.evaluate(() => !![...document.querySelectorAll('*')].find(e => /LIGHTNING INVOICE · BOLT11/.test(e.textContent || "") && e.children.length < 4));
     if (!lnCard) fail("bolt11: Lightning invoice lint card did not render");
     else pass("bolt11: invoice shows the Lightning lint card (funding-UTXO leak surfaced, in-browser)");
+    // BOLT12 offer → offer lint card
+    const OFFER = "lno1pqps7sjqpgtyzm3qv4uxzmtsd3jjqer9wd3hy6tsw35k7msjzfpy7nz5yqcnygrfdej82um5wf5k2uckyypwa3eyt44h6txtxquqh7lz5djge4afgfjn7k4rgrkuag0jsd5xvxg";
+    await spPage.locator('input[aria-label*="silent payment"]').fill(OFFER);
+    await spPage.getByRole("button", { name: /Analy[sz]e|Reveal|Audit/i }).first().click();
+    await spPage.waitForTimeout(300);
+    const offerCard = await spPage.evaluate(() => !![...document.querySelectorAll('*')].find(e => /BOLT12 OFFER/.test(e.textContent || "") && e.children.length < 4));
+    if (!offerCard) fail("bolt12: offer lint card did not render");
+    else pass("bolt12: offer shows the lint card (node-id exposure vs blinded paths, in-browser)");
   } catch (e) {
-    fail("silent payments / bolt11: " + e.message.slice(0, 120));
+    fail("silent payments / lightning: " + e.message.slice(0, 120));
   } finally {
     await spPage.close();
   }
@@ -632,6 +640,24 @@ const unit = await page.evaluate(() => {
       && inv.routes[1].block === 197637 && inv.routes[1].tx === 395016 && inv.routes[1].out === 2314);
     t("bolt11: detector recognizes an invoice, rejects a normal address", E.detectBolt11(INV) === "bolt11" && E.detectBolt11("bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4") === null);
     t("bolt11: garbage / silent-payment address rejected", E.decodeBolt11("lnbc1garbage") === null && E.decodeBolt11("sp1qq") === null);
+  }
+
+  // — BOLT12 offer + LNURL + Lightning address decode/lint —
+  {
+    // BOLT12 spec test-vector offer: decodes to amount/description/issuer + node id
+    const OFFER = "lno1pqps7sjqpgtyzm3qv4uxzmtsd3jjqer9wd3hy6tsw35k7msjzfpy7nz5yqcnygrfdej82um5wf5k2uckyypwa3eyt44h6txtxquqh7lz5djge4afgfjn7k4rgrkuag0jsd5xvxg";
+    const off = E.decodeBolt12Offer(OFFER);
+    t("bolt12: offer decodes amount/description/issuer", off && off.amountMsat === 1000000 && off.description === "An example description" && off.issuer === "BOLT 12 industries");
+    t("bolt12: offer exposes node id (no blinded paths)", off && off.hasBlindedPaths === false && off.issuerId === "02eec7245d6b7d2ccb30380bfbe2a3648cd7a942653f5aa340edcea1f283686619");
+    t("bolt12: detector recognizes lno1, rejects a bolt11 invoice", E.detectBolt12(OFFER) === "bolt12" && E.detectBolt12("lnbc20m1pvjluez") === null);
+    // LNURL (LUD-01 canonical vector) → https URL + host
+    const LNURL = "LNURL1DP68GURN8GHJ7UM9WFMXJCM99E3K7MF0V9CXJ0M385EKVCENXC6R2C35XVUKXEFCV5MKVV34X5EKZD3EV56NYD3HXQURZEPEXEJXXEPNXSCRVWFNV9NXZCN9XQ6XYEFHVGCXXCMYXYMNSERXFQ5FNS";
+    const lu = E.decodeLnurl(LNURL);
+    t("lnurl: LUD-01 vector → exact URL + host", lu && lu.url === "https://service.com/api?q=3fc3645b439ce8e7f2553a69e5267081d96dcd340693afabe04be7b0ccd178df" && lu.host === "service.com");
+    // Lightning address (LUD-16) resolves to the .well-known endpoint
+    const la = E.resolveLnAddress("alice@wallet.example");
+    t("lnaddress: resolves to LUD-16 well-known endpoint", la && la.host === "wallet.example" && la.endpoint === "https://wallet.example/.well-known/lnurlp/alice");
+    t("lnaddress: rejects non-addresses", E.resolveLnAddress("not an address") === null && E.resolveLnAddress("bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4") === null);
   }
 
   // — xpub wallet scanner: BIP32 public derivation (validated end-to-end against

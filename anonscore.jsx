@@ -1247,6 +1247,72 @@ function decodeBolt11(str) {
 }
 function detectBolt11(v) { const s = (v || "").trim().toLowerCase(); if (!/^ln(bc|tb|bcrt|bcs|sb)[0-9]*[munp]?1[a-z0-9]+$/.test(s)) return null; return decodeBolt11(s) ? "bolt11" : null; }
 
+/* BOLT12 OFFER decode + privacy lint (pure JS, no network). Offers are the
+   privacy upgrade to BOLT11: reusable without a static invoice/payment-hash to
+   correlate, and when they carry BLINDED PATHS (offer_paths, TLV 16) the payee's
+   node identity is hidden behind intermediaries. The lint: blinded paths = good
+   (identity hidden); a bare offer_issuer_id (TLV 22) with no paths exposes the
+   node pubkey. bech32 WITHOUT a checksum, hrp "lno", '+'/whitespace stripped;
+   a TLV stream of BigSize type·BigSize length·value. Validated vs a BOLT12
+   spec test-vector offer. */
+function _bech32NoChecksum(str) {
+  str = (str || "").toLowerCase().replace(/[+\s]/g, "");
+  const pos = str.lastIndexOf("1");
+  if (pos < 1) return null;
+  const hrp = str.slice(0, pos), vals = [];
+  for (const c of str.slice(pos + 1)) { const v = _BECHKEY[c]; if (v === undefined) return null; vals.push(v); }
+  return { hrp, bytes: _g5Bytes(vals) };
+}
+function _bigSize(b, pos) {
+  const f = b[pos];
+  if (f === undefined) return null;
+  if (f < 0xfd) return [f, pos + 1];
+  if (f === 0xfd) return [(b[pos + 1] << 8) | b[pos + 2], pos + 3];
+  if (f === 0xfe) return [((b[pos + 1] << 24) | (b[pos + 2] << 16) | (b[pos + 3] << 8) | b[pos + 4]) >>> 0, pos + 5];
+  let v = 0; for (let i = 1; i <= 8; i++) v = v * 256 + b[pos + i]; return [v, pos + 9];
+}
+function decodeBolt12Offer(str) {
+  const d = _bech32NoChecksum((str || "").trim());
+  if (!d || d.hrp !== "lno") return null;
+  const b = d.bytes; const tlv = {}; let pos = 0;
+  while (pos < b.length) {
+    let r = _bigSize(b, pos); if (!r) return null; const type = r[0]; pos = r[1];
+    r = _bigSize(b, pos); if (!r) return null; const len = r[0]; pos = r[1];
+    if (pos + len > b.length) return null;
+    tlv[type] = b.slice(pos, pos + len); pos += len;
+  }
+  if (!Object.keys(tlv).length) return null;
+  const hex = a => a.map(x => x.toString(16).padStart(2, "0")).join("");
+  const utf8 = a => { try { return new TextDecoder().decode(new Uint8Array(a)); } catch { return null; } };
+  const beInt = a => { let n = 0; for (const x of a) n = n * 256 + x; return n; };
+  const out = { hasBlindedPaths: 16 in tlv, tlvTypes: Object.keys(tlv).map(Number).sort((a, b) => a - b) };
+  if (8 in tlv) out.amountMsat = beInt(tlv[8]);
+  if (6 in tlv) out.currency = utf8(tlv[6]);
+  if (10 in tlv) out.description = utf8(tlv[10]);
+  if (18 in tlv) out.issuer = utf8(tlv[18]);
+  if (22 in tlv) out.issuerId = hex(tlv[22]);
+  return out;
+}
+function detectBolt12(v) { const s = (v || "").trim().toLowerCase().replace(/[+\s]/g, ""); if (!/^lno1[a-z0-9]+$/.test(s)) return null; return decodeBolt12Offer(s) ? "bolt12" : null; }
+
+/* LNURL (LUD-01) decode + Lightning address (LUD-16). Both funnel payments
+   through an HTTPS endpoint the operator controls — a metadata chokepoint that
+   sees your IP and every request. bech32-encoded https URL for LNURL; user@host
+   → https://host/.well-known/lnurlp/user for a Lightning address. */
+function decodeLnurl(str) {
+  const d = _bech32Decode((str || "").trim());
+  if (!d || d.spec !== "bech32" || d.hrp !== "lnurl") return null;
+  let url; try { url = new TextDecoder().decode(new Uint8Array(_g5Bytes(d.data))); } catch { return null; }
+  if (!/^https?:\/\//i.test(url)) return null;
+  try { return { url, host: new URL(url).host }; } catch { return null; }
+}
+function resolveLnAddress(str) {
+  const s = (str || "").trim();
+  const m = s.match(/^([a-z0-9._%+-]+)@([a-z0-9.-]+\.[a-z]{2,})$/i);
+  if (!m) return null;
+  return { user: m[1], host: m[2].toLowerCase(), endpoint: `https://${m[2].toLowerCase()}/.well-known/lnurlp/${m[1]}` };
+}
+
 // -- base58check (P2PKH / P2SH) --
 const _B58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
 function _base58encode(bytes){let zeros=0;while(zeros<bytes.length&&bytes[zeros]===0)zeros++;const digits=[0];for(let i=zeros;i<bytes.length;i++){let carry=bytes[i];for(let j=0;j<digits.length;j++){carry+=digits[j]<<8;digits[j]=carry%58;carry=(carry/58)|0;}while(carry){digits.push(carry%58);carry=(carry/58)|0;}}let s="";for(let i=0;i<zeros;i++)s+="1";for(let i=digits.length-1;i>=0;i--)s+=_B58[digits[i]];return s;}
@@ -3665,6 +3731,7 @@ function Landing({ onAnalyze, isMobile, onCases }) {
   const [error, setError] = useState("");
   const [spInfo, setSpInfo] = useState(null);   // decoded Silent Payments (BIP352) address, if entered
   const [lnInvoice, setLnInvoice] = useState(null);   // decoded BOLT11 Lightning invoice, if entered
+  const [lnPay, setLnPay] = useState(null);           // { kind: "offer"|"lnurl"|"lnaddress", ...decoded }
   const [history, setHistory] = useState(() => getHistory());
   const deleteHistory = (addr) => { removeFromHistory(addr); setHistory(getHistory()); };
   const wipeHistory = () => { clearAllHistory(); setHistory([]); };
@@ -3732,7 +3799,7 @@ function Landing({ onAnalyze, isMobile, onCases }) {
 
   const submit = (val, plain = false) => {
     const v = (val || input).trim();
-    setSpInfo(null); setLnInvoice(null);
+    setSpInfo(null); setLnInvoice(null); setLnPay(null);
     if (!v) { setError(t("err.empty")); return; }
     const detected = detectInputType(v);
     if (!detected) {
@@ -3740,11 +3807,18 @@ function Landing({ onAnalyze, isMobile, onCases }) {
       if (sp) { setError(""); setSpInfo(sp); return; }   // not scannable — it's a reusable BIP352 address; educate instead
       const inv = decodeBolt11(v);
       if (inv) { setError(""); setLnInvoice(inv); return; }   // a Lightning invoice — decode + lint what it leaks
+      const off = decodeBolt12Offer(v);
+      if (off) { setError(""); setLnPay({ kind: "offer", ...off }); return; }   // BOLT12 offer — blinded-path privacy lint
+      const lu = decodeLnurl(v);
+      if (lu) { setError(""); setLnPay({ kind: "lnurl", ...lu }); return; }     // LNURL — metadata chokepoint lint
       setError(t("err.invalid"));
       return;
     }
     if (detected === "ln_address") {
-      // Lightning addresses (user@domain) can't be resolved to a node — don't pretend to scan one.
+      // A Lightning address (user@domain) can't be scanned — but we can decode
+      // where it resolves and explain the metadata exposure, rather than just error.
+      const la = resolveLnAddress(v);
+      if (la) { setError(""); setLnPay({ kind: "lnaddress", ...la }); return; }
       setError(t("err.lnaddress"));
       return;
     }
@@ -3930,7 +4004,7 @@ function Landing({ onAnalyze, isMobile, onCases }) {
                     <circle cx="11" cy="11" r="7" stroke={inputType ? (isLn ? T.ln : T.btc) : T.cyan} strokeWidth="2" opacity="0.9" />
                     <line x1="16.5" y1="16.5" x2="21" y2="21" stroke={inputType ? (isLn ? T.ln : T.btc) : T.cyan} strokeWidth="2" strokeLinecap="round" opacity="0.9" />
                   </svg>
-                  <input ref={inputRef} value={input} onChange={e => { setInput(e.target.value); setError(""); setSpInfo(null); setLnInvoice(null); }}
+                  <input ref={inputRef} value={input} onChange={e => { setInput(e.target.value); setError(""); setSpInfo(null); setLnInvoice(null); setLnPay(null); }}
                     onKeyDown={e => e.key === "Enter" && submit(null, true)}
                     aria-label="Paste a Bitcoin address, Lightning node pubkey, or silent payment address"
                     placeholder={isLn ? "03abc… (66-char node pubkey)" : "Paste an address or pubkey…"}
@@ -4020,6 +4094,44 @@ function Landing({ onAnalyze, isMobile, onCases }) {
                     <div style={{ fontSize: 11.5, color: T.textDim, lineHeight: 1.55, marginTop: 10 }}>
                       Node balances are cheaply probeable — most channels' exact balances can be recovered in under a minute. Reuse invoices as little as possible; BOLT12 offers and blinded paths reduce this exposure. Decoded entirely in your browser.
                     </div>
+                  </div>
+                );
+              })()}
+              {lnPay && (() => {
+                const p = lnPay, cut = s => !s ? "" : s.length > 22 ? s.slice(0, 11) + "…" + s.slice(-6) : s;
+                // offer: blinded paths = good (hidden node); bare issuer id = exposed
+                const good = p.kind === "offer" ? p.hasBlindedPaths : false;
+                const accent = good ? T.green : T.ln;
+                const head = p.kind === "offer" ? "BOLT12 OFFER" : p.kind === "lnurl" ? "LNURL" : "LIGHTNING ADDRESS";
+                return (
+                  <div style={{ marginTop: 12, textAlign: "left", background: accent + "0e", border: `1px solid ${accent}40`, borderRadius: 14, padding: "14px 16px", animation: "slideDown .25s ease" }}>
+                    <div style={{ fontFamily: T.mono, fontSize: 9, color: accent, letterSpacing: 1.5, marginBottom: 8 }}>{head}{p.kind === "offer" && p.currency ? " · " + p.currency : ""}</div>
+                    {p.kind === "offer" && (
+                      <>
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 10 }}>
+                          {p.amountMsat != null && <span style={{ fontFamily: T.serif, fontSize: 19, color: T.text }}>{p.currency ? (p.amountMsat + " " + p.currency) : (p.amountMsat / 1000).toLocaleString() + " sats"}</span>}
+                          {p.description && <span style={{ fontSize: 12.5, color: T.textMid, alignSelf: "center" }}>“{p.description}”</span>}
+                        </div>
+                        {p.hasBlindedPaths ? (
+                          <div style={{ fontSize: 12.5, color: T.textMid, lineHeight: 1.6 }}>
+                            <strong style={{ color: T.green }}>Uses blinded paths — the payee's node identity is hidden.</strong> This is BOLT12's privacy win over BOLT11 invoices: reusable without a static payment hash to correlate, and no node pubkey or funding UTXO exposed. {p.issuer ? "Issuer: " + p.issuer + "." : ""}
+                          </div>
+                        ) : (
+                          <div style={{ fontSize: 12.5, color: T.textMid, lineHeight: 1.6 }}>
+                            <strong style={{ color: T.ln }}>Exposes the payee's node pubkey directly</strong>{p.issuerId ? <> (<span style={{ fontFamily: T.mono, fontSize: 11 }}>{cut(p.issuerId)}</span>)</> : ""} — no blinded paths. An observer can look the node up, map its public channels and probe balances. Still better than a BOLT11 invoice (reusable, no static payment hash), but a blinded-path offer would hide the identity. {p.issuer ? "Issuer: " + p.issuer + "." : ""}
+                          </div>
+                        )}
+                      </>
+                    )}
+                    {(p.kind === "lnurl" || p.kind === "lnaddress") && (
+                      <>
+                        <div style={{ fontFamily: T.mono, fontSize: 12, color: T.text, wordBreak: "break-all", marginBottom: 8 }}>{p.kind === "lnaddress" ? p.user + "@" + p.host : p.host}</div>
+                        <div style={{ fontSize: 12.5, color: T.textMid, lineHeight: 1.6 }}>
+                          Payments funnel through <strong style={{ color: T.text }}>{p.host}</strong>{p.kind === "lnaddress" ? <> — it resolves to <span style={{ fontFamily: T.mono, fontSize: 11, color: T.textDim, wordBreak: "break-all" }}>{p.endpoint}</span></> : ""}. That server is a <strong style={{ color: T.ln }}>metadata chokepoint</strong>: it sees your IP and every payment request, and can log who pays you and when. Convenient, but the operator (and its host) can build a payment profile — not private the way an on-chain or blinded-path payment is.
+                        </div>
+                      </>
+                    )}
+                    <div style={{ fontSize: 11.5, color: T.textDim, lineHeight: 1.55, marginTop: 10 }}>Decoded entirely in your browser.</div>
                   </div>
                 );
               })()}
@@ -7886,6 +7998,8 @@ window.__ANONSCORE_TEST__ = Object.freeze({
   _bech32Decode, decodeSilentPayment, detectSilentPayment,
   // BOLT11 Lightning invoice decode/lint — validated vs the BOLT11 spec vector
   decodeBolt11, detectBolt11,
+  // BOLT12 offer + LNURL + Lightning-address decode/lint (payment-string linter)
+  decodeBolt12Offer, detectBolt12, decodeLnurl, resolveLnAddress,
   // xpub wallet scanner — crypto (validated against BIP32 TV1 + BIP84 vectors)
   _sha512, _hmacSha512, _ripemd160, decodeXpub, ckdPub, deriveWalletAddress, detectXpub,
   runWalletEngine, DEMO_WALLET,

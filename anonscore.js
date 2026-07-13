@@ -2063,6 +2063,110 @@ function detectBolt11(v) {
   if (!/^ln(bc|tb|bcrt|bcs|sb)[0-9]*[munp]?1[a-z0-9]+$/.test(s)) return null;
   return decodeBolt11(s) ? "bolt11" : null;
 }
+function _bech32NoChecksum(str) {
+  str = (str || "").toLowerCase().replace(/[+\s]/g, "");
+  const pos = str.lastIndexOf("1");
+  if (pos < 1) return null;
+  const hrp = str.slice(0, pos),
+    vals = [];
+  for (const c of str.slice(pos + 1)) {
+    const v = _BECHKEY[c];
+    if (v === undefined) return null;
+    vals.push(v);
+  }
+  return {
+    hrp,
+    bytes: _g5Bytes(vals)
+  };
+}
+function _bigSize(b, pos) {
+  const f = b[pos];
+  if (f === undefined) return null;
+  if (f < 0xfd) return [f, pos + 1];
+  if (f === 0xfd) return [b[pos + 1] << 8 | b[pos + 2], pos + 3];
+  if (f === 0xfe) return [(b[pos + 1] << 24 | b[pos + 2] << 16 | b[pos + 3] << 8 | b[pos + 4]) >>> 0, pos + 5];
+  let v = 0;
+  for (let i = 1; i <= 8; i++) v = v * 256 + b[pos + i];
+  return [v, pos + 9];
+}
+function decodeBolt12Offer(str) {
+  const d = _bech32NoChecksum((str || "").trim());
+  if (!d || d.hrp !== "lno") return null;
+  const b = d.bytes;
+  const tlv = {};
+  let pos = 0;
+  while (pos < b.length) {
+    let r = _bigSize(b, pos);
+    if (!r) return null;
+    const type = r[0];
+    pos = r[1];
+    r = _bigSize(b, pos);
+    if (!r) return null;
+    const len = r[0];
+    pos = r[1];
+    if (pos + len > b.length) return null;
+    tlv[type] = b.slice(pos, pos + len);
+    pos += len;
+  }
+  if (!Object.keys(tlv).length) return null;
+  const hex = a => a.map(x => x.toString(16).padStart(2, "0")).join("");
+  const utf8 = a => {
+    try {
+      return new TextDecoder().decode(new Uint8Array(a));
+    } catch {
+      return null;
+    }
+  };
+  const beInt = a => {
+    let n = 0;
+    for (const x of a) n = n * 256 + x;
+    return n;
+  };
+  const out = {
+    hasBlindedPaths: 16 in tlv,
+    tlvTypes: Object.keys(tlv).map(Number).sort((a, b) => a - b)
+  };
+  if (8 in tlv) out.amountMsat = beInt(tlv[8]);
+  if (6 in tlv) out.currency = utf8(tlv[6]);
+  if (10 in tlv) out.description = utf8(tlv[10]);
+  if (18 in tlv) out.issuer = utf8(tlv[18]);
+  if (22 in tlv) out.issuerId = hex(tlv[22]);
+  return out;
+}
+function detectBolt12(v) {
+  const s = (v || "").trim().toLowerCase().replace(/[+\s]/g, "");
+  if (!/^lno1[a-z0-9]+$/.test(s)) return null;
+  return decodeBolt12Offer(s) ? "bolt12" : null;
+}
+function decodeLnurl(str) {
+  const d = _bech32Decode((str || "").trim());
+  if (!d || d.spec !== "bech32" || d.hrp !== "lnurl") return null;
+  let url;
+  try {
+    url = new TextDecoder().decode(new Uint8Array(_g5Bytes(d.data)));
+  } catch {
+    return null;
+  }
+  if (!/^https?:\/\//i.test(url)) return null;
+  try {
+    return {
+      url,
+      host: new URL(url).host
+    };
+  } catch {
+    return null;
+  }
+}
+function resolveLnAddress(str) {
+  const s = (str || "").trim();
+  const m = s.match(/^([a-z0-9._%+-]+)@([a-z0-9.-]+\.[a-z]{2,})$/i);
+  if (!m) return null;
+  return {
+    user: m[1],
+    host: m[2].toLowerCase(),
+    endpoint: `https://${m[2].toLowerCase()}/.well-known/lnurlp/${m[1]}`
+  };
+}
 const _B58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
 function _base58encode(bytes) {
   let zeros = 0;
@@ -7206,6 +7310,7 @@ function Landing({
   const [error, setError] = useState("");
   const [spInfo, setSpInfo] = useState(null);
   const [lnInvoice, setLnInvoice] = useState(null);
+  const [lnPay, setLnPay] = useState(null);
   const [history, setHistory] = useState(() => getHistory());
   const deleteHistory = addr => {
     removeFromHistory(addr);
@@ -7283,6 +7388,7 @@ function Landing({
     const v = (val || input).trim();
     setSpInfo(null);
     setLnInvoice(null);
+    setLnPay(null);
     if (!v) {
       setError(t("err.empty"));
       return;
@@ -7301,10 +7407,37 @@ function Landing({
         setLnInvoice(inv);
         return;
       }
+      const off = decodeBolt12Offer(v);
+      if (off) {
+        setError("");
+        setLnPay({
+          kind: "offer",
+          ...off
+        });
+        return;
+      }
+      const lu = decodeLnurl(v);
+      if (lu) {
+        setError("");
+        setLnPay({
+          kind: "lnurl",
+          ...lu
+        });
+        return;
+      }
       setError(t("err.invalid"));
       return;
     }
     if (detected === "ln_address") {
+      const la = resolveLnAddress(v);
+      if (la) {
+        setError("");
+        setLnPay({
+          kind: "lnaddress",
+          ...la
+        });
+        return;
+      }
       setError(t("err.lnaddress"));
       return;
     }
@@ -7922,6 +8055,7 @@ function Landing({
       setError("");
       setSpInfo(null);
       setLnInvoice(null);
+      setLnPay(null);
     },
     onKeyDown: e => e.key === "Enter" && submit(null, true),
     "aria-label": "Paste a Bitcoin address, Lightning node pubkey, or silent payment address",
@@ -8169,6 +8303,111 @@ function Landing({
         marginTop: 10
       }
     }, "Node balances are cheaply probeable \u2014 most channels' exact balances can be recovered in under a minute. Reuse invoices as little as possible; BOLT12 offers and blinded paths reduce this exposure. Decoded entirely in your browser."));
+  })(), lnPay && (() => {
+    const p = lnPay,
+      cut = s => !s ? "" : s.length > 22 ? s.slice(0, 11) + "…" + s.slice(-6) : s;
+    const good = p.kind === "offer" ? p.hasBlindedPaths : false;
+    const accent = good ? T.green : T.ln;
+    const head = p.kind === "offer" ? "BOLT12 OFFER" : p.kind === "lnurl" ? "LNURL" : "LIGHTNING ADDRESS";
+    return React.createElement("div", {
+      style: {
+        marginTop: 12,
+        textAlign: "left",
+        background: accent + "0e",
+        border: `1px solid ${accent}40`,
+        borderRadius: 14,
+        padding: "14px 16px",
+        animation: "slideDown .25s ease"
+      }
+    }, React.createElement("div", {
+      style: {
+        fontFamily: T.mono,
+        fontSize: 9,
+        color: accent,
+        letterSpacing: 1.5,
+        marginBottom: 8
+      }
+    }, head, p.kind === "offer" && p.currency ? " · " + p.currency : ""), p.kind === "offer" && React.createElement(React.Fragment, null, React.createElement("div", {
+      style: {
+        display: "flex",
+        flexWrap: "wrap",
+        gap: 10,
+        marginBottom: 10
+      }
+    }, p.amountMsat != null && React.createElement("span", {
+      style: {
+        fontFamily: T.serif,
+        fontSize: 19,
+        color: T.text
+      }
+    }, p.currency ? p.amountMsat + " " + p.currency : (p.amountMsat / 1000).toLocaleString() + " sats"), p.description && React.createElement("span", {
+      style: {
+        fontSize: 12.5,
+        color: T.textMid,
+        alignSelf: "center"
+      }
+    }, "\u201C", p.description, "\u201D")), p.hasBlindedPaths ? React.createElement("div", {
+      style: {
+        fontSize: 12.5,
+        color: T.textMid,
+        lineHeight: 1.6
+      }
+    }, React.createElement("strong", {
+      style: {
+        color: T.green
+      }
+    }, "Uses blinded paths \u2014 the payee's node identity is hidden."), " This is BOLT12's privacy win over BOLT11 invoices: reusable without a static payment hash to correlate, and no node pubkey or funding UTXO exposed. ", p.issuer ? "Issuer: " + p.issuer + "." : "") : React.createElement("div", {
+      style: {
+        fontSize: 12.5,
+        color: T.textMid,
+        lineHeight: 1.6
+      }
+    }, React.createElement("strong", {
+      style: {
+        color: T.ln
+      }
+    }, "Exposes the payee's node pubkey directly"), p.issuerId ? React.createElement(React.Fragment, null, " (", React.createElement("span", {
+      style: {
+        fontFamily: T.mono,
+        fontSize: 11
+      }
+    }, cut(p.issuerId)), ")") : "", " \u2014 no blinded paths. An observer can look the node up, map its public channels and probe balances. Still better than a BOLT11 invoice (reusable, no static payment hash), but a blinded-path offer would hide the identity. ", p.issuer ? "Issuer: " + p.issuer + "." : "")), (p.kind === "lnurl" || p.kind === "lnaddress") && React.createElement(React.Fragment, null, React.createElement("div", {
+      style: {
+        fontFamily: T.mono,
+        fontSize: 12,
+        color: T.text,
+        wordBreak: "break-all",
+        marginBottom: 8
+      }
+    }, p.kind === "lnaddress" ? p.user + "@" + p.host : p.host), React.createElement("div", {
+      style: {
+        fontSize: 12.5,
+        color: T.textMid,
+        lineHeight: 1.6
+      }
+    }, "Payments funnel through ", React.createElement("strong", {
+      style: {
+        color: T.text
+      }
+    }, p.host), p.kind === "lnaddress" ? React.createElement(React.Fragment, null, " \u2014 it resolves to ", React.createElement("span", {
+      style: {
+        fontFamily: T.mono,
+        fontSize: 11,
+        color: T.textDim,
+        wordBreak: "break-all"
+      }
+    }, p.endpoint)) : "", ". That server is a ", React.createElement("strong", {
+      style: {
+        color: T.ln
+      }
+    }, "metadata chokepoint"), ": it sees your IP and every payment request, and can log who pays you and when. Convenient, but the operator (and its host) can build a payment profile \u2014 not private the way an on-chain or blinded-path payment is.")), React.createElement("div", {
+      style: {
+        fontSize: 11.5,
+        color: T.textDim,
+        lineHeight: 1.55,
+        marginTop: 10
+      }
+    }, "Decoded entirely in your browser."));
   })()), React.createElement("div", {
     style: {
       display: "flex",
@@ -18085,6 +18324,10 @@ window.__ANONSCORE_TEST__ = Object.freeze({
   detectSilentPayment,
   decodeBolt11,
   detectBolt11,
+  decodeBolt12Offer,
+  detectBolt12,
+  decodeLnurl,
+  resolveLnAddress,
   _sha512,
   _hmacSha512,
   _ripemd160,
