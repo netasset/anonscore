@@ -1,4 +1,4 @@
-const { useState, useEffect, useCallback, useRef, useMemo } = React;
+const { useState, useEffect, useCallback, useRef, useMemo, useLayoutEffect } = React;
 
 /* ─────────────────────────────────────────────
    GLOBAL CSS
@@ -5010,6 +5010,108 @@ function NewsletterSignup({ compact = false }) {
 }
 
 /* ─────────────────────────────────────────────
+   FLOW GRAPH — a reusable inputs→outputs value-flow. Renders the input and output
+   cards as HTML (keeps text, "Audit →" jumps, and screen-reader semantics native)
+   and draws the input→output relationships as an inline-SVG bezier overlay,
+   measured from the real card positions (robust to variable heights). Each edge is
+   weighted by the link-probability matrix (lp) the entropy engine already computes:
+   deterministic links (LP=1, provable on-chain) are solid red; ambiguous links
+   fade with their probability. The overlay is aria-hidden — the same linkage is
+   conveyed textually by the "⛓ provably" note and the LP heatmap. Desktop only;
+   mobile stacks the cards. No deps, no network, no auto-fire.
+───────────────────────────────────────────── */
+function FlowGraph({ inputs, outputs, lp, outIdx, isMobile, onAudit }) {
+  const wrapRef = useRef(null), leftRef = useRef(null), rightRef = useRef(null);
+  const inRefs = useRef([]), outRefs = useRef([]);
+  const [edges, setEdges] = useState([]);
+  const [box, setBox] = useState({ w: 0, h: 0 });
+  inRefs.current = []; outRefs.current = [];
+
+  const measure = useCallback(() => {
+    const wrap = wrapRef.current, left = leftRef.current, right = rightRef.current;
+    if (!wrap || !left || !right) return;
+    const wb = wrap.getBoundingClientRect();
+    if (!wb.width) return;
+    const cy = el => { const r = el.getBoundingClientRect(); return r.top - wb.top + r.height / 2; };
+    const xIn = left.getBoundingClientRect().right - wb.left;
+    const xOut = right.getBoundingClientRect().left - wb.left;
+    const inY = inRefs.current.map(el => el ? cy(el) : null);
+    const outY = outRefs.current.map(el => el ? cy(el) : null);
+    const es = [];
+    if (lp && lp.length) {
+      for (let i = 0; i < lp.length; i++) for (let j = 0; j < lp[i].length; j++) {
+        const v = lp[i][j]; if (v <= 0.001) continue;
+        const oj = outIdx ? outIdx[j] : j;
+        if (inY[i] == null || outY[oj] == null) continue;
+        es.push({ x1: xIn, y1: inY[i], x2: xOut, y2: outY[oj], v, det: Math.abs(v - 1) < 1e-9 });
+      }
+    } else {                                   // no link data (raw hex): faint neutral fan
+      for (let i = 0; i < inputs.length; i++) for (let j = 0; j < outputs.length; j++) {
+        if (inY[i] == null || outY[j] == null) continue;
+        es.push({ x1: xIn, y1: inY[i], x2: xOut, y2: outY[j], v: 0.1, neutral: true });
+      }
+    }
+    es.sort((a, b) => a.v - b.v);              // strongest links drawn last (on top)
+    setEdges(es);
+    setBox({ w: wb.width, h: wb.height });
+  }, [lp, outIdx, inputs, outputs]);
+
+  useLayoutEffect(() => {
+    if (isMobile) return;
+    measure();
+    const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(measure) : null;
+    if (ro && wrapRef.current) ro.observe(wrapRef.current);
+    return () => ro && ro.disconnect();
+  }, [measure, isMobile]);
+
+  const inputCard = (v, i) => (
+    <div key={i} ref={el => (inRefs.current[i] = el)} style={{ fontFamily: T.mono, fontSize: 11.5, color: T.textMid, background: T.surface, border: `1px solid ${T.borderLo}`, borderRadius: 8, padding: "7px 10px" }}>
+      <div style={{ color: v.faint ? T.textDim : T.text, overflow: "hidden", textOverflow: "ellipsis" }}>{v.title}</div>
+      <div style={{ color: T.textDim, fontSize: 10, marginTop: 2 }}>{v.sub}</div>
+    </div>
+  );
+  const outputCard = (o, i) => (
+    <div key={i} ref={el => (outRefs.current[i] = el)} style={{ fontFamily: T.mono, fontSize: 11.5, background: T.surface, border: `1px solid ${o.color}44`, borderLeft: `3px solid ${o.color}`, borderRadius: 8, padding: "7px 10px" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+        <span style={{ color: T.text, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>{o.title}</span>
+        <span style={{ color: o.color, flexShrink: 0, fontSize: 9 }}>{o.note}</span>
+      </div>
+      <div style={{ color: T.textDim, fontSize: 10, marginTop: 2 }}>{o.sub}</div>
+      {o.det && <div style={{ color: T.red, fontSize: 9, marginTop: 3, letterSpacing: 0.3 }}>⛓ provably from these inputs</div>}
+      {o.address && onAudit && (
+        <button onClick={() => onAudit(o.address)} aria-label={"Audit output address " + o.address}
+          style={{ marginTop: 6, background: "transparent", border: `1px solid ${T.cyan}55`, borderRadius: 7, padding: "3px 10px", color: T.cyan, fontFamily: T.sans, fontSize: 11, fontWeight: 600, cursor: "pointer" }}
+          onMouseOver={e => (e.currentTarget.style.background = T.cyan + "14")} onMouseOut={e => (e.currentTarget.style.background = "transparent")}>Audit →</button>
+      )}
+    </div>
+  );
+
+  if (isMobile) {
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        {inputs.map(inputCard)}
+        <div style={{ textAlign: "center", color: T.textDim, fontSize: 15 }} aria-hidden="true">↓</div>
+        {outputs.map(outputCard)}
+      </div>
+    );
+  }
+  return (
+    <div ref={wrapRef} style={{ position: "relative", display: "grid", gridTemplateColumns: "1fr 76px 1fr", alignItems: "start" }}>
+      <svg width={box.w} height={box.h} viewBox={`0 0 ${box.w || 1} ${box.h || 1}`} preserveAspectRatio="none" aria-hidden="true" style={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: 0 }}>
+        {edges.map((e, k) => {
+          const xm = (e.x1 + e.x2) / 2;
+          return <path key={k} d={`M ${e.x1} ${e.y1} C ${xm} ${e.y1}, ${xm} ${e.y2}, ${e.x2} ${e.y2}`} fill="none"
+            stroke={e.neutral ? T.textDim : T.red} strokeWidth={e.det ? 2.2 : 1 + e.v * 1.6} strokeOpacity={e.neutral ? 0.14 : 0.14 + e.v * 0.72} strokeLinecap="round" />;
+        })}
+      </svg>
+      <div ref={leftRef} style={{ position: "relative", zIndex: 1, display: "flex", flexDirection: "column", gap: 6 }}>{inputs.map(inputCard)}</div>
+      <div aria-hidden="true" />
+      <div ref={rightRef} style={{ position: "relative", zIndex: 1, display: "flex", flexDirection: "column", gap: 6 }}>{outputs.map(outputCard)}</div>
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────────
    TRANSACTION INSPECTOR — standalone tool at /?page=inspector. Paste a PSBT or
    raw tx your wallet is about to sign and see what it leaks BEFORE you broadcast.
    PSBT/raw-hex are parsed and analyzed entirely in the browser (zero network).
@@ -5206,29 +5308,25 @@ function TransactionInspector({ onBack, isMobile, onScan }) {
               {result.kind === "rawhex" ? "Raw hex carries no input data — paste the PSBT for full input-side analysis (cluster + fee)." : "Partial PSBT — some inputs lack UTXO data, so the fee and input analysis cover only the known inputs."}
             </div>
           )}
-          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr auto 1fr", gap: isMobile ? 12 : 16, alignItems: "start" }}>
-            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              {(tx.vin || []).map((v, i) => (
-                <div key={i} style={{ fontFamily: T.mono, fontSize: 11.5, color: T.textMid, background: T.surface, border: `1px solid ${T.borderLo}`, borderRadius: 8, padding: "7px 10px" }}>
-                  <div style={{ color: T.text }}>{v.prevout ? trunc(v.prevout.scriptpubkey_address) : "input " + (i + 1) + " (no UTXO data)"}</div>
-                  <div style={{ color: T.textDim, fontSize: 10, marginTop: 2 }}>{v.prevout ? sats(v.prevout.value) + " · " + v.prevout.scriptpubkey_type : "unknown"}</div>
-                </div>
-              ))}
+          {link.available && (tx.vin || []).length >= 1 && (
+            <div style={{ fontSize: 11, color: T.textDim, lineHeight: 1.5, marginBottom: 10 }}>
+              Threads show which input funds which output. <span style={{ color: T.red }}>Solid red</span> = a deterministic link (provable on-chain); fainter threads are ambiguous — the more they blur, the less any single link can be proven.
             </div>
-            <div style={{ display: isMobile ? "none" : "flex", alignItems: "center", justifyContent: "center", color: T.textDim, fontSize: 18, alignSelf: "center" }}>→</div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              {(tx.vout || []).map((o, i) => (
-                <div key={i} style={{ fontFamily: T.mono, fontSize: 11.5, background: T.surface, border: `1px solid ${outColor(o, i)}44`, borderLeft: `3px solid ${outColor(o, i)}`, borderRadius: 8, padding: "7px 10px" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
-                    <span style={{ color: T.text, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>{trunc(o.scriptpubkey_address)}</span>
-                    <span style={{ color: outColor(o, i), flexShrink: 0, fontSize: 9 }}>{outNote(o, i)}</span>
-                  </div>
-                  <div style={{ color: T.textDim, fontSize: 10, marginTop: 2 }}>{sats(o.value)} · {o.scriptpubkey_type}</div>
-                  {detOut.has(i) && <div style={{ color: T.red, fontSize: 9, marginTop: 3, letterSpacing: .3 }}>⛓ provably from these inputs</div>}
-                </div>
-              ))}
-            </div>
-          </div>
+          )}
+          <FlowGraph
+            inputs={(tx.vin || []).map((v, i) => ({
+              title: v.prevout ? trunc(v.prevout.scriptpubkey_address) : "input " + (i + 1) + " (no UTXO data)",
+              sub: v.prevout ? sats(v.prevout.value) + " · " + v.prevout.scriptpubkey_type : "unknown",
+              faint: !v.prevout,
+            }))}
+            outputs={(tx.vout || []).map((o, i) => ({
+              title: trunc(o.scriptpubkey_address), sub: sats(o.value) + " · " + o.scriptpubkey_type,
+              color: outColor(o, i), note: outNote(o, i), det: detOut.has(i),
+              address: (o.scriptpubkey_address && !o.scriptpubkey_address.startsWith("script:") && isValidBitcoinAddress(o.scriptpubkey_address)) ? o.scriptpubkey_address : null,
+            }))}
+            lp={link.available ? link.lp : null} outIdx={link.available ? link.outIdx : null}
+            isMobile={isMobile} onAudit={onScan ? (a => onScan(a)) : null}
+          />
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 14, alignItems: "center" }}>
             {fr && <Tag label={"≈ " + fr.rate + " sat/vB" + (fr.estimated ? " (est)" : "")} color={T.textMid} size={9} />}
             {tx.fee != null && <Tag label={"fee " + sats(tx.fee)} color={T.textMid} size={9} />}
@@ -5291,7 +5389,9 @@ function TransactionInspector({ onBack, isMobile, onScan }) {
             placeholder="cHNidP8B…  or  0200000001…"
             aria-label="Paste a PSBT (base64), raw transaction hex, or a transaction id"
             spellCheck={false}
-            style={{ width: "100%", boxSizing: "border-box", minHeight: 120, resize: "vertical", background: "#070910", border: `1px solid ${T.border}`, borderRadius: 10, padding: "12px 14px", color: T.text, fontFamily: T.mono, fontSize: 12.5, lineHeight: 1.5, outline: "none" }} />
+            onFocus={e => { e.target.style.borderColor = T.cyan; e.target.style.boxShadow = `0 0 0 3px ${T.cyan}22`; }}
+            onBlur={e => { e.target.style.borderColor = T.border; e.target.style.boxShadow = "none"; }}
+            style={{ width: "100%", boxSizing: "border-box", minHeight: 120, resize: "vertical", background: "#070910", border: `1px solid ${T.border}`, borderRadius: 10, padding: "12px 14px", color: T.text, fontFamily: T.mono, fontSize: 12.5, lineHeight: 1.5, outline: "none", transition: "border .15s, box-shadow .2s" }} />
           <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 12, flexWrap: "wrap" }}>
             <button onClick={() => inspect()} disabled={!raw.trim()} className="sheen"
               style={{ background: raw.trim() ? T.cyan : T.surface, border: "none", borderRadius: 10, padding: "12px 22px", color: raw.trim() ? T.bg : T.textDim, fontFamily: T.sans, fontWeight: 700, fontSize: 14, cursor: raw.trim() ? "pointer" : "default", transition: "all .15s" }}>
@@ -5464,7 +5564,9 @@ function XpubScan({ onBack, isMobile, onScan }) {
           <label htmlFor="xpub-input" style={{ display: "block", fontFamily: T.mono, fontSize: 9, color: T.textDim, letterSpacing: 1.5, marginBottom: 8 }}>EXTENDED PUBLIC KEY (xpub / ypub / zpub)</label>
           <textarea id="xpub-input" value={raw} onChange={e => { setRaw(e.target.value); setError(""); }}
             placeholder="zpub6r… / xpub6C… / ypub6X…" aria-label="Paste your extended public key (xpub, ypub, or zpub)" spellCheck={false}
-            style={{ width: "100%", boxSizing: "border-box", minHeight: 84, resize: "vertical", background: "#070910", border: `1px solid ${T.border}`, borderRadius: 10, padding: "12px 14px", color: T.text, fontFamily: T.mono, fontSize: 12.5, lineHeight: 1.5, outline: "none" }} />
+            onFocus={e => { e.target.style.borderColor = T.cyan; e.target.style.boxShadow = `0 0 0 3px ${T.cyan}22`; }}
+            onBlur={e => { e.target.style.borderColor = T.border; e.target.style.boxShadow = "none"; }}
+            style={{ width: "100%", boxSizing: "border-box", minHeight: 84, resize: "vertical", background: "#070910", border: `1px solid ${T.border}`, borderRadius: 10, padding: "12px 14px", color: T.text, fontFamily: T.mono, fontSize: 12.5, lineHeight: 1.5, outline: "none", transition: "border .15s, box-shadow .2s" }} />
           <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 12, flexWrap: "wrap" }}>
             <button onClick={runScan} disabled={!detected || busy} className="sheen"
               style={{ background: (detected && !busy) ? T.cyan : T.surface, border: "none", borderRadius: 10, padding: "12px 22px", color: (detected && !busy) ? T.bg : T.textDim, fontFamily: T.sans, fontWeight: 700, fontSize: 14, cursor: (detected && !busy) ? "pointer" : "default", transition: "all .15s" }}>

@@ -4,7 +4,8 @@ const {
   useEffect,
   useCallback,
   useRef,
-  useMemo
+  useMemo,
+  useLayoutEffect
 } = React;
 const CSS = `
 /* Fonts are loaded via a preconnected <link> in index.html (faster than @import). */
@@ -10606,6 +10607,240 @@ function NewsletterSignup({
     }
   }, "No spam. Unsubscribe link in every issue. We never link your email to a scanned address."));
 }
+function FlowGraph({
+  inputs,
+  outputs,
+  lp,
+  outIdx,
+  isMobile,
+  onAudit
+}) {
+  const wrapRef = useRef(null),
+    leftRef = useRef(null),
+    rightRef = useRef(null);
+  const inRefs = useRef([]),
+    outRefs = useRef([]);
+  const [edges, setEdges] = useState([]);
+  const [box, setBox] = useState({
+    w: 0,
+    h: 0
+  });
+  inRefs.current = [];
+  outRefs.current = [];
+  const measure = useCallback(() => {
+    const wrap = wrapRef.current,
+      left = leftRef.current,
+      right = rightRef.current;
+    if (!wrap || !left || !right) return;
+    const wb = wrap.getBoundingClientRect();
+    if (!wb.width) return;
+    const cy = el => {
+      const r = el.getBoundingClientRect();
+      return r.top - wb.top + r.height / 2;
+    };
+    const xIn = left.getBoundingClientRect().right - wb.left;
+    const xOut = right.getBoundingClientRect().left - wb.left;
+    const inY = inRefs.current.map(el => el ? cy(el) : null);
+    const outY = outRefs.current.map(el => el ? cy(el) : null);
+    const es = [];
+    if (lp && lp.length) {
+      for (let i = 0; i < lp.length; i++) for (let j = 0; j < lp[i].length; j++) {
+        const v = lp[i][j];
+        if (v <= 0.001) continue;
+        const oj = outIdx ? outIdx[j] : j;
+        if (inY[i] == null || outY[oj] == null) continue;
+        es.push({
+          x1: xIn,
+          y1: inY[i],
+          x2: xOut,
+          y2: outY[oj],
+          v,
+          det: Math.abs(v - 1) < 1e-9
+        });
+      }
+    } else {
+      for (let i = 0; i < inputs.length; i++) for (let j = 0; j < outputs.length; j++) {
+        if (inY[i] == null || outY[j] == null) continue;
+        es.push({
+          x1: xIn,
+          y1: inY[i],
+          x2: xOut,
+          y2: outY[j],
+          v: 0.1,
+          neutral: true
+        });
+      }
+    }
+    es.sort((a, b) => a.v - b.v);
+    setEdges(es);
+    setBox({
+      w: wb.width,
+      h: wb.height
+    });
+  }, [lp, outIdx, inputs, outputs]);
+  useLayoutEffect(() => {
+    if (isMobile) return;
+    measure();
+    const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(measure) : null;
+    if (ro && wrapRef.current) ro.observe(wrapRef.current);
+    return () => ro && ro.disconnect();
+  }, [measure, isMobile]);
+  const inputCard = (v, i) => React.createElement("div", {
+    key: i,
+    ref: el => inRefs.current[i] = el,
+    style: {
+      fontFamily: T.mono,
+      fontSize: 11.5,
+      color: T.textMid,
+      background: T.surface,
+      border: `1px solid ${T.borderLo}`,
+      borderRadius: 8,
+      padding: "7px 10px"
+    }
+  }, React.createElement("div", {
+    style: {
+      color: v.faint ? T.textDim : T.text,
+      overflow: "hidden",
+      textOverflow: "ellipsis"
+    }
+  }, v.title), React.createElement("div", {
+    style: {
+      color: T.textDim,
+      fontSize: 10,
+      marginTop: 2
+    }
+  }, v.sub));
+  const outputCard = (o, i) => React.createElement("div", {
+    key: i,
+    ref: el => outRefs.current[i] = el,
+    style: {
+      fontFamily: T.mono,
+      fontSize: 11.5,
+      background: T.surface,
+      border: `1px solid ${o.color}44`,
+      borderLeft: `3px solid ${o.color}`,
+      borderRadius: 8,
+      padding: "7px 10px"
+    }
+  }, React.createElement("div", {
+    style: {
+      display: "flex",
+      justifyContent: "space-between",
+      gap: 8
+    }
+  }, React.createElement("span", {
+    style: {
+      color: T.text,
+      minWidth: 0,
+      overflow: "hidden",
+      textOverflow: "ellipsis"
+    }
+  }, o.title), React.createElement("span", {
+    style: {
+      color: o.color,
+      flexShrink: 0,
+      fontSize: 9
+    }
+  }, o.note)), React.createElement("div", {
+    style: {
+      color: T.textDim,
+      fontSize: 10,
+      marginTop: 2
+    }
+  }, o.sub), o.det && React.createElement("div", {
+    style: {
+      color: T.red,
+      fontSize: 9,
+      marginTop: 3,
+      letterSpacing: 0.3
+    }
+  }, "\u26D3 provably from these inputs"), o.address && onAudit && React.createElement("button", {
+    onClick: () => onAudit(o.address),
+    "aria-label": "Audit output address " + o.address,
+    style: {
+      marginTop: 6,
+      background: "transparent",
+      border: `1px solid ${T.cyan}55`,
+      borderRadius: 7,
+      padding: "3px 10px",
+      color: T.cyan,
+      fontFamily: T.sans,
+      fontSize: 11,
+      fontWeight: 600,
+      cursor: "pointer"
+    },
+    onMouseOver: e => e.currentTarget.style.background = T.cyan + "14",
+    onMouseOut: e => e.currentTarget.style.background = "transparent"
+  }, "Audit \u2192"));
+  if (isMobile) {
+    return React.createElement("div", {
+      style: {
+        display: "flex",
+        flexDirection: "column",
+        gap: 6
+      }
+    }, inputs.map(inputCard), React.createElement("div", {
+      style: {
+        textAlign: "center",
+        color: T.textDim,
+        fontSize: 15
+      },
+      "aria-hidden": "true"
+    }, "\u2193"), outputs.map(outputCard));
+  }
+  return React.createElement("div", {
+    ref: wrapRef,
+    style: {
+      position: "relative",
+      display: "grid",
+      gridTemplateColumns: "1fr 76px 1fr",
+      alignItems: "start"
+    }
+  }, React.createElement("svg", {
+    width: box.w,
+    height: box.h,
+    viewBox: `0 0 ${box.w || 1} ${box.h || 1}`,
+    preserveAspectRatio: "none",
+    "aria-hidden": "true",
+    style: {
+      position: "absolute",
+      inset: 0,
+      pointerEvents: "none",
+      zIndex: 0
+    }
+  }, edges.map((e, k) => {
+    const xm = (e.x1 + e.x2) / 2;
+    return React.createElement("path", {
+      key: k,
+      d: `M ${e.x1} ${e.y1} C ${xm} ${e.y1}, ${xm} ${e.y2}, ${e.x2} ${e.y2}`,
+      fill: "none",
+      stroke: e.neutral ? T.textDim : T.red,
+      strokeWidth: e.det ? 2.2 : 1 + e.v * 1.6,
+      strokeOpacity: e.neutral ? 0.14 : 0.14 + e.v * 0.72,
+      strokeLinecap: "round"
+    });
+  })), React.createElement("div", {
+    ref: leftRef,
+    style: {
+      position: "relative",
+      zIndex: 1,
+      display: "flex",
+      flexDirection: "column",
+      gap: 6
+    }
+  }, inputs.map(inputCard)), React.createElement("div", {
+    "aria-hidden": "true"
+  }), React.createElement("div", {
+    ref: rightRef,
+    style: {
+      position: "relative",
+      zIndex: 1,
+      display: "flex",
+      flexDirection: "column",
+      gap: 6
+    }
+  }, outputs.map(outputCard)));
+}
 function TransactionInspector({
   onBack,
   isMobile,
@@ -11082,99 +11317,36 @@ function TransactionInspector({
         marginBottom: 12,
         lineHeight: 1.5
       }
-    }, result.kind === "rawhex" ? "Raw hex carries no input data — paste the PSBT for full input-side analysis (cluster + fee)." : "Partial PSBT — some inputs lack UTXO data, so the fee and input analysis cover only the known inputs."), React.createElement("div", {
+    }, result.kind === "rawhex" ? "Raw hex carries no input data — paste the PSBT for full input-side analysis (cluster + fee)." : "Partial PSBT — some inputs lack UTXO data, so the fee and input analysis cover only the known inputs."), link.available && (tx.vin || []).length >= 1 && React.createElement("div", {
       style: {
-        display: "grid",
-        gridTemplateColumns: isMobile ? "1fr" : "1fr auto 1fr",
-        gap: isMobile ? 12 : 16,
-        alignItems: "start"
-      }
-    }, React.createElement("div", {
-      style: {
-        display: "flex",
-        flexDirection: "column",
-        gap: 6
-      }
-    }, (tx.vin || []).map((v, i) => React.createElement("div", {
-      key: i,
-      style: {
-        fontFamily: T.mono,
-        fontSize: 11.5,
-        color: T.textMid,
-        background: T.surface,
-        border: `1px solid ${T.borderLo}`,
-        borderRadius: 8,
-        padding: "7px 10px"
-      }
-    }, React.createElement("div", {
-      style: {
-        color: T.text
-      }
-    }, v.prevout ? trunc(v.prevout.scriptpubkey_address) : "input " + (i + 1) + " (no UTXO data)"), React.createElement("div", {
-      style: {
+        fontSize: 11,
         color: T.textDim,
-        fontSize: 10,
-        marginTop: 2
+        lineHeight: 1.5,
+        marginBottom: 10
       }
-    }, v.prevout ? sats(v.prevout.value) + " · " + v.prevout.scriptpubkey_type : "unknown")))), React.createElement("div", {
+    }, "Threads show which input funds which output. ", React.createElement("span", {
       style: {
-        display: isMobile ? "none" : "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        color: T.textDim,
-        fontSize: 18,
-        alignSelf: "center"
+        color: T.red
       }
-    }, "\u2192"), React.createElement("div", {
-      style: {
-        display: "flex",
-        flexDirection: "column",
-        gap: 6
-      }
-    }, (tx.vout || []).map((o, i) => React.createElement("div", {
-      key: i,
-      style: {
-        fontFamily: T.mono,
-        fontSize: 11.5,
-        background: T.surface,
-        border: `1px solid ${outColor(o, i)}44`,
-        borderLeft: `3px solid ${outColor(o, i)}`,
-        borderRadius: 8,
-        padding: "7px 10px"
-      }
-    }, React.createElement("div", {
-      style: {
-        display: "flex",
-        justifyContent: "space-between",
-        gap: 8
-      }
-    }, React.createElement("span", {
-      style: {
-        color: T.text,
-        minWidth: 0,
-        overflow: "hidden",
-        textOverflow: "ellipsis"
-      }
-    }, trunc(o.scriptpubkey_address)), React.createElement("span", {
-      style: {
+    }, "Solid red"), " = a deterministic link (provable on-chain); fainter threads are ambiguous \u2014 the more they blur, the less any single link can be proven."), React.createElement(FlowGraph, {
+      inputs: (tx.vin || []).map((v, i) => ({
+        title: v.prevout ? trunc(v.prevout.scriptpubkey_address) : "input " + (i + 1) + " (no UTXO data)",
+        sub: v.prevout ? sats(v.prevout.value) + " · " + v.prevout.scriptpubkey_type : "unknown",
+        faint: !v.prevout
+      })),
+      outputs: (tx.vout || []).map((o, i) => ({
+        title: trunc(o.scriptpubkey_address),
+        sub: sats(o.value) + " · " + o.scriptpubkey_type,
         color: outColor(o, i),
-        flexShrink: 0,
-        fontSize: 9
-      }
-    }, outNote(o, i))), React.createElement("div", {
-      style: {
-        color: T.textDim,
-        fontSize: 10,
-        marginTop: 2
-      }
-    }, sats(o.value), " \xB7 ", o.scriptpubkey_type), detOut.has(i) && React.createElement("div", {
-      style: {
-        color: T.red,
-        fontSize: 9,
-        marginTop: 3,
-        letterSpacing: .3
-      }
-    }, "\u26D3 provably from these inputs"))))), React.createElement("div", {
+        note: outNote(o, i),
+        det: detOut.has(i),
+        address: o.scriptpubkey_address && !o.scriptpubkey_address.startsWith("script:") && isValidBitcoinAddress(o.scriptpubkey_address) ? o.scriptpubkey_address : null
+      })),
+      lp: link.available ? link.lp : null,
+      outIdx: link.available ? link.outIdx : null,
+      isMobile: isMobile,
+      onAudit: onScan ? a => onScan(a) : null
+    }), React.createElement("div", {
       style: {
         display: "flex",
         flexWrap: "wrap",
@@ -11394,6 +11566,14 @@ function TransactionInspector({
     placeholder: "cHNidP8B\u2026  or  0200000001\u2026",
     "aria-label": "Paste a PSBT (base64), raw transaction hex, or a transaction id",
     spellCheck: false,
+    onFocus: e => {
+      e.target.style.borderColor = T.cyan;
+      e.target.style.boxShadow = `0 0 0 3px ${T.cyan}22`;
+    },
+    onBlur: e => {
+      e.target.style.borderColor = T.border;
+      e.target.style.boxShadow = "none";
+    },
     style: {
       width: "100%",
       boxSizing: "border-box",
@@ -11407,7 +11587,8 @@ function TransactionInspector({
       fontFamily: T.mono,
       fontSize: 12.5,
       lineHeight: 1.5,
-      outline: "none"
+      outline: "none",
+      transition: "border .15s, box-shadow .2s"
     }
   }), React.createElement("div", {
     style: {
@@ -11944,6 +12125,14 @@ function XpubScan({
     placeholder: "zpub6r\u2026 / xpub6C\u2026 / ypub6X\u2026",
     "aria-label": "Paste your extended public key (xpub, ypub, or zpub)",
     spellCheck: false,
+    onFocus: e => {
+      e.target.style.borderColor = T.cyan;
+      e.target.style.boxShadow = `0 0 0 3px ${T.cyan}22`;
+    },
+    onBlur: e => {
+      e.target.style.borderColor = T.border;
+      e.target.style.boxShadow = "none";
+    },
     style: {
       width: "100%",
       boxSizing: "border-box",
@@ -11957,7 +12146,8 @@ function XpubScan({
       fontFamily: T.mono,
       fontSize: 12.5,
       lineHeight: 1.5,
-      outline: "none"
+      outline: "none",
+      transition: "border .15s, box-shadow .2s"
     }
   }), React.createElement("div", {
     style: {
