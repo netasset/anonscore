@@ -2715,17 +2715,20 @@ const PROOF = {
   heuristic: { glyph: "?", dash: "1.5 3", verb: "consistent with", label: "Heuristic", note: "a weak tell that can misfire" },
 };
 // A compact legend that decodes the line styles beside any connection graph.
-const EpistemicLegend = ({ kinds = ["proven", "inferred"], color = T.textMid }) => (
-  <div role="img" aria-label={"Legend: " + kinds.map(k => PROOF[k].label + " = " + PROOF[k].note).join("; ")}
-    style={{ display: "flex", flexWrap: "wrap", gap: 14, marginTop: 8 }}>
-    {kinds.map(k => (
-      <span key={k} style={{ display: "inline-flex", alignItems: "center", gap: 6, fontFamily: T.mono, fontSize: 9.5, color: T.textDim }}>
-        <svg width="22" height="8" aria-hidden="true"><line x1="1" y1="4" x2="21" y2="4" stroke={color} strokeWidth={k === "proven" ? 2.2 : 1.3} strokeDasharray={PROOF[k].dash === "none" ? undefined : PROOF[k].dash} strokeLinecap="round" /></svg>
-        <span style={{ color: T.textMid }}>{PROOF[k].glyph} {PROOF[k].label}</span>
-      </span>
-    ))}
-  </div>
-);
+const EpistemicLegend = ({ kinds = ["proven", "inferred"], color = T.textMid, colors }) => {
+  const cf = k => (colors && colors[k]) || color;
+  return (
+    <div role="img" aria-label={"Legend: " + kinds.map(k => PROOF[k].label + " = " + PROOF[k].note).join("; ")}
+      style={{ display: "flex", flexWrap: "wrap", gap: 14, marginTop: 8 }}>
+      {kinds.map(k => (
+        <span key={k} style={{ display: "inline-flex", alignItems: "center", gap: 6, fontFamily: T.mono, fontSize: 9.5, color: T.textDim }}>
+          <svg width="22" height="8" aria-hidden="true"><line x1="1" y1="4" x2="21" y2="4" stroke={cf(k)} strokeWidth={k === "proven" ? 2.2 : 1.3} strokeDasharray={PROOF[k].dash === "none" ? undefined : PROOF[k].dash} strokeLinecap="round" /></svg>
+          <span style={{ color: T.textMid }}>{PROOF[k].glyph} {PROOF[k].label}</span>
+        </span>
+      ))}
+    </div>
+  );
+};
 
 function Toast({ toasts }) {
   return (
@@ -6524,6 +6527,33 @@ function computeCluster(txs, address) {
   return { linked, spends, cjExcluded, sample: list.length };
 }
 
+// INFERRED neighbours — the addresses this one has TRANSACTED with (paid to /
+// received from), as opposed to the PROVEN same-owner cluster above. The tx is
+// on-chain fact, but the counterparty relationship is softer: a "destination"
+// can be your own change, and a counterparty address rarely maps 1:1 to a real
+// entity — so these render as INFERRED (dashed) links, never as proof. CoinJoins
+// excluded (ambiguous), the proven-cluster members excluded (they're drawn as the
+// inner ring), change-back-to-an-input excluded (not a counterparty).
+function computeCounterparties(txs, address, exclude) {
+  const skip = exclude instanceof Set ? exclude : new Set(exclude || []);
+  const cp = new Map(); // addr -> { paid, received }
+  (txs || []).forEach(tx => {
+    const vin = tx.vin || [], vout = tx.vout || [];
+    if (isCoinJoinShape(vin, vout)) return;
+    const inAddrs = vin.map(v => v.prevout?.scriptpubkey_address).filter(Boolean);
+    const inSet = new Set(inAddrs);
+    if (inSet.has(address)) {
+      vout.forEach(o => { const a = o.scriptpubkey_address; if (a && a !== address && !inSet.has(a)) { const e = cp.get(a) || { paid: 0, received: 0 }; e.paid++; cp.set(a, e); } });
+    } else if (vout.some(o => o.scriptpubkey_address === address)) {
+      inSet.forEach(a => { if (a && a !== address) { const e = cp.get(a) || { paid: 0, received: 0 }; e.received++; cp.set(a, e); } });
+    }
+  });
+  return [...cp.entries()]
+    .filter(([a]) => a !== address && !skip.has(a))
+    .map(([addr, e]) => ({ addr, count: e.paid + e.received, kind: e.paid && e.received ? "both" : e.paid ? "paid" : "received" }))
+    .sort((a, b) => b.count - a.count);
+}
+
 /* ─────────────────────────────────────────────
    ADDRESS-POISONING DETECTOR — scammers vanity-generate an address matching
    the first & last characters of yours, plant it in your history with a tiny
@@ -6562,75 +6592,116 @@ function ClusterMap({ txs, address, isMobile, entity, onScan }) {
   const isDemo = address === "DEMO" || address === "DEMO_A";
   const trunc = a => a.length > 17 ? `${a.slice(0, 10)}…${a.slice(-5)}` : a;
   const you = third ? "this wallet" : "your wallet";
-  // Radial graph geometry — scanned address centred, linked addresses orbiting.
-  const shown = linked.slice(0, 8);
-  const W = 520, H = 220, CX = W / 2, CY = H / 2, RX = 185, RY = 78;
-  const pos = i => {
-    const a = (i / shown.length) * Math.PI * 2 - Math.PI / 2;
-    return { x: CX + RX * Math.cos(a), y: CY + RY * Math.sin(a) };
-  };
+  // Two concentric rings around the subject: PROVEN same-owner cluster (inner,
+  // solid) + INFERRED counterparties this address transacted with (outer, dashed).
+  const clusterSet = new Set(linked.map(n => n.addr));
+  const counterparties = computeCounterparties(txs, address, clusterSet);
+  const hasGraph = linked.length > 0 || counterparties.length > 0;
+  const innerShown = linked.slice(0, 8), outerShown = counterparties.slice(0, 10);
+  const W = 480, H = 424, CX = 240, CY = 206, RIN = 88, ROUT = 164;
+  const ringPos = (i, n, R) => { const a = (i / Math.max(n, 1)) * Math.PI * 2 - Math.PI / 2; return { x: CX + R * Math.cos(a), y: CY + R * Math.sin(a) }; };
   const listRows = showAll ? linked : linked.slice(0, 4);
+  const cpRows = showAll ? counterparties : counterparties.slice(0, 4);
   return (
     <div style={{ background: T.card, border: `1px solid ${linked.length ? T.red + "33" : T.border}`, borderRadius: 16, padding: isMobile ? "16px 18px" : "20px 24px" }}>
-      <div style={{ fontFamily: T.mono, fontSize: 9, color: linked.length ? T.red : T.cyan, letterSpacing: 2, marginBottom: 8 }}>CLUSTER EXPOSURE</div>
+      <div style={{ fontFamily: T.mono, fontSize: 9, color: linked.length ? T.red : T.cyan, letterSpacing: 2, marginBottom: 8 }}>CONNECTIONS</div>
       <div style={{ fontFamily: T.serif, fontSize: isMobile ? 19 : 22, color: T.text, fontWeight: 400, marginBottom: 8 }}>
-        {linked.length ? `The chain ties ${linked.length} other address${linked.length !== 1 ? "es" : ""} to ${you}` : "Addresses the chain would tie to this one"}
+        {hasGraph ? `The neighborhood the chain draws around ${you}` : "The neighborhood the chain would draw around this address"}
       </div>
       <div style={{ fontSize: 13, color: T.textMid, lineHeight: 1.65 }}>
-        Spend from several addresses in one transaction and every analyst assumes a single owner signed them all — the <strong style={{ color: T.text }}>common-input heuristic</strong>, the workhorse of chain surveillance. This is the cluster it builds around {you}, computed in your browser from the transactions above. These are <strong style={{ color: T.text }}>proven</strong> links — solid, thickening with each shared spend.
+        {linked.length > 0
+          ? <><strong style={{ color: T.red }}>{linked.length} address{linked.length !== 1 ? "es" : ""}</strong> are <strong style={{ color: T.text }}>provably {you}</strong> via the common-input heuristic (spent together — solid links). </>
+          : "No co-spend proves other addresses are the same owner. "}
+        {counterparties.length > 0 && <><strong style={{ color: T.amber }}>{counterparties.length}</strong> more are <strong style={{ color: T.text }}>inferred counterparties</strong> — addresses {you} paid or was paid by (dashed; a destination can be your own change, so these are likely, not proven). </>}
+        Computed in your browser from the transactions above.
       </div>
-      {linked.length > 0 && (
+      {hasGraph && (
         <>
-          <EpistemicLegend kinds={["proven"]} color={T.red} />
+          <EpistemicLegend kinds={["proven", "inferred"]} colors={{ proven: T.red, inferred: T.amber }} />
           <svg viewBox={`0 0 ${W} ${H}`} role="img"
-            aria-label={`Cluster graph: ${linked.length} address${linked.length !== 1 ? "es" : ""} linked to the scanned address by co-spending.`}
-            style={{ display: "block", width: "100%", maxWidth: 560, height: "auto", margin: "14px auto 0", overflow: "visible" }}>
-            {shown.map((n, i) => {
-              const p = pos(i);
+            aria-label={`Connections graph: ${linked.length} proven same-owner address${linked.length !== 1 ? "es" : ""} and ${counterparties.length} inferred counterpart${counterparties.length !== 1 ? "ies" : "y"} around the scanned address.`}
+            style={{ display: "block", width: "100%", maxWidth: 460, height: "auto", margin: "14px auto 0", overflow: "visible" }}>
+            {/* outer ring = INFERRED counterparties (dashed amber) */}
+            {outerShown.map((n, i) => {
+              const p = ringPos(i, outerShown.length, ROUT);
               return (
-                <g key={n.addr} style={{ animation: `clusterIn .5s ease ${0.15 + i * 0.09}s both` }}>
-                  <line x1={CX} y1={CY} x2={p.x} y2={p.y} stroke={T.red} strokeOpacity="0.5" strokeWidth={1 + Math.min(n.count, 5) * 0.35} strokeLinecap="round" />
-                  <circle cx={p.x} cy={p.y} r="11" fill={T.red} opacity="0.14" />
-                  <circle cx={p.x} cy={p.y} r="6" fill={T.bg} stroke={T.red} strokeWidth="1.6">
-                    <title>{n.addr} — co-spent with the scanned address in {n.count} transaction{n.count !== 1 ? "s" : ""}</title>
+                <g key={"cp" + n.addr} style={{ animation: `clusterIn .5s ease ${0.25 + i * 0.05}s both` }}>
+                  <line x1={CX} y1={CY} x2={p.x} y2={p.y} stroke={T.amber} strokeOpacity="0.4" strokeWidth="1" strokeDasharray="5 3" strokeLinecap="round" />
+                  <circle cx={p.x} cy={p.y} r="5" fill={T.bg} stroke={T.amber} strokeWidth="1.4" strokeDasharray="2.4 1.6">
+                    <title>{n.addr} — {n.kind === "both" ? "paid and received" : n.kind === "paid" ? "paid" : "received from"}, {n.count}×  (inferred counterparty)</title>
                   </circle>
-                  <text x={p.x} y={p.y + (p.y >= CY ? 22 : -14)} textAnchor="middle" fontFamily={T.mono} fontSize="8.5" fill={T.textMid}>{trunc(n.addr)}</text>
+                  <text x={p.x} y={p.y + (p.y >= CY ? 15 : -9)} textAnchor="middle" fontFamily={T.mono} fontSize="7.5" fill={T.textDim}>{trunc(n.addr)}</text>
                 </g>
               );
             })}
-            {linked.length > shown.length && (
-              <text x={CX} y={H - 4} textAnchor="middle" fontFamily={T.mono} fontSize="9" fill={T.textDim}>+{linked.length - shown.length} more not drawn</text>
+            {/* inner ring = PROVEN cluster (solid red) */}
+            {innerShown.map((n, i) => {
+              const p = ringPos(i, innerShown.length, RIN);
+              return (
+                <g key={n.addr} style={{ animation: `clusterIn .5s ease ${0.15 + i * 0.07}s both` }}>
+                  <line x1={CX} y1={CY} x2={p.x} y2={p.y} stroke={T.red} strokeOpacity="0.55" strokeWidth={1.2 + Math.min(n.count, 5) * 0.4} strokeLinecap="round" />
+                  <circle cx={p.x} cy={p.y} r="11" fill={T.red} opacity="0.14" />
+                  <circle cx={p.x} cy={p.y} r="6" fill={T.bg} stroke={T.red} strokeWidth="1.6">
+                    <title>{n.addr} — co-spent with the scanned address in {n.count} transaction{n.count !== 1 ? "s" : ""} (proven common-input)</title>
+                  </circle>
+                  <text x={p.x} y={p.y + (p.y >= CY ? 18 : -11)} textAnchor="middle" fontFamily={T.mono} fontSize="8" fill={T.textMid}>{trunc(n.addr)}</text>
+                </g>
+              );
+            })}
+            {(linked.length > innerShown.length || counterparties.length > outerShown.length) && (
+              <text x={CX} y={H - 2} textAnchor="middle" fontFamily={T.mono} fontSize="9" fill={T.textDim}>
+                {[linked.length > innerShown.length ? `+${linked.length - innerShown.length} proven` : null, counterparties.length > outerShown.length ? `+${counterparties.length - outerShown.length} inferred` : null].filter(Boolean).join(" · ")} not drawn
+              </text>
             )}
             <circle cx={CX} cy={CY} r="30" fill={T.cyan} style={{ animation: "haloPulse 4s ease-in-out infinite" }} />
             <circle cx={CX} cy={CY} r="21" fill={T.bg} stroke={T.cyan} strokeWidth="2" />
             <text x={CX} y={CY + 3.5} textAnchor="middle" fontFamily={T.mono} fontSize="9" fill={T.cyan} letterSpacing="1">{third ? "WALLET" : "YOU"}</text>
           </svg>
-          <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 14 }}>
-            {listRows.map(n => {
-              const scannable = !!onScan && !isDemo && isValidBitcoinAddress(n.addr);
-              return (
-                <div key={n.addr} style={{ display: "flex", alignItems: "center", gap: 10, background: T.surface, border: `1px solid ${T.borderLo}`, borderRadius: 10, padding: "8px 12px" }}>
-                  <span style={{ width: 7, height: 7, borderRadius: "50%", background: T.red, flexShrink: 0 }} />
-                  <span style={{ fontFamily: T.mono, fontSize: 12, color: T.text, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>{trunc(n.addr)}</span>
-                  <span style={{ fontFamily: T.mono, fontSize: 10, color: T.textDim, flexShrink: 0 }}>co-spent ×{n.count}</span>
-                  {scannable && <AuditButton onClick={() => onScan(n.addr)} ariaLabel={"Audit linked address " + n.addr} style={{ marginLeft: "auto" }} />}
-                </div>
-              );
-            })}
-            {linked.length > 4 && (
-              <button onClick={() => setShowAll(s => !s)}
-                style={{ background: "none", border: "none", fontFamily: T.mono, fontSize: 11, color: T.cyan, cursor: "pointer", padding: "4px 0", textAlign: "left" }}>
-                {showAll ? "▲ show fewer" : `▼ show all ${linked.length} linked addresses`}
-              </button>
-            )}
-          </div>
+          {linked.length > 0 && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 14 }}>
+              <div style={{ fontFamily: T.mono, fontSize: 9, color: T.red, letterSpacing: 1.5 }}>⛓ PROVEN — SAME OWNER</div>
+              {listRows.map(n => {
+                const scannable = !!onScan && !isDemo && isValidBitcoinAddress(n.addr);
+                return (
+                  <div key={n.addr} style={{ display: "flex", alignItems: "center", gap: 10, background: T.surface, border: `1px solid ${T.borderLo}`, borderRadius: 10, padding: "8px 12px" }}>
+                    <span style={{ width: 7, height: 7, borderRadius: "50%", background: T.red, flexShrink: 0 }} />
+                    <span style={{ fontFamily: T.mono, fontSize: 12, color: T.text, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>{trunc(n.addr)}</span>
+                    <span style={{ fontFamily: T.mono, fontSize: 10, color: T.textDim, flexShrink: 0 }}>co-spent ×{n.count}</span>
+                    {scannable && <AuditButton onClick={() => onScan(n.addr)} ariaLabel={"Audit linked address " + n.addr} style={{ marginLeft: "auto" }} />}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          {counterparties.length > 0 && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 12 }}>
+              <div style={{ fontFamily: T.mono, fontSize: 9, color: T.amber, letterSpacing: 1.5 }}>≈ INFERRED — COUNTERPARTIES</div>
+              {cpRows.map(n => {
+                const scannable = !!onScan && !isDemo && isValidBitcoinAddress(n.addr);
+                return (
+                  <div key={"cp" + n.addr} style={{ display: "flex", alignItems: "center", gap: 10, background: T.surface, border: `1px solid ${T.borderLo}`, borderRadius: 10, padding: "8px 12px" }}>
+                    <span style={{ width: 7, height: 7, borderRadius: "50%", border: `1.5px solid ${T.amber}`, flexShrink: 0 }} />
+                    <span style={{ fontFamily: T.mono, fontSize: 12, color: T.text, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>{trunc(n.addr)}</span>
+                    <span style={{ fontFamily: T.mono, fontSize: 10, color: T.textDim, flexShrink: 0 }}>{n.kind === "both" ? "paid + received" : n.kind} ×{n.count}</span>
+                    {scannable && <AuditButton onClick={() => onScan(n.addr)} color={T.amber} ariaLabel={"Audit counterparty " + n.addr} style={{ marginLeft: "auto" }} />}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          {(linked.length > 4 || counterparties.length > 4) && (
+            <button onClick={() => setShowAll(s => !s)}
+              style={{ background: "none", border: "none", fontFamily: T.mono, fontSize: 11, color: T.cyan, cursor: "pointer", padding: "8px 0 0", textAlign: "left" }}>
+              {showAll ? "▲ show fewer" : `▼ show all (${linked.length} proven · ${counterparties.length} inferred)`}
+            </button>
+          )}
         </>
       )}
-      {linked.length === 0 && (
+      {!hasGraph && (
         <div style={{ marginTop: 12, background: T.green + "12", border: `1px solid ${T.green}45`, borderRadius: 10, padding: "10px 14px", fontSize: 13, color: T.textMid, lineHeight: 1.6 }}>
           <span style={{ color: T.green, fontFamily: T.mono }}>✓</span>{" "}
           {spends === 0
-            ? `None of the ${sample} most recent transactions spend from this address together with others — the heuristic has nothing to work with here.`
+            ? `None of the ${sample} most recent transactions spend from this address together with others, and no counterparties stand out — the graph has nothing to draw here.`
             : `No co-spend links across ${spends} spend${spends !== 1 ? "s" : ""} — each one used only this address, so the workhorse heuristic comes up empty.`}
         </div>
       )}
@@ -8257,7 +8328,7 @@ function App() {
 // unit-test the built bundle directly). No state, no user data: pure functions.
 window.__ANONSCORE_TEST__ = Object.freeze({
   runEngine, runLightningEngine, classifyUtxo, scoreGrade,
-  computeCluster, computePoisoning, isLookalikeAddress, computeActivityClock,
+  computeCluster, computeCounterparties, computePoisoning, isLookalikeAddress, computeActivityClock,
   isValidBitcoinAddress, isValidLightningPubkey, detectInputType,
   // Transaction Inspector — parser + analysis (validated against BIP174/173/350)
   parsePsbt, parseRawTx, classifyScript, parseTransactionInput, detectTxInput,

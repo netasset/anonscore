@@ -491,6 +491,24 @@ const unit = await page.evaluate(() => {
     t("cluster: receive-only history links nothing", c3.linked.length === 0 && c3.spends === 0);
   }
 
+  // — Counterparties: inferred neighbours (paid-to / received-from) —
+  {
+    const dest = "bc1qdest000000000000000000000000000000000";
+    // spend from me → dest is a "paid" counterparty; change back to me is excluded
+    const spend = { txid: "s1", vin: [pv(me)], vout: [{ value: 4e6, scriptpubkey_address: dest }, { value: 1e6, scriptpubkey_address: me }] };
+    const cp1 = E.computeCounterparties([spend], me, new Set());
+    t("counterparties: spend destination is an inferred 'paid' counterparty (change excluded)", cp1.length === 1 && cp1[0].addr === dest && cp1[0].kind === "paid");
+    // receive from sib1 → 'received'
+    const recv2 = { txid: "r1", vin: [pv(sib1)], vout: [{ value: 1e6, scriptpubkey_address: me }] };
+    const cp2 = E.computeCounterparties([recv2], me, new Set());
+    t("counterparties: sender of a received payment is an inferred 'received' counterparty", cp2.length === 1 && cp2[0].addr === sib1 && cp2[0].kind === "received");
+    // proven-cluster members are excluded from the inferred ring (no double-draw)
+    t("counterparties: proven-cluster members are excluded", E.computeCounterparties([recv2], me, new Set([sib1])).length === 0);
+    // CoinJoin is excluded (ambiguous) — its outputs are not counterparties
+    const cj2 = { txid: "cj1", vin: [pv(me), pv(sib1), pv(sib2)], vout: [{ value: 5e6, scriptpubkey_address: "x1" }, { value: 5e6, scriptpubkey_address: "x2" }, { value: 5e6, scriptpubkey_address: "x3" }, { value: 5e6, scriptpubkey_address: "x4" }, { value: 5e6, scriptpubkey_address: "x5" }] };
+    t("counterparties: CoinJoin outputs are excluded", E.computeCounterparties([cj2], me, new Set()).length === 0);
+  }
+
   // — Address poisoning: lookalike matching —
   {
     const bait = "bc1qm34lx9k2v7d0trplq5u8snw6hjazy4j77s3h"; // head+tail match `me`, middle differs
