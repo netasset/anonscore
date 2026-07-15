@@ -27,8 +27,12 @@ export default {
       return new Response("Method not allowed", { status: 405, headers: corsHeaders(origin) });
     }
 
-    // Block non-matching origins (empty origin = direct curl, allow for debugging)
-    if (origin && !ALLOWED_ORIGINS.has(origin)) {
+    // Require a matching Origin. The browser always sends Origin on the
+    // cross-origin POST the app makes, so this never blocks real app traffic; a
+    // MISSING Origin means a direct non-browser call (curl), which we now reject
+    // so the endpoint can't be driven as a free Claude proxy on the operator's
+    // credits. Set env.DEBUG_ALLOW_NO_ORIGIN=1 to bypass for local testing.
+    if (!env.DEBUG_ALLOW_NO_ORIGIN && (!origin || !ALLOWED_ORIGINS.has(origin))) {
       return new Response("Forbidden", { status: 403 });
     }
 

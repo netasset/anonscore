@@ -10973,6 +10973,20 @@ function TransactionInspector({
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
   const detected = detectTxInput(raw);
+  const derived = useMemo(() => {
+    if (!result) return null;
+    const tx = result.tx;
+    return {
+      tx,
+      a: analyzeTx(tx),
+      change: guessChange(tx),
+      clus: clusterUnification(tx),
+      fr: feeRate(tx),
+      link: txLinkability(tx),
+      fp: fingerprintTx(tx),
+      cj: classifyCoinjoin(tx.vin, tx.vout)
+    };
+  }, [result]);
   useEffect(() => {
     const prev = document.title;
     document.title = "Transaction Inspector — pre-broadcast privacy check — AnonScore";
@@ -11020,13 +11034,17 @@ function TransactionInspector({
     ...extra
   });
   let report = null;
-  if (result) {
-    const tx = result.tx;
-    const a = analyzeTx(tx);
-    const change = guessChange(tx);
-    const clus = clusterUnification(tx);
-    const fr = feeRate(tx);
-    const link = txLinkability(tx);
+  if (result && derived) {
+    const {
+      tx,
+      a,
+      change,
+      clus,
+      fr,
+      link,
+      fp,
+      cj
+    } = derived;
     const ent = link.available ? link.N === 1 ? {
       c: T.red,
       t: "Fully deterministic"
@@ -11043,8 +11061,6 @@ function TransactionInspector({
       c: T.green,
       t: "Strongly ambiguous"
     } : null;
-    const fp = fingerprintTx(tx);
-    const cj = classifyCoinjoin(tx.vin, tx.vout);
     const lpCell = v => Math.abs(v - 1) < 1e-9 ? {
       bg: T.red,
       fg: T.bg,
@@ -11676,6 +11692,7 @@ function TransactionInspector({
     onChange: e => {
       setRaw(e.target.value);
       setError("");
+      setResult(null);
     },
     placeholder: "cHNidP8B\u2026  or  0200000001\u2026",
     "aria-label": "Paste a PSBT (base64), raw transaction hex, or a transaction id",

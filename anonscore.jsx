@@ -5187,6 +5187,15 @@ function TransactionInspector({ onBack, isMobile, onScan }) {
   const [error, setError] = useState("");
   const detected = detectTxInput(raw);
 
+  // The whole analysis pipeline (incl. the Boltzmann entropy counter) computed
+  // ONCE per Inspect and memoised on the parsed tx — not on every keystroke /
+  // language-toggle re-render, which previously re-ran the entire pipeline.
+  const derived = useMemo(() => {
+    if (!result) return null;
+    const tx = result.tx;
+    return { tx, a: analyzeTx(tx), change: guessChange(tx), clus: clusterUnification(tx), fr: feeRate(tx), link: txLinkability(tx), fp: fingerprintTx(tx), cj: classifyCoinjoin(tx.vin, tx.vout) };
+  }, [result]);
+
   useEffect(() => {
     const prev = document.title;
     document.title = "Transaction Inspector — pre-broadcast privacy check — AnonScore";
@@ -5215,16 +5224,9 @@ function TransactionInspector({ onBack, isMobile, onScan }) {
 
   // ---- report ----
   let report = null;
-  if (result) {
-    const tx = result.tx;
-    const a = analyzeTx(tx);
-    const change = guessChange(tx);
-    const clus = clusterUnification(tx);
-    const fr = feeRate(tx);
-    const link = txLinkability(tx);
+  if (result && derived) {
+    const { tx, a, change, clus, fr, link, fp, cj } = derived;
     const ent = link.available ? (link.N === 1 ? { c: T.red, t: "Fully deterministic" } : link.entropy < 1 ? { c: T.red, t: "Very low ambiguity" } : link.entropy < 1.585 ? { c: T.amber, t: "Low ambiguity" } : link.entropy < 3 ? { c: T.cyan, t: "Ambiguous" } : { c: T.green, t: "Strongly ambiguous" }) : null;
-    const fp = fingerprintTx(tx);
-    const cj = classifyCoinjoin(tx.vin, tx.vout);
     const lpCell = v => Math.abs(v - 1) < 1e-9 ? { bg: T.red, fg: T.bg, txt: "1" } : v === 0 ? { bg: T.surface, fg: T.textDim, txt: "0" } : { bg: T.red + Math.round(18 + v * 60).toString(16).padStart(2, "0"), fg: T.text, txt: v.toFixed(2).replace(/^0/, "") };
     const inAddrs = new Set((tx.vin || []).map(v => v.prevout && v.prevout.scriptpubkey_address).filter(Boolean));
     const outColor = (o, i) => _txDust(o) ? T.red : (o.scriptpubkey_address && inAddrs.has(o.scriptpubkey_address)) ? T.red
@@ -5447,7 +5449,7 @@ function TransactionInspector({ onBack, isMobile, onScan }) {
 
         <div style={{ background: T.card, border: `1.5px solid ${detected ? T.cyan + "55" : T.border}`, borderRadius: 16, padding: isMobile ? "16px" : "20px 22px", transition: "border .2s" }}>
           <label htmlFor="tx-input" style={{ display: "block", fontFamily: T.mono, fontSize: 9, color: T.textDim, letterSpacing: 1.5, marginBottom: 8 }}>PSBT (BASE64) · RAW TX HEX · TXID</label>
-          <textarea id="tx-input" value={raw} onChange={e => { setRaw(e.target.value); setError(""); }}
+          <textarea id="tx-input" value={raw} onChange={e => { setRaw(e.target.value); setError(""); setResult(null); }}
             placeholder="cHNidP8B…  or  0200000001…"
             aria-label="Paste a PSBT (base64), raw transaction hex, or a transaction id"
             spellCheck={false}
