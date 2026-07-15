@@ -285,7 +285,7 @@ const STRINGS = {
     "hero.h1.line1": "Is your Bitcoin",
     "hero.h1.line2": "stack leaking?",
     "hero.h1.em": "Find out in 60 seconds.",
-    "hero.sub": "Paste a Bitcoin address or a Lightning node pubkey. Get a privacy score, every issue explained, and a ranked fix plan — free, open source, nothing stored.",
+    "hero.sub": "Surveillance firms run these exact heuristics against you. We run them for you — entirely in your browser, before anyone else looks. A privacy score, every issue explained, and a ranked fix plan. Free, open source, nothing stored.",
     "spectrum.low": "0 · Fully traceable",
     "spectrum.avg": "typical wallet: ~38",
     "spectrum.high": "100 · Invisible",
@@ -319,7 +319,7 @@ const STRINGS = {
     "sample.lightning": "⚡ Lightning node",
     "recent.title": "RECENT SCANS",
     "err.empty": "Please enter a Bitcoin address or Lightning node pubkey.",
-    "err.invalid": "Paste a Bitcoin address (bc1…, 1…, 3…) or a Lightning node pubkey (66-char hex).",
+    "err.invalid": "Not recognized. This console reads: a Bitcoin address (bc1…, 1…, 3…), a Lightning node pubkey (66-char hex), a BOLT11 invoice, a BOLT12 offer, an LNURL, a Silent Payment address (sp1…), an xpub/ypub/zpub, a PSBT or raw transaction, or a Cashu token.",
     "err.lnaddress": "Lightning addresses can't be audited yet — paste your node's 66-character pubkey instead.",
     "finalcta.h2.a": "A typical wallet scores ~38/100.",
     "finalcta.h2.b": "Where does yours land?",
@@ -346,7 +346,7 @@ const STRINGS = {
     "hero.h1.line1": "¿Tu stack de Bitcoin",
     "hero.h1.line2": "está filtrando datos?",
     "hero.h1.em": "Descúbrelo en 60 segundos.",
-    "hero.sub": "Pega una dirección de Bitcoin o la clave pública de un nodo Lightning. Obtén una puntuación de privacidad, cada problema explicado y un plan de mejora priorizado — gratis, código abierto, nada se guarda.",
+    "hero.sub": "Las firmas de vigilancia ejecutan estas mismas heurísticas contra ti. Nosotros las ejecutamos para ti — completamente en tu navegador, antes de que nadie más mire. Una puntuación de privacidad, cada problema explicado y un plan de mejora priorizado. Gratis, código abierto, nada se guarda.",
     "spectrum.low": "0 · Totalmente rastreable",
     "spectrum.avg": "billetera típica: ~38",
     "spectrum.high": "100 · Invisible",
@@ -380,7 +380,7 @@ const STRINGS = {
     "sample.lightning": "⚡ Nodo Lightning",
     "recent.title": "ESCANEOS RECIENTES",
     "err.empty": "Ingresa una dirección de Bitcoin o la clave pública de un nodo Lightning.",
-    "err.invalid": "Pega una dirección de Bitcoin (bc1…, 1…, 3…) o una clave pública de nodo Lightning (66 caracteres hex).",
+    "err.invalid": "No reconocido. Esta consola lee: una dirección de Bitcoin (bc1…, 1…, 3…), la clave pública de un nodo Lightning (66 hex), una factura BOLT11, una oferta BOLT12, un LNURL, una dirección de Pago Silencioso (sp1…), un xpub/ypub/zpub, una PSBT o transacción sin firmar, o un token Cashu.",
     "err.lnaddress": "Las direcciones Lightning aún no se pueden auditar — pega la clave pública (66 caracteres hex) de tu nodo.",
     "finalcta.h2.a": "Una billetera típica puntúa ~38/100.",
     "finalcta.h2.b": "¿Dónde queda la tuya?",
@@ -4810,6 +4810,115 @@ const EpistemicLegend = ({
     }
   }, PROOF[k].glyph, " ", PROOF[k].label))));
 };
+const NAV_LINKS = [{
+  page: "inspector",
+  label: "Inspector",
+  href: "/?page=inspector"
+}, {
+  page: "xpub",
+  label: "Wallet scan",
+  href: "/?page=xpub"
+}, {
+  page: "wallets",
+  label: "Wallets",
+  href: "/?page=wallets"
+}, {
+  page: "cases",
+  label: "Case Files",
+  href: "/?page=cases"
+}];
+function SiteNav({
+  isMobile,
+  onBack,
+  backLabel = "← Back",
+  onNav,
+  current,
+  badge,
+  badgeColor = T.cyan
+}) {
+  const go = page => e => {
+    if (onNav && e.button === 0 && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey) {
+      e.preventDefault();
+      onNav(page);
+    }
+  };
+  return React.createElement("nav", {
+    "aria-label": "AnonScore",
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: 10,
+      padding: isMobile ? "12px 16px" : "14px 32px",
+      borderBottom: `1px solid ${T.border}`,
+      background: T.bg,
+      position: "sticky",
+      top: 0,
+      zIndex: 100
+    }
+  }, onBack && React.createElement("button", {
+    onClick: onBack,
+    style: {
+      background: "transparent",
+      border: `1.5px solid ${T.border}`,
+      borderRadius: 8,
+      padding: "7px 12px",
+      color: T.textMid,
+      fontFamily: T.sans,
+      fontSize: 13,
+      cursor: "pointer",
+      transition: "border .15s"
+    },
+    onMouseOver: e => e.currentTarget.style.borderColor = T.cyan,
+    onMouseOut: e => e.currentTarget.style.borderColor = T.border
+  }, backLabel), React.createElement("a", {
+    href: "/",
+    onClick: go("landing"),
+    "aria-label": "AnonScore home",
+    style: {
+      fontFamily: T.display,
+      fontSize: 15,
+      letterSpacing: 4,
+      fontWeight: 700,
+      color: T.text,
+      textDecoration: "none"
+    }
+  }, "ANON", React.createElement("span", {
+    style: {
+      color: T.cyan
+    }
+  }, "SCORE")), React.createElement("div", {
+    style: {
+      flex: 1
+    }
+  }), !isMobile && NAV_LINKS.filter(l => l.page !== current).map(l => React.createElement("a", {
+    key: l.page,
+    href: l.href,
+    onClick: go(l.page),
+    style: {
+      fontFamily: T.mono,
+      fontSize: 10,
+      color: T.textMid,
+      textDecoration: "none",
+      letterSpacing: 0.5,
+      padding: "4px 6px",
+      transition: "color .15s"
+    },
+    onMouseOver: e => e.currentTarget.style.color = T.cyan,
+    onMouseOut: e => e.currentTarget.style.color = T.textMid
+  }, l.label)), badge && React.createElement("span", {
+    style: {
+      fontFamily: T.mono,
+      fontSize: 9,
+      color: badgeColor,
+      background: badgeColor + "14",
+      border: `1px solid ${badgeColor}44`,
+      borderRadius: 6,
+      padding: "4px 9px",
+      letterSpacing: 1,
+      whiteSpace: "nowrap"
+    }
+  }, badge));
+}
 function Toast({
   toasts
 }) {
@@ -6499,7 +6608,8 @@ const STATUS_META = {
 function CaseFiles({
   onOpenCase,
   onBack,
-  isMobile
+  isMobile,
+  onNav
 }) {
   const PAGE_ROLE_LABEL = "AnonScore case files — notable Bitcoin wallets";
   const [filter, setFilter] = useState("all");
@@ -6514,55 +6624,14 @@ function CaseFiles({
       display: "flex",
       flexDirection: "column"
     }
-  }, React.createElement("nav", {
-    style: {
-      display: "flex",
-      alignItems: "center",
-      gap: 10,
-      padding: isMobile ? "12px 16px" : "12px 32px",
-      borderBottom: `1px solid ${T.border}`,
-      background: T.bg,
-      position: "sticky",
-      top: 0,
-      zIndex: 100
-    }
-  }, React.createElement("button", {
-    onClick: onBack,
-    style: {
-      background: "transparent",
-      border: `1.5px solid ${T.border}`,
-      borderRadius: 8,
-      padding: "7px 12px",
-      color: T.textMid,
-      fontFamily: T.sans,
-      fontSize: 13,
-      cursor: "pointer",
-      transition: "border .15s"
-    },
-    onMouseOver: e => e.currentTarget.style.borderColor = T.cyan,
-    onMouseOut: e => e.currentTarget.style.borderColor = T.border
-  }, "\u2190 Back"), React.createElement("div", {
-    style: {
-      fontFamily: T.display,
-      fontSize: 15,
-      letterSpacing: 4,
-      fontWeight: 700
-    }
-  }, "ANON", React.createElement("span", {
-    style: {
-      color: T.cyan
-    }
-  }, "SCORE")), React.createElement("div", {
-    style: {
-      flex: 1
-    }
+  }, React.createElement(SiteNav, {
+    isMobile: isMobile,
+    onBack: onBack,
+    onNav: onNav,
+    current: "cases",
+    badge: "CASE FILES",
+    badgeColor: T.btc
   }), React.createElement("div", {
-    style: {
-      fontFamily: T.mono,
-      fontSize: 10,
-      color: T.textDim
-    }
-  }, "CASE FILES")), React.createElement("div", {
     style: {
       flex: 1,
       padding: isMobile ? "24px 16px" : "40px 48px",
@@ -6758,7 +6827,8 @@ function CaseDetail({
   caseFile,
   onBack,
   onAnalyze,
-  isMobile
+  isMobile,
+  onNav
 }) {
   const PAGE_ROLE_LABEL = "AnonScore case file: " + caseFile.title;
   const [shareMode, setShareMode] = useState(null);
@@ -6806,59 +6876,15 @@ function CaseDetail({
       display: "flex",
       flexDirection: "column"
     }
-  }, React.createElement("nav", {
-    style: {
-      display: "flex",
-      alignItems: "center",
-      gap: 10,
-      padding: isMobile ? "12px 16px" : "12px 32px",
-      borderBottom: `1px solid ${T.border}`,
-      background: T.bg,
-      position: "sticky",
-      top: 0,
-      zIndex: 100
-    }
-  }, React.createElement("button", {
-    onClick: onBack,
-    style: {
-      background: "transparent",
-      border: `1.5px solid ${T.border}`,
-      borderRadius: 8,
-      padding: "7px 12px",
-      color: T.textMid,
-      fontFamily: T.sans,
-      fontSize: 13,
-      cursor: "pointer"
-    },
-    onMouseOver: e => e.currentTarget.style.borderColor = T.cyan,
-    onMouseOut: e => e.currentTarget.style.borderColor = T.border
-  }, "\u2190 Cases"), React.createElement("div", {
-    style: {
-      fontFamily: T.display,
-      fontSize: 15,
-      letterSpacing: 4,
-      fontWeight: 700
-    }
-  }, "ANON", React.createElement("span", {
-    style: {
-      color: T.cyan
-    }
-  }, "SCORE")), React.createElement("div", {
-    style: {
-      flex: 1
-    }
-  }), React.createElement("span", {
-    style: {
-      fontFamily: T.mono,
-      fontSize: 9,
-      color: cat.color,
-      background: cat.color + "18",
-      border: `1px solid ${cat.color}33`,
-      borderRadius: 4,
-      padding: "3px 8px",
-      letterSpacing: 1
-    }
-  }, "CASE #", caseFile.id)), React.createElement("div", {
+  }, React.createElement(SiteNav, {
+    isMobile: isMobile,
+    onBack: onBack,
+    backLabel: "\u2190 Cases",
+    onNav: onNav,
+    current: "cases",
+    badge: `CASE #${caseFile.id}`,
+    badgeColor: cat.color
+  }), React.createElement("div", {
     style: {
       flex: 1,
       padding: isMobile ? "24px 16px" : "40px 48px",
@@ -7552,7 +7578,8 @@ function Landing({
   onAnalyze,
   isMobile,
   onCases,
-  onNav
+  onNav,
+  onOpenTool
 }) {
   const navLink = page => e => {
     if (onNav && e.button === 0 && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey) {
@@ -7572,6 +7599,7 @@ function Landing({
   const [spInfo, setSpInfo] = useState(null);
   const [lnInvoice, setLnInvoice] = useState(null);
   const [lnPay, setLnPay] = useState(null);
+  const [toolHint, setToolHint] = useState(null);
   const [history, setHistory] = useState(() => getHistory());
   const deleteHistory = addr => {
     removeFromHistory(addr);
@@ -7650,6 +7678,7 @@ function Landing({
     setSpInfo(null);
     setLnInvoice(null);
     setLnPay(null);
+    setToolHint(null);
     if (!v) {
       setError(t("err.empty"));
       return;
@@ -7694,6 +7723,26 @@ function Landing({
           ...cs
         });
         return;
+      }
+      if (detectXpub(v)) {
+        setError("");
+        setToolHint({
+          kind: "xpub",
+          value: v
+        });
+        return;
+      }
+      const txk = detectTxInput(v);
+      if (txk === "psbt" || txk === "rawhex") {
+        try {
+          parseTransactionInput(v);
+          setError("");
+          setToolHint({
+            kind: "tx",
+            value: v
+          });
+          return;
+        } catch {}
       }
       setError(t("err.invalid"));
       return;
@@ -7845,47 +7894,32 @@ function Landing({
     style: {
       display: "flex",
       alignItems: "center",
-      gap: 8,
+      gap: 2,
       minWidth: 0,
       justifySelf: "start"
     }
-  }, navWide && React.createElement(React.Fragment, null, React.createElement("span", {
+  }, navWide && NAV_LINKS.map(l => React.createElement("a", {
+    key: l.page,
+    href: l.href,
+    onClick: l.page === "cases" ? e => {
+      if (e.button === 0 && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey) {
+        e.preventDefault();
+        onCases(null);
+      }
+    } : navLink(l.page),
     style: {
       fontFamily: T.mono,
       fontSize: 10,
-      color: T.textDim
-    }
-  }, t("nav.nocookies")), React.createElement("span", {
-    style: {
-      color: T.borderLo
-    }
-  }, "\xB7"), React.createElement("span", {
-    style: {
-      fontFamily: T.mono,
-      fontSize: 10,
-      color: T.textDim
-    }
-  }, t("nav.nothingstored")), React.createElement("span", {
-    style: {
-      color: T.borderLo
-    }
-  }, "\xB7"), React.createElement("span", {
-    style: {
-      fontFamily: T.mono,
-      fontSize: 10,
-      color: T.textDim
-    }
-  }, t("nav.tor")), React.createElement("span", {
-    style: {
-      color: T.borderLo
-    }
-  }, "\xB7"), React.createElement("span", {
-    style: {
-      fontFamily: T.mono,
-      fontSize: 10,
-      color: T.textDim
-    }
-  }, t("nav.opensource")))), React.createElement("div", {
+      color: T.textMid,
+      textDecoration: "none",
+      letterSpacing: 0.5,
+      padding: "4px 7px",
+      transition: "color .15s",
+      whiteSpace: "nowrap"
+    },
+    onMouseOver: e => e.currentTarget.style.color = T.cyan,
+    onMouseOut: e => e.currentTarget.style.color = T.textMid
+  }, l.label))), React.createElement("div", {
     style: {
       display: "flex",
       alignItems: "center",
@@ -8257,7 +8291,7 @@ function Landing({
       marginBottom: 7,
       textAlign: "left"
     }
-  }, isLn ? "NODE PUBKEY" : "BITCOIN ADDRESS OR LN PUBKEY"), React.createElement("div", {
+  }, isLn ? "NODE PUBKEY" : "ADDRESS · NODE PUBKEY · INVOICE · OFFER · XPUB · PSBT · ECASH"), React.createElement("div", {
     style: {
       display: "flex",
       gap: 8
@@ -8745,7 +8779,61 @@ function Landing({
         marginTop: 10
       }
     }, "Decoded entirely in your browser."));
-  })()), React.createElement("div", {
+  })(), toolHint && React.createElement("div", {
+    style: {
+      marginTop: 12,
+      textAlign: "left",
+      background: T.cyan + "0e",
+      border: `1px solid ${T.cyan}40`,
+      borderRadius: 14,
+      padding: "14px 16px",
+      animation: "slideDown .25s ease"
+    }
+  }, React.createElement("div", {
+    style: {
+      fontFamily: T.mono,
+      fontSize: 9,
+      color: T.cyan,
+      letterSpacing: 1.5,
+      marginBottom: 8
+    }
+  }, toolHint.kind === "xpub" ? "EXTENDED PUBLIC KEY · WHOLE-WALLET SCAN" : "TRANSACTION · PRE-BROADCAST INSPECTOR"), React.createElement("div", {
+    style: {
+      fontSize: 13.5,
+      color: T.textMid,
+      lineHeight: 1.65,
+      marginBottom: 12
+    }
+  }, toolHint.kind === "xpub" ? React.createElement(React.Fragment, null, "That's an ", React.createElement("strong", {
+    style: {
+      color: T.text
+    }
+  }, "extended public key"), " \u2014 the map of an entire wallet, not one address. The Wallet scan derives every address from it ", React.createElement("strong", {
+    style: {
+      color: T.text
+    }
+  }, "in your browser"), ", gap-limit scans them, and scores the whole wallet \u2014 including the reuse and cross-address links no single-address scan can see.") : React.createElement(React.Fragment, null, "That's a ", React.createElement("strong", {
+    style: {
+      color: T.text
+    }
+  }, "transaction"), ", not an address. The Inspector shows what it leaks \u2014 change detection, wallet fingerprint, input\u2192output linkability \u2014 ", React.createElement("strong", {
+    style: {
+      color: T.text
+    }
+  }, "before you broadcast"), ", so you can still fix it. Fully offline; it never leaves the page.")), React.createElement("button", {
+    onClick: () => onOpenTool && onOpenTool(toolHint.kind === "xpub" ? "xpub" : "inspector", toolHint.value),
+    style: {
+      background: T.cyan,
+      border: "none",
+      borderRadius: 10,
+      padding: "10px 18px",
+      color: T.bg,
+      fontFamily: T.sans,
+      fontWeight: 700,
+      fontSize: 13,
+      cursor: "pointer"
+    }
+  }, toolHint.kind === "xpub" ? "Audit the whole wallet →" : "Inspect before you broadcast →"))), React.createElement("div", {
     style: {
       display: "flex",
       alignItems: "center",
@@ -10950,10 +11038,12 @@ function FlowGraph({
 function TransactionInspector({
   onBack,
   isMobile,
-  onScan
+  onScan,
+  onNav,
+  prefill
 }) {
   useLang();
-  const [raw, setRaw] = useState("");
+  const [raw, setRaw] = useState(prefill || "");
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
   const detected = detectTxInput(raw);
@@ -11001,6 +11091,9 @@ function TransactionInspector({
     setRaw(DEMO_PSBT);
     inspect(DEMO_PSBT);
   };
+  useEffect(() => {
+    if (prefill) inspect(prefill);
+  }, []);
   const sats = v => v == null ? "—" : v >= 1e8 ? "₿" + (v / 1e8).toFixed(4) : v.toLocaleString() + " sats";
   const trunc = a => !a ? "—" : a.startsWith("script:") ? "unrecognized script" : a.length > 26 ? a.slice(0, 13) + "…" + a.slice(-6) : a;
   const label = {
@@ -11552,60 +11645,13 @@ function TransactionInspector({
     }
   }, React.createElement("h1", {
     className: "sr-only"
-  }, "Bitcoin Transaction Inspector \u2014 pre-broadcast privacy analysis"), React.createElement("nav", {
-    style: {
-      display: "flex",
-      alignItems: "center",
-      gap: 10,
-      padding: isMobile ? "12px 16px" : "14px 32px",
-      borderBottom: `1px solid ${T.border}`,
-      background: T.bg,
-      position: "sticky",
-      top: 0,
-      zIndex: 100
-    }
-  }, React.createElement("button", {
-    onClick: onBack,
-    style: {
-      background: "transparent",
-      border: `1.5px solid ${T.border}`,
-      borderRadius: 8,
-      padding: "7px 12px",
-      color: T.textMid,
-      fontFamily: T.sans,
-      fontSize: 13,
-      cursor: "pointer",
-      transition: "border .15s"
-    },
-    onMouseOver: e => e.currentTarget.style.borderColor = T.cyan,
-    onMouseOut: e => e.currentTarget.style.borderColor = T.border
-  }, "\u2190 Back"), React.createElement("div", {
-    style: {
-      fontFamily: T.display,
-      fontSize: 15,
-      letterSpacing: 4,
-      fontWeight: 700
-    }
-  }, "ANON", React.createElement("span", {
-    style: {
-      color: T.cyan
-    }
-  }, "SCORE")), React.createElement("div", {
-    style: {
-      flex: 1
-    }
-  }), React.createElement("span", {
-    style: {
-      fontFamily: T.mono,
-      fontSize: 9,
-      color: T.cyan,
-      background: T.cyanLo,
-      border: `1px solid ${T.cyan}44`,
-      borderRadius: 6,
-      padding: "4px 9px",
-      letterSpacing: 1
-    }
-  }, "INSPECTOR")), React.createElement("div", {
+  }, "Bitcoin Transaction Inspector \u2014 pre-broadcast privacy analysis"), React.createElement(SiteNav, {
+    isMobile: isMobile,
+    onBack: onBack,
+    onNav: onNav,
+    current: "inspector",
+    badge: "INSPECTOR"
+  }), React.createElement("div", {
     style: {
       flex: 1,
       maxWidth: 760,
@@ -11780,10 +11826,12 @@ function TransactionInspector({
 function XpubScan({
   onBack,
   isMobile,
-  onScan
+  onScan,
+  onNav,
+  prefill
 }) {
   useLang();
-  const [raw, setRaw] = useState("");
+  const [raw, setRaw] = useState(prefill || "");
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState(null);
   const [result, setResult] = useState(null);
@@ -12096,60 +12144,13 @@ function XpubScan({
     }
   }, React.createElement("h1", {
     className: "sr-only"
-  }, "Bitcoin Wallet Privacy Scan from an Extended Public Key (xpub)"), React.createElement("nav", {
-    style: {
-      display: "flex",
-      alignItems: "center",
-      gap: 10,
-      padding: isMobile ? "12px 16px" : "14px 32px",
-      borderBottom: `1px solid ${T.border}`,
-      background: T.bg,
-      position: "sticky",
-      top: 0,
-      zIndex: 100
-    }
-  }, React.createElement("button", {
-    onClick: onBack,
-    style: {
-      background: "transparent",
-      border: `1.5px solid ${T.border}`,
-      borderRadius: 8,
-      padding: "7px 12px",
-      color: T.textMid,
-      fontFamily: T.sans,
-      fontSize: 13,
-      cursor: "pointer",
-      transition: "border .15s"
-    },
-    onMouseOver: e => e.currentTarget.style.borderColor = T.cyan,
-    onMouseOut: e => e.currentTarget.style.borderColor = T.border
-  }, "\u2190 Back"), React.createElement("div", {
-    style: {
-      fontFamily: T.display,
-      fontSize: 15,
-      letterSpacing: 4,
-      fontWeight: 700
-    }
-  }, "ANON", React.createElement("span", {
-    style: {
-      color: T.cyan
-    }
-  }, "SCORE")), React.createElement("div", {
-    style: {
-      flex: 1
-    }
-  }), React.createElement("span", {
-    style: {
-      fontFamily: T.mono,
-      fontSize: 9,
-      color: T.cyan,
-      background: T.cyanLo,
-      border: `1px solid ${T.cyan}44`,
-      borderRadius: 6,
-      padding: "4px 9px",
-      letterSpacing: 1
-    }
-  }, "WALLET SCAN")), React.createElement("div", {
+  }, "Bitcoin Wallet Privacy Scan from an Extended Public Key (xpub)"), React.createElement(SiteNav, {
+    isMobile: isMobile,
+    onBack: onBack,
+    onNav: onNav,
+    current: "xpub",
+    badge: "WALLET SCAN"
+  }), React.createElement("div", {
     style: {
       flex: 1,
       maxWidth: 780,
@@ -12354,7 +12355,8 @@ function XpubScan({
 }
 function WalletDirectory({
   onBack,
-  isMobile
+  isMobile,
+  onNav
 }) {
   useLang();
   const [cat, setCat] = useState("all");
@@ -12394,60 +12396,14 @@ function WalletDirectory({
     }
   }, React.createElement("h1", {
     className: "sr-only"
-  }, "Privacy-First Bitcoin & Lightning Wallet Directory"), React.createElement("nav", {
-    style: {
-      display: "flex",
-      alignItems: "center",
-      gap: 10,
-      padding: isMobile ? "12px 16px" : "14px 32px",
-      borderBottom: `1px solid ${T.border}`,
-      background: T.bg,
-      position: "sticky",
-      top: 0,
-      zIndex: 100
-    }
-  }, React.createElement("button", {
-    onClick: onBack,
-    style: {
-      background: "transparent",
-      border: `1.5px solid ${T.border}`,
-      borderRadius: 8,
-      padding: "7px 12px",
-      color: T.textMid,
-      fontFamily: T.sans,
-      fontSize: 13,
-      cursor: "pointer",
-      transition: "border .15s"
-    },
-    onMouseOver: e => e.currentTarget.style.borderColor = T.cyan,
-    onMouseOut: e => e.currentTarget.style.borderColor = T.border
-  }, "\u2190 Back"), React.createElement("div", {
-    style: {
-      fontFamily: T.display,
-      fontSize: 15,
-      letterSpacing: 4,
-      fontWeight: 700
-    }
-  }, "ANON", React.createElement("span", {
-    style: {
-      color: T.cyan
-    }
-  }, "SCORE")), React.createElement("div", {
-    style: {
-      flex: 1
-    }
-  }), React.createElement("span", {
-    style: {
-      fontFamily: T.mono,
-      fontSize: 9,
-      color: T.btc,
-      background: T.btcLo,
-      border: `1px solid ${T.btcMid}`,
-      borderRadius: 6,
-      padding: "4px 9px",
-      letterSpacing: 1
-    }
-  }, "DIRECTORY")), React.createElement("div", {
+  }, "Privacy-First Bitcoin & Lightning Wallet Directory"), React.createElement(SiteNav, {
+    isMobile: isMobile,
+    onBack: onBack,
+    onNav: onNav,
+    current: "wallets",
+    badge: "DIRECTORY",
+    badgeColor: T.btc
+  }), React.createElement("div", {
     style: {
       flex: 1,
       maxWidth: 980,
@@ -12806,7 +12762,8 @@ function WalletDirectory({
 }
 function CoachWaitlist({
   onBack,
-  isMobile
+  isMobile,
+  onNav
 }) {
   const [email, setEmail] = useState("");
   const [status, setStatus] = useState("idle");
@@ -12858,60 +12815,12 @@ function CoachWaitlist({
     }
   }, React.createElement("h1", {
     className: "sr-only"
-  }, "Privacy Coach \u2014 paid AI tier (early access waitlist)"), React.createElement("nav", {
-    style: {
-      display: "flex",
-      alignItems: "center",
-      gap: 10,
-      padding: isMobile ? "12px 16px" : "14px 32px",
-      borderBottom: `1px solid ${T.border}`,
-      background: T.bg,
-      position: "sticky",
-      top: 0,
-      zIndex: 100
-    }
-  }, React.createElement("button", {
-    onClick: onBack,
-    style: {
-      background: "transparent",
-      border: `1.5px solid ${T.border}`,
-      borderRadius: 8,
-      padding: "7px 12px",
-      color: T.textMid,
-      fontFamily: T.sans,
-      fontSize: 13,
-      cursor: "pointer",
-      transition: "border .15s"
-    },
-    onMouseOver: e => e.currentTarget.style.borderColor = T.cyan,
-    onMouseOut: e => e.currentTarget.style.borderColor = T.border
-  }, "\u2190 Back"), React.createElement("div", {
-    style: {
-      fontFamily: T.display,
-      fontSize: 15,
-      letterSpacing: 4,
-      fontWeight: 700
-    }
-  }, "ANON", React.createElement("span", {
-    style: {
-      color: T.cyan
-    }
-  }, "SCORE")), React.createElement("div", {
-    style: {
-      flex: 1
-    }
-  }), React.createElement("span", {
-    style: {
-      fontFamily: T.mono,
-      fontSize: 9,
-      color: T.cyan,
-      background: T.cyanLo,
-      border: `1px solid ${T.cyanMid}`,
-      borderRadius: 6,
-      padding: "4px 9px",
-      letterSpacing: 1
-    }
-  }, "EARLY ACCESS")), React.createElement("div", {
+  }, "Privacy Coach \u2014 paid AI tier (early access waitlist)"), React.createElement(SiteNav, {
+    isMobile: isMobile,
+    onBack: onBack,
+    onNav: onNav,
+    badge: "EARLY ACCESS"
+  }), React.createElement("div", {
     style: {
       flex: 1,
       maxWidth: 760,
@@ -18756,6 +18665,7 @@ function App() {
   const [page, setPage] = useState("landing");
   const [activeCaseFile, setActiveCaseFile] = useState(null);
   const [pendingScan, setPendingScan] = useState(null);
+  const [toolPrefill, setToolPrefill] = useState(null);
   const [scoreTint, setScoreTint] = useState(null);
   const [scoreDelta, setScoreDelta] = useState(null);
   useEffect(() => {
@@ -18802,15 +18712,15 @@ function App() {
         }
       }
       const pageParam = params.get("page");
-      if (pageParam === "coach") setPage("coach");else if (pageParam === "wallets") setPage("wallets");else if (pageParam === "inspector") setPage("inspector");else if (pageParam === "xpub") setPage("xpub");
+      if (pageParam === "coach") setPage("coach");else if (pageParam === "wallets") setPage("wallets");else if (pageParam === "inspector") setPage("inspector");else if (pageParam === "xpub") setPage("xpub");else if (pageParam === "cases") setPage("cases");
     } catch {}
   }, []);
   const _skipPush = useRef(false);
   const _firstSync = useRef(true);
   const pageUrl = useCallback((pg, cf) => {
-    if (pg === "coach" || pg === "wallets" || pg === "inspector" || pg === "xpub") return "/?page=" + pg;
+    if (pg === "coach" || pg === "wallets" || pg === "inspector" || pg === "xpub" || pg === "cases") return "/?page=" + pg;
     if (pg === "case_detail" && cf) return "/?case=" + (cf.slug || cf.id);
-    if (pg === "landing" || pg === "cases") return "/";
+    if (pg === "landing") return "/";
     return null;
   }, []);
   useEffect(() => {
@@ -18828,7 +18738,7 @@ function App() {
           }
         }
         const pg = params.get("page");
-        setPage(["coach", "wallets", "inspector", "xpub"].includes(pg) ? pg : "landing");
+        setPage(["coach", "wallets", "inspector", "xpub", "cases"].includes(pg) ? pg : "landing");
       } catch {
         setPage("landing");
       }
@@ -19027,6 +18937,13 @@ function App() {
     onAnalyze: analyze,
     isMobile: isMobile,
     onNav: setPage,
+    onOpenTool: (pg, value) => {
+      setToolPrefill({
+        page: pg,
+        value
+      });
+      setPage(pg);
+    },
     onCases: c => {
       if (c) {
         setActiveCaseFile(c);
@@ -19041,12 +18958,14 @@ function App() {
       setPage("case_detail");
     },
     onBack: () => setPage("landing"),
-    isMobile: isMobile
+    isMobile: isMobile,
+    onNav: setPage
   }), page === "case_detail" && activeCaseFile && React.createElement(CaseDetail, {
     caseFile: activeCaseFile,
     onBack: () => setPage("cases"),
     onAnalyze: analyze,
-    isMobile: isMobile
+    isMobile: isMobile,
+    onNav: setPage
   }), page === "scanning" && React.createElement(Scanning, {
     address: address || lnNodeId,
     isLightning: isScanningLightning,
@@ -19077,18 +18996,24 @@ function App() {
     toast: toast
   }), page === "coach" && React.createElement(CoachWaitlist, {
     onBack: () => setPage("landing"),
-    isMobile: isMobile
+    isMobile: isMobile,
+    onNav: setPage
   }), page === "wallets" && React.createElement(WalletDirectory, {
     onBack: () => setPage("landing"),
-    isMobile: isMobile
+    isMobile: isMobile,
+    onNav: setPage
   }), page === "inspector" && React.createElement(TransactionInspector, {
     onBack: () => setPage("landing"),
     isMobile: isMobile,
-    onScan: analyze
+    onScan: analyze,
+    onNav: setPage,
+    prefill: toolPrefill?.page === "inspector" ? toolPrefill.value : null
   }), page === "xpub" && React.createElement(XpubScan, {
     onBack: () => setPage("landing"),
     isMobile: isMobile,
-    onScan: analyze
+    onScan: analyze,
+    onNav: setPage,
+    prefill: toolPrefill?.page === "xpub" ? toolPrefill.value : null
   })));
 }
 window.__ANONSCORE_TEST__ = Object.freeze({

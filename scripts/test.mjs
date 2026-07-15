@@ -467,6 +467,78 @@ else {
   }
 }
 
+// Hub spine: the shared SiteNav must expose the toolkit on every sub-page,
+// ?page=cases must resolve, and the landing input must hand off xpubs/PSBTs
+// to their sibling tools instead of erroring ("universal front door").
+{
+  const np = await ctx.newPage();
+  try {
+    // ?page=cases resolves to the case-files index
+    await np.goto(`http://127.0.0.1:${PORT}/?page=cases`, { waitUntil: "load" });
+    await np.waitForFunction(() => document.getElementById("root")?.childElementCount > 0, { timeout: 20000 });
+    await np.waitForTimeout(400);
+    const casesOk = await np.evaluate(() => /Case Files/.test(document.body.innerText));
+    if (!casesOk) fail("hub: /?page=cases didn't render the case-files index");
+    else pass("hub: /?page=cases resolves to the case-files index");
+
+    // SiteNav on a sub-page links to the sibling tools; in-app click syncs the URL
+    await np.goto(`http://127.0.0.1:${PORT}/?page=inspector`, { waitUntil: "load" });
+    await np.waitForFunction(() => document.getElementById("root")?.childElementCount > 0, { timeout: 20000 });
+    await np.waitForTimeout(400);
+    const navLinks = await np.evaluate(() =>
+      [...document.querySelectorAll("nav a")].map(a => (a.textContent || "").trim()).filter(Boolean));
+    const missing = ["Wallet scan", "Wallets", "Case Files"].filter(l => !navLinks.includes(l));
+    if (missing.length) fail(`hub: SiteNav on Inspector missing links: ${missing.join(", ")} (saw: ${navLinks.join(" | ")})`);
+    else {
+      await np.getByText("Wallet scan", { exact: true }).click();
+      await np.waitForTimeout(400);
+      const st = await np.evaluate(() => ({ url: location.search, xpub: /entire wallet/.test(document.body.innerText) }));
+      if (!/page=xpub/.test(st.url) || !st.xpub) fail(`hub: SiteNav click didn't reach the xpub page (url "${st.url}")`);
+      else pass("hub: SiteNav links every sub-page to the sibling tools (URL-synced)");
+    }
+
+    // Front door: paste an xpub on the landing → handoff card → prefilled Wallet scan
+    const ZPUB = "zpub6rFR7y4Q2AijBEqTUquhVz398htDFrtymD9xYYfG1m4wAcvPhXNfE3EfH1r1ADqtfSdVCToUG868RvUUkgDKf31mGDtKsAYz2oz2AGutZYs";
+    await np.goto(`http://127.0.0.1:${PORT}/`, { waitUntil: "load" });
+    await np.waitForFunction(() => document.getElementById("root")?.childElementCount > 0, { timeout: 20000 });
+    await np.waitForTimeout(400);
+    await np.locator('input[aria-label*="Paste a Bitcoin address"]').fill(ZPUB);
+    await np.keyboard.press("Enter");
+    await np.waitForTimeout(400);
+    const xpubCard = await np.evaluate(() => /EXTENDED PUBLIC KEY/.test(document.body.innerText));
+    if (!xpubCard) fail("hub: landing didn't show the xpub handoff card");
+    else {
+      await np.getByText("Audit the whole wallet →").click();
+      await np.waitForTimeout(400);
+      const prefilled = await np.evaluate(z => [...document.querySelectorAll("textarea")].some(t => t.value === z), ZPUB);
+      if (!prefilled) fail("hub: xpub page textarea wasn't prefilled after handoff");
+      else pass("hub: landing hands an xpub to the Wallet scan, prefilled");
+    }
+
+    // Front door: paste a raw tx → handoff card → Inspector auto-parses it
+    const RAWTX = "0200000000010100000000000000000000000000000000000000000000000000000000000000000000000000fdffffff018038010000000000160014abababababababababababababababababababab02483045022100111111111111111111111111111111111111111111111111111111111111111102202222222222222222222222222222222222222222222222222222222222222222012103cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd00000000";
+    await np.goto(`http://127.0.0.1:${PORT}/`, { waitUntil: "load" });
+    await np.waitForFunction(() => document.getElementById("root")?.childElementCount > 0, { timeout: 20000 });
+    await np.waitForTimeout(400);
+    await np.locator('input[aria-label*="Paste a Bitcoin address"]').fill(RAWTX);
+    await np.keyboard.press("Enter");
+    await np.waitForTimeout(400);
+    const txCard = await np.evaluate(() => /PRE-BROADCAST INSPECTOR/.test(document.body.innerText));
+    if (!txCard) fail("hub: landing didn't show the transaction handoff card");
+    else {
+      await np.getByText("Inspect before you broadcast →").click();
+      await np.waitForTimeout(600);
+      const report = await np.evaluate(() => /PRE-BROADCAST VERDICT/.test(document.body.innerText));
+      if (!report) fail("hub: Inspector didn't auto-parse the handed-off transaction");
+      else pass("hub: landing hands a raw tx to the Inspector, parsed on arrival");
+    }
+  } catch (e) {
+    fail("hub: " + e.message.slice(0, 140));
+  } finally {
+    await np.close();
+  }
+}
+
 // Service worker should register and precache the static assets.
 await page.waitForFunction(
   () => navigator.serviceWorker?.controller || navigator.serviceWorker?.ready,

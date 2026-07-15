@@ -228,7 +228,7 @@ const STRINGS = {
     "hero.h1.line1": "Is your Bitcoin",
     "hero.h1.line2": "stack leaking?",
     "hero.h1.em": "Find out in 60 seconds.",
-    "hero.sub": "Paste a Bitcoin address or a Lightning node pubkey. Get a privacy score, every issue explained, and a ranked fix plan — free, open source, nothing stored.",
+    "hero.sub": "Surveillance firms run these exact heuristics against you. We run them for you — entirely in your browser, before anyone else looks. A privacy score, every issue explained, and a ranked fix plan. Free, open source, nothing stored.",
     "spectrum.low": "0 · Fully traceable",
     "spectrum.avg": "typical wallet: ~38",
     "spectrum.high": "100 · Invisible",
@@ -263,7 +263,7 @@ const STRINGS = {
     "sample.lightning": "⚡ Lightning node",
     "recent.title": "RECENT SCANS",
     "err.empty": "Please enter a Bitcoin address or Lightning node pubkey.",
-    "err.invalid": "Paste a Bitcoin address (bc1…, 1…, 3…) or a Lightning node pubkey (66-char hex).",
+    "err.invalid": "Not recognized. This console reads: a Bitcoin address (bc1…, 1…, 3…), a Lightning node pubkey (66-char hex), a BOLT11 invoice, a BOLT12 offer, an LNURL, a Silent Payment address (sp1…), an xpub/ypub/zpub, a PSBT or raw transaction, or a Cashu token.",
     "err.lnaddress": "Lightning addresses can't be audited yet — paste your node's 66-character pubkey instead.",
     "finalcta.h2.a": "A typical wallet scores ~38/100.",
     "finalcta.h2.b": "Where does yours land?",
@@ -290,7 +290,7 @@ const STRINGS = {
     "hero.h1.line1": "¿Tu stack de Bitcoin",
     "hero.h1.line2": "está filtrando datos?",
     "hero.h1.em": "Descúbrelo en 60 segundos.",
-    "hero.sub": "Pega una dirección de Bitcoin o la clave pública de un nodo Lightning. Obtén una puntuación de privacidad, cada problema explicado y un plan de mejora priorizado — gratis, código abierto, nada se guarda.",
+    "hero.sub": "Las firmas de vigilancia ejecutan estas mismas heurísticas contra ti. Nosotros las ejecutamos para ti — completamente en tu navegador, antes de que nadie más mire. Una puntuación de privacidad, cada problema explicado y un plan de mejora priorizado. Gratis, código abierto, nada se guarda.",
     "spectrum.low": "0 · Totalmente rastreable",
     "spectrum.avg": "billetera típica: ~38",
     "spectrum.high": "100 · Invisible",
@@ -324,7 +324,7 @@ const STRINGS = {
     "sample.lightning": "⚡ Nodo Lightning",
     "recent.title": "ESCANEOS RECIENTES",
     "err.empty": "Ingresa una dirección de Bitcoin o la clave pública de un nodo Lightning.",
-    "err.invalid": "Pega una dirección de Bitcoin (bc1…, 1…, 3…) o una clave pública de nodo Lightning (66 caracteres hex).",
+    "err.invalid": "No reconocido. Esta consola lee: una dirección de Bitcoin (bc1…, 1…, 3…), la clave pública de un nodo Lightning (66 hex), una factura BOLT11, una oferta BOLT12, un LNURL, una dirección de Pago Silencioso (sp1…), un xpub/ypub/zpub, una PSBT o transacción sin firmar, o un token Cashu.",
     "err.lnaddress": "Las direcciones Lightning aún no se pueden auditar — pega la clave pública (66 caracteres hex) de tu nodo.",
     "finalcta.h2.a": "Una billetera típica puntúa ~38/100.",
     "finalcta.h2.b": "¿Dónde queda la tuya?",
@@ -2748,6 +2748,45 @@ const EpistemicLegend = ({ kinds = ["proven", "inferred"], color = T.textMid, co
   );
 };
 
+/* ─────────────────────────────────────────────
+   SITE NAV — the one shared spine across every sub-page. ← Back, a clickable
+   brand (→ landing), the toolkit link row (desktop), and a right-side page
+   badge. Every link is a real href (?page=…) so middle-click / open-in-new-tab
+   / copy-link work; a plain left-click navigates in-app via onNav. Before this
+   existed, every sub-page's only exit was "← Back" and three of the four
+   flagship tools were reachable solely through 10px footer links.
+───────────────────────────────────────────── */
+const NAV_LINKS = [
+  { page: "inspector", label: "Inspector",   href: "/?page=inspector" },
+  { page: "xpub",      label: "Wallet scan", href: "/?page=xpub" },
+  { page: "wallets",   label: "Wallets",     href: "/?page=wallets" },
+  { page: "cases",     label: "Case Files",  href: "/?page=cases" },
+];
+function SiteNav({ isMobile, onBack, backLabel = "← Back", onNav, current, badge, badgeColor = T.cyan }) {
+  const go = page => e => { if (onNav && e.button === 0 && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey) { e.preventDefault(); onNav(page); } };
+  return (
+    <nav aria-label="AnonScore" style={{ display: "flex", alignItems: "center", gap: 10, padding: isMobile ? "12px 16px" : "14px 32px", borderBottom: `1px solid ${T.border}`, background: T.bg, position: "sticky", top: 0, zIndex: 100 }}>
+      {onBack && (
+        <button onClick={onBack} style={{ background: "transparent", border: `1.5px solid ${T.border}`, borderRadius: 8, padding: "7px 12px", color: T.textMid, fontFamily: T.sans, fontSize: 13, cursor: "pointer", transition: "border .15s" }}
+          onMouseOver={e => e.currentTarget.style.borderColor = T.cyan}
+          onMouseOut={e => e.currentTarget.style.borderColor = T.border}>{backLabel}</button>
+      )}
+      <a href="/" onClick={go("landing")} aria-label="AnonScore home"
+        style={{ fontFamily: T.display, fontSize: 15, letterSpacing: 4, fontWeight: 700, color: T.text, textDecoration: "none" }}>
+        ANON<span style={{ color: T.cyan }}>SCORE</span>
+      </a>
+      <div style={{ flex: 1 }} />
+      {!isMobile && NAV_LINKS.filter(l => l.page !== current).map(l => (
+        <a key={l.page} href={l.href} onClick={go(l.page)}
+          style={{ fontFamily: T.mono, fontSize: 10, color: T.textMid, textDecoration: "none", letterSpacing: 0.5, padding: "4px 6px", transition: "color .15s" }}
+          onMouseOver={e => e.currentTarget.style.color = T.cyan}
+          onMouseOut={e => e.currentTarget.style.color = T.textMid}>{l.label}</a>
+      ))}
+      {badge && <span style={{ fontFamily: T.mono, fontSize: 9, color: badgeColor, background: badgeColor + "14", border: `1px solid ${badgeColor}44`, borderRadius: 6, padding: "4px 9px", letterSpacing: 1, whiteSpace: "nowrap" }}>{badge}</span>}
+    </nav>
+  );
+}
+
 function Toast({ toasts }) {
   return (
     <div role="region" aria-label="Notifications" aria-live="polite" style={{ position: "fixed", bottom: 80, right: 20, zIndex: 9999, display: "flex", flexDirection: "column", gap: 8, pointerEvents: "none" }}>
@@ -3482,7 +3521,7 @@ const STATUS_META = {
   liquidated: { label: "Liquidated",  color: "#58a6ff" },
 };
 
-function CaseFiles({ onOpenCase, onBack, isMobile }) {
+function CaseFiles({ onOpenCase, onBack, isMobile, onNav }) {
   const PAGE_ROLE_LABEL = "AnonScore case files — notable Bitcoin wallets";
   const [filter, setFilter] = useState("all");
   const categories = ["all", "exchange", "seizure", "miner"];
@@ -3490,15 +3529,7 @@ function CaseFiles({ onOpenCase, onBack, isMobile }) {
 
   return (
     <div role="main" aria-label={PAGE_ROLE_LABEL} style={{ minHeight: "100vh", background: "transparent", display: "flex", flexDirection: "column" }}>
-      {/* Nav */}
-      <nav style={{ display: "flex", alignItems: "center", gap: 10, padding: isMobile ? "12px 16px" : "12px 32px", borderBottom: `1px solid ${T.border}`, background: T.bg, position: "sticky", top: 0, zIndex: 100 }}>
-        <button onClick={onBack} style={{ background: "transparent", border: `1.5px solid ${T.border}`, borderRadius: 8, padding: "7px 12px", color: T.textMid, fontFamily: T.sans, fontSize: 13, cursor: "pointer", transition: "border .15s" }}
-          onMouseOver={e => e.currentTarget.style.borderColor = T.cyan}
-          onMouseOut={e => e.currentTarget.style.borderColor = T.border}>← Back</button>
-        <div style={{ fontFamily: T.display, fontSize: 15, letterSpacing: 4, fontWeight: 700 }}>ANON<span style={{ color: T.cyan }}>SCORE</span></div>
-        <div style={{ flex: 1 }} />
-        <div style={{ fontFamily: T.mono, fontSize: 10, color: T.textDim }}>CASE FILES</div>
-      </nav>
+      <SiteNav isMobile={isMobile} onBack={onBack} onNav={onNav} current="cases" badge="CASE FILES" badgeColor={T.btc} />
 
       <div style={{ flex: 1, padding: isMobile ? "24px 16px" : "40px 48px", maxWidth: 960, margin: "0 auto", width: "100%" }}>
         {/* Header */}
@@ -3567,7 +3598,7 @@ function CaseFiles({ onOpenCase, onBack, isMobile }) {
 /* ─────────────────────────────────────────────
    CASE DETAIL — individual case with live scan
 ───────────────────────────────────────────── */
-function CaseDetail({ caseFile, onBack, onAnalyze, isMobile }) {
+function CaseDetail({ caseFile, onBack, onAnalyze, isMobile, onNav }) {
   const PAGE_ROLE_LABEL = "AnonScore case file: " + caseFile.title;
   const [shareMode, setShareMode] = useState(null); // null | "thread" | "link"
   const [copied, setCopied] = useState(false);
@@ -3609,15 +3640,7 @@ function CaseDetail({ caseFile, onBack, onAnalyze, isMobile }) {
 
   return (
     <div role="main" aria-label={PAGE_ROLE_LABEL} style={{ minHeight: "100vh", background: "transparent", display: "flex", flexDirection: "column" }}>
-      {/* Nav */}
-      <nav style={{ display: "flex", alignItems: "center", gap: 10, padding: isMobile ? "12px 16px" : "12px 32px", borderBottom: `1px solid ${T.border}`, background: T.bg, position: "sticky", top: 0, zIndex: 100 }}>
-        <button onClick={onBack} style={{ background: "transparent", border: `1.5px solid ${T.border}`, borderRadius: 8, padding: "7px 12px", color: T.textMid, fontFamily: T.sans, fontSize: 13, cursor: "pointer" }}
-          onMouseOver={e => e.currentTarget.style.borderColor = T.cyan}
-          onMouseOut={e => e.currentTarget.style.borderColor = T.border}>← Cases</button>
-        <div style={{ fontFamily: T.display, fontSize: 15, letterSpacing: 4, fontWeight: 700 }}>ANON<span style={{ color: T.cyan }}>SCORE</span></div>
-        <div style={{ flex: 1 }} />
-        <span style={{ fontFamily: T.mono, fontSize: 9, color: cat.color, background: cat.color + "18", border: `1px solid ${cat.color}33`, borderRadius: 4, padding: "3px 8px", letterSpacing: 1 }}>CASE #{caseFile.id}</span>
-      </nav>
+      <SiteNav isMobile={isMobile} onBack={onBack} backLabel="← Cases" onNav={onNav} current="cases" badge={`CASE #${caseFile.id}`} badgeColor={cat.color} />
 
       <div style={{ flex: 1, padding: isMobile ? "24px 16px" : "40px 48px", maxWidth: 800, margin: "0 auto", width: "100%" }}>
 
@@ -3854,7 +3877,7 @@ function CountUp({ value }) {
   return <span ref={ref}>{value}</span>;
 }
 
-function Landing({ onAnalyze, isMobile, onCases, onNav }) {
+function Landing({ onAnalyze, isMobile, onCases, onNav, onOpenTool }) {
   // Left-click a tool link → navigate in-app (no cold SPA reload); keep the href so
   // middle-click / open-in-new-tab / deep-link still work.
   const navLink = page => e => { if (onNav && e.button === 0 && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey) { e.preventDefault(); onNav(page); } };
@@ -3872,6 +3895,7 @@ function Landing({ onAnalyze, isMobile, onCases, onNav }) {
   const [spInfo, setSpInfo] = useState(null);   // decoded Silent Payments (BIP352) address, if entered
   const [lnInvoice, setLnInvoice] = useState(null);   // decoded BOLT11 Lightning invoice, if entered
   const [lnPay, setLnPay] = useState(null);           // { kind: "offer"|"lnurl"|"lnaddress", ...decoded }
+  const [toolHint, setToolHint] = useState(null);     // { kind: "xpub"|"tx", value } — input belongs to a sibling tool
   const [history, setHistory] = useState(() => getHistory());
   const deleteHistory = (addr) => { removeFromHistory(addr); setHistory(getHistory()); };
   const wipeHistory = () => { clearAllHistory(); setHistory([]); };
@@ -3939,7 +3963,7 @@ function Landing({ onAnalyze, isMobile, onCases, onNav }) {
 
   const submit = (val, plain = false) => {
     const v = (val || input).trim();
-    setSpInfo(null); setLnInvoice(null); setLnPay(null);
+    setSpInfo(null); setLnInvoice(null); setLnPay(null); setToolHint(null);
     if (!v) { setError(t("err.empty")); return; }
     const detected = detectInputType(v);
     if (!detected) {
@@ -3953,6 +3977,13 @@ function Landing({ onAnalyze, isMobile, onCases, onNav }) {
       if (lu) { setError(""); setLnPay({ kind: "lnurl", ...lu }); return; }     // LNURL — metadata chokepoint lint
       const cs = decodeCashu(v);
       if (cs) { setError(""); setLnPay({ kind: "cashu", ...cs }); return; }     // Cashu ecash token — custodial + cleartext-bearer lint
+      // Inputs that belong to a sibling tool: hand off instead of erroring.
+      if (detectXpub(v)) { setError(""); setToolHint({ kind: "xpub", value: v }); return; }   // whole-wallet key → Wallet scan
+      const txk = detectTxInput(v);
+      if (txk === "psbt" || txk === "rawhex") {
+        // Only offer the handoff when it genuinely parses (pure local check).
+        try { parseTransactionInput(v); setError(""); setToolHint({ kind: "tx", value: v }); return; } catch {}
+      }
       setError(t("err.invalid"));
       return;
     }
@@ -4004,17 +4035,15 @@ function Landing({ onAnalyze, isMobile, onCases, onNav }) {
       <div role="main" aria-label="AnonScore — Bitcoin & Lightning privacy audit" style={{ minHeight: "100vh", display: "flex", flexDirection: "column", background: "transparent" }}>
       {/* Nav — trust signals left · brand centered · actions right */}
       <nav style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", alignItems: "center", padding: isMobile ? "14px 20px" : "14px 48px", borderBottom: `1px solid ${T.border}`, background: T.bg, position: "sticky", top: 0, zIndex: 100 }}>
-        {/* Left — trust signals (proof) */}
-        <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0, justifySelf: "start" }}>
-          {navWide && <>
-            <span style={{ fontFamily: T.mono, fontSize: 10, color: T.textDim }}>{t("nav.nocookies")}</span>
-            <span style={{ color: T.borderLo }}>·</span>
-            <span style={{ fontFamily: T.mono, fontSize: 10, color: T.textDim }}>{t("nav.nothingstored")}</span>
-            <span style={{ color: T.borderLo }}>·</span>
-            <span style={{ fontFamily: T.mono, fontSize: 10, color: T.textDim }}>{t("nav.tor")}</span>
-            <span style={{ color: T.borderLo }}>·</span>
-            <span style={{ fontFamily: T.mono, fontSize: 10, color: T.textDim }}>{t("nav.opensource")}</span>
-          </>}
+        {/* Left — the toolkit (every flagship tool, one click from the front door;
+            trust signals live in the hero privacy panel + TrustBox below) */}
+        <div style={{ display: "flex", alignItems: "center", gap: 2, minWidth: 0, justifySelf: "start" }}>
+          {navWide && NAV_LINKS.map(l => (
+            <a key={l.page} href={l.href} onClick={l.page === "cases" ? (e => { if (e.button === 0 && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey) { e.preventDefault(); onCases(null); } }) : navLink(l.page)}
+              style={{ fontFamily: T.mono, fontSize: 10, color: T.textMid, textDecoration: "none", letterSpacing: 0.5, padding: "4px 7px", transition: "color .15s", whiteSpace: "nowrap" }}
+              onMouseOver={e => e.currentTarget.style.color = T.cyan}
+              onMouseOut={e => e.currentTarget.style.color = T.textMid}>{l.label}</a>
+          ))}
         </div>
         {/* Center — the brand */}
         <div style={{ display: "flex", alignItems: "center", gap: 8, justifySelf: "center" }}>
@@ -4127,7 +4156,7 @@ function Landing({ onAnalyze, isMobile, onCases, onNav }) {
               )}
               {/* Micro-label so the field reads unmistakably as the input, not prose */}
               <div style={{ fontFamily: T.mono, fontSize: 9, letterSpacing: 1.5, color: T.textDim, marginBottom: 7, textAlign: "left" }}>
-                {isLn ? "NODE PUBKEY" : "BITCOIN ADDRESS OR LN PUBKEY"}
+                {isLn ? "NODE PUBKEY" : "ADDRESS · NODE PUBKEY · INVOICE · OFFER · XPUB · PSBT · ECASH"}
               </div>
               {/* Input on its own full-width row so the field is the widest, most
                   prominent element; Analyze becomes a full-width CTA below it. */}
@@ -4299,6 +4328,24 @@ function Landing({ onAnalyze, isMobile, onCases, onNav }) {
                   </div>
                 );
               })()}
+              {/* Input belongs to a sibling tool — hand off instead of erroring.
+                  The user pressed Analyze; the click below is the navigation. */}
+              {toolHint && (
+                <div style={{ marginTop: 12, textAlign: "left", background: T.cyan + "0e", border: `1px solid ${T.cyan}40`, borderRadius: 14, padding: "14px 16px", animation: "slideDown .25s ease" }}>
+                  <div style={{ fontFamily: T.mono, fontSize: 9, color: T.cyan, letterSpacing: 1.5, marginBottom: 8 }}>
+                    {toolHint.kind === "xpub" ? "EXTENDED PUBLIC KEY · WHOLE-WALLET SCAN" : "TRANSACTION · PRE-BROADCAST INSPECTOR"}
+                  </div>
+                  <div style={{ fontSize: 13.5, color: T.textMid, lineHeight: 1.65, marginBottom: 12 }}>
+                    {toolHint.kind === "xpub"
+                      ? <>That's an <strong style={{ color: T.text }}>extended public key</strong> — the map of an entire wallet, not one address. The Wallet scan derives every address from it <strong style={{ color: T.text }}>in your browser</strong>, gap-limit scans them, and scores the whole wallet — including the reuse and cross-address links no single-address scan can see.</>
+                      : <>That's a <strong style={{ color: T.text }}>transaction</strong>, not an address. The Inspector shows what it leaks — change detection, wallet fingerprint, input→output linkability — <strong style={{ color: T.text }}>before you broadcast</strong>, so you can still fix it. Fully offline; it never leaves the page.</>}
+                  </div>
+                  <button onClick={() => onOpenTool && onOpenTool(toolHint.kind === "xpub" ? "xpub" : "inspector", toolHint.value)}
+                    style={{ background: T.cyan, border: "none", borderRadius: 10, padding: "10px 18px", color: T.bg, fontFamily: T.sans, fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
+                    {toolHint.kind === "xpub" ? "Audit the whole wallet →" : "Inspect before you broadcast →"}
+                  </button>
+                </div>
+              )}
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
               <div style={{ flex: 1, height: 1, background: T.borderLo }} />
@@ -5183,9 +5230,9 @@ function FlowGraph({ inputs, outputs, lp, outIdx, isMobile, onAudit }) {
    raw tx your wallet is about to sign and see what it leaks BEFORE you broadcast.
    PSBT/raw-hex are parsed and analyzed entirely in the browser (zero network).
 ───────────────────────────────────────────── */
-function TransactionInspector({ onBack, isMobile, onScan }) {
+function TransactionInspector({ onBack, isMobile, onScan, onNav, prefill }) {
   useLang();
-  const [raw, setRaw] = useState("");
+  const [raw, setRaw] = useState(prefill || "");
   const [result, setResult] = useState(null);   // { kind, tx }
   const [error, setError] = useState("");
   const detected = detectTxInput(raw);
@@ -5218,6 +5265,11 @@ function TransactionInspector({ onBack, isMobile, onScan }) {
     } catch (e) { setError(e && e.message ? e.message : "Couldn't parse that input."); }
   };
   const loadDemo = () => { setRaw(DEMO_PSBT); inspect(DEMO_PSBT); };
+
+  // Landing handed us a transaction the user already asked to analyze — parse it
+  // on arrival. Pure local decoding (zero network), same as the landing's own
+  // inline decoders, so the no-auto-fire rule (about scans/popups) isn't in play.
+  useEffect(() => { if (prefill) inspect(prefill); }, []);  // eslint-disable-line react-hooks/exhaustive-deps
 
   const sats = v => v == null ? "—" : v >= 1e8 ? "₿" + (v / 1e8).toFixed(4) : v.toLocaleString() + " sats";
   const trunc = a => !a ? "—" : a.startsWith("script:") ? "unrecognized script" : a.length > 26 ? a.slice(0, 13) + "…" + a.slice(-6) : a;
@@ -5431,13 +5483,7 @@ function TransactionInspector({ onBack, isMobile, onScan }) {
   return (
     <div role="main" aria-label="Transaction Inspector" style={{ minHeight: "100vh", background: "transparent", display: "flex", flexDirection: "column" }}>
       <h1 className="sr-only">Bitcoin Transaction Inspector — pre-broadcast privacy analysis</h1>
-      <nav style={{ display: "flex", alignItems: "center", gap: 10, padding: isMobile ? "12px 16px" : "14px 32px", borderBottom: `1px solid ${T.border}`, background: T.bg, position: "sticky", top: 0, zIndex: 100 }}>
-        <button onClick={onBack} style={{ background: "transparent", border: `1.5px solid ${T.border}`, borderRadius: 8, padding: "7px 12px", color: T.textMid, fontFamily: T.sans, fontSize: 13, cursor: "pointer", transition: "border .15s" }}
-          onMouseOver={e => e.currentTarget.style.borderColor = T.cyan} onMouseOut={e => e.currentTarget.style.borderColor = T.border}>← Back</button>
-        <div style={{ fontFamily: T.display, fontSize: 15, letterSpacing: 4, fontWeight: 700 }}>ANON<span style={{ color: T.cyan }}>SCORE</span></div>
-        <div style={{ flex: 1 }} />
-        <span style={{ fontFamily: T.mono, fontSize: 9, color: T.cyan, background: T.cyanLo, border: `1px solid ${T.cyan}44`, borderRadius: 6, padding: "4px 9px", letterSpacing: 1 }}>INSPECTOR</span>
-      </nav>
+      <SiteNav isMobile={isMobile} onBack={onBack} onNav={onNav} current="inspector" badge="INSPECTOR" />
 
       <div style={{ flex: 1, maxWidth: 760, margin: "0 auto", width: "100%", padding: isMobile ? "28px 16px" : "44px 32px" }}>
         <div style={{ textAlign: "center", marginBottom: 24 }}>
@@ -5492,9 +5538,9 @@ function TransactionInspector({ onBack, isMobile, onScan }) {
    XPUB WALLET SCAN — standalone tool at /?page=xpub. Paste an xpub/ypub/zpub,
    derive + gap-limit scan the whole wallet client-side, score it wallet-level.
 ───────────────────────────────────────────── */
-function XpubScan({ onBack, isMobile, onScan }) {
+function XpubScan({ onBack, isMobile, onScan, onNav, prefill }) {
   useLang();
-  const [raw, setRaw] = useState("");
+  const [raw, setRaw] = useState(prefill || "");
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState(null);   // { derived, used }
   const [result, setResult] = useState(null);
@@ -5608,13 +5654,7 @@ function XpubScan({ onBack, isMobile, onScan }) {
   return (
     <div role="main" aria-label="Wallet xpub Scan" style={{ minHeight: "100vh", background: "transparent", display: "flex", flexDirection: "column" }}>
       <h1 className="sr-only">Bitcoin Wallet Privacy Scan from an Extended Public Key (xpub)</h1>
-      <nav style={{ display: "flex", alignItems: "center", gap: 10, padding: isMobile ? "12px 16px" : "14px 32px", borderBottom: `1px solid ${T.border}`, background: T.bg, position: "sticky", top: 0, zIndex: 100 }}>
-        <button onClick={onBack} style={{ background: "transparent", border: `1.5px solid ${T.border}`, borderRadius: 8, padding: "7px 12px", color: T.textMid, fontFamily: T.sans, fontSize: 13, cursor: "pointer", transition: "border .15s" }}
-          onMouseOver={e => e.currentTarget.style.borderColor = T.cyan} onMouseOut={e => e.currentTarget.style.borderColor = T.border}>← Back</button>
-        <div style={{ fontFamily: T.display, fontSize: 15, letterSpacing: 4, fontWeight: 700 }}>ANON<span style={{ color: T.cyan }}>SCORE</span></div>
-        <div style={{ flex: 1 }} />
-        <span style={{ fontFamily: T.mono, fontSize: 9, color: T.cyan, background: T.cyanLo, border: `1px solid ${T.cyan}44`, borderRadius: 6, padding: "4px 9px", letterSpacing: 1 }}>WALLET SCAN</span>
-      </nav>
+      <SiteNav isMobile={isMobile} onBack={onBack} onNav={onNav} current="xpub" badge="WALLET SCAN" />
 
       <div style={{ flex: 1, maxWidth: 780, margin: "0 auto", width: "100%", padding: isMobile ? "28px 16px" : "44px 32px" }}>
         <div style={{ textAlign: "center", marginBottom: 24 }}>
@@ -5675,7 +5715,7 @@ function XpubScan({ onBack, isMobile, onScan }) {
    Filterable by category, links out via toolLink() (so affiliate URLs
    slot in automatically when configured).
 ───────────────────────────────────────────── */
-function WalletDirectory({ onBack, isMobile }) {
+function WalletDirectory({ onBack, isMobile, onNav }) {
   useLang();
   const [cat, setCat] = useState("all");
   const [query, setQuery] = useState("");
@@ -5709,15 +5749,7 @@ function WalletDirectory({ onBack, isMobile }) {
     <div role="main" aria-label="Privacy-First Wallet Directory" style={{ minHeight: "100vh", background: "transparent", display: "flex", flexDirection: "column" }}>
       <h1 className="sr-only">Privacy-First Bitcoin & Lightning Wallet Directory</h1>
 
-      {/* Nav */}
-      <nav style={{ display: "flex", alignItems: "center", gap: 10, padding: isMobile ? "12px 16px" : "14px 32px", borderBottom: `1px solid ${T.border}`, background: T.bg, position: "sticky", top: 0, zIndex: 100 }}>
-        <button onClick={onBack} style={{ background: "transparent", border: `1.5px solid ${T.border}`, borderRadius: 8, padding: "7px 12px", color: T.textMid, fontFamily: T.sans, fontSize: 13, cursor: "pointer", transition: "border .15s" }}
-          onMouseOver={e => e.currentTarget.style.borderColor = T.cyan}
-          onMouseOut={e => e.currentTarget.style.borderColor = T.border}>← Back</button>
-        <div style={{ fontFamily: T.display, fontSize: 15, letterSpacing: 4, fontWeight: 700 }}>ANON<span style={{ color: T.cyan }}>SCORE</span></div>
-        <div style={{ flex: 1 }} />
-        <span style={{ fontFamily: T.mono, fontSize: 9, color: T.btc, background: T.btcLo, border: `1px solid ${T.btcMid}`, borderRadius: 6, padding: "4px 9px", letterSpacing: 1 }}>DIRECTORY</span>
-      </nav>
+      <SiteNav isMobile={isMobile} onBack={onBack} onNav={onNav} current="wallets" badge="DIRECTORY" badgeColor={T.btc} />
 
       <div style={{ flex: 1, maxWidth: 980, margin: "0 auto", width: "100%", padding: isMobile ? "32px 16px" : "48px 32px" }}>
         {/* Hero */}
@@ -5844,7 +5876,7 @@ function WalletDirectory({ onBack, isMobile }) {
    no payment — just an email from folks who want it, so we know whether
    it's worth building before we build it.
 ───────────────────────────────────────────── */
-function CoachWaitlist({ onBack, isMobile }) {
+function CoachWaitlist({ onBack, isMobile, onNav }) {
   const [email, setEmail] = useState("");
   const [status, setStatus] = useState("idle"); // idle | submitting | ok | err
   const [error, setError] = useState("");
@@ -5879,15 +5911,7 @@ function CoachWaitlist({ onBack, isMobile }) {
     <div role="main" aria-label="Privacy Coach — early access waitlist" style={{ minHeight: "100vh", background: "transparent", display: "flex", flexDirection: "column" }}>
       <h1 className="sr-only">Privacy Coach — paid AI tier (early access waitlist)</h1>
 
-      {/* Nav */}
-      <nav style={{ display: "flex", alignItems: "center", gap: 10, padding: isMobile ? "12px 16px" : "14px 32px", borderBottom: `1px solid ${T.border}`, background: T.bg, position: "sticky", top: 0, zIndex: 100 }}>
-        <button onClick={onBack} style={{ background: "transparent", border: `1.5px solid ${T.border}`, borderRadius: 8, padding: "7px 12px", color: T.textMid, fontFamily: T.sans, fontSize: 13, cursor: "pointer", transition: "border .15s" }}
-          onMouseOver={e => e.currentTarget.style.borderColor = T.cyan}
-          onMouseOut={e => e.currentTarget.style.borderColor = T.border}>← Back</button>
-        <div style={{ fontFamily: T.display, fontSize: 15, letterSpacing: 4, fontWeight: 700 }}>ANON<span style={{ color: T.cyan }}>SCORE</span></div>
-        <div style={{ flex: 1 }} />
-        <span style={{ fontFamily: T.mono, fontSize: 9, color: T.cyan, background: T.cyanLo, border: `1px solid ${T.cyanMid}`, borderRadius: 6, padding: "4px 9px", letterSpacing: 1 }}>EARLY ACCESS</span>
-      </nav>
+      <SiteNav isMobile={isMobile} onBack={onBack} onNav={onNav} badge="EARLY ACCESS" />
 
       <div style={{ flex: 1, maxWidth: 760, margin: "0 auto", width: "100%", padding: isMobile ? "32px 20px" : "56px 32px" }}>
         {/* Hero */}
@@ -8143,6 +8167,7 @@ function App() {
   const [page, setPage] = useState("landing");
   const [activeCaseFile, setActiveCaseFile] = useState(null);
   const [pendingScan, setPendingScan] = useState(null); // { addr, inputType } awaiting user confirmation
+  const [toolPrefill, setToolPrefill] = useState(null); // { page, value } — landing handed an xpub/PSBT to its tool
   const [scoreTint, setScoreTint] = useState(null);     // grade color for the ambient backdrop while a dashboard shows
   const [scoreDelta, setScoreDelta] = useState(null);   // score change vs the user's previous scan of the same address
 
@@ -8184,6 +8209,7 @@ function App() {
       else if (pageParam === "wallets") setPage("wallets");
       else if (pageParam === "inspector") setPage("inspector");
       else if (pageParam === "xpub") setPage("xpub");
+      else if (pageParam === "cases") setPage("cases");
     } catch {}
   }, []);
 
@@ -8196,9 +8222,9 @@ function App() {
   const _skipPush = useRef(false);   // this page change came from popstate — don't re-push
   const _firstSync = useRef(true);   // never rewrite the load URL on first render
   const pageUrl = useCallback((pg, cf) => {
-    if (pg === "coach" || pg === "wallets" || pg === "inspector" || pg === "xpub") return "/?page=" + pg;
+    if (pg === "coach" || pg === "wallets" || pg === "inspector" || pg === "xpub" || pg === "cases") return "/?page=" + pg;
     if (pg === "case_detail" && cf) return "/?case=" + (cf.slug || cf.id);
-    if (pg === "landing" || pg === "cases") return "/";
+    if (pg === "landing") return "/";
     return null;                     // scanning / dashboard / ln_dashboard — transient
   }, []);
   useEffect(() => {
@@ -8212,7 +8238,7 @@ function App() {
           if (found) { setActiveCaseFile(found); setPage("case_detail"); return; }
         }
         const pg = params.get("page");
-        setPage(["coach", "wallets", "inspector", "xpub"].includes(pg) ? pg : "landing");
+        setPage(["coach", "wallets", "inspector", "xpub", "cases"].includes(pg) ? pg : "landing");
       } catch { setPage("landing"); }
     };
     window.addEventListener("popstate", onPop);
@@ -8370,16 +8396,16 @@ function App() {
 
       {/* Page transition: opacity-only fade on every navigation (keyed by page so it replays; no transform → sticky nav preserved) */}
       <div key={page} style={{ animation: "fadeIn .35s ease both" }}>
-      {page === "landing"      && <Landing onAnalyze={analyze} isMobile={isMobile} onNav={setPage} onCases={(c) => { if (c) { setActiveCaseFile(c); setPage("case_detail"); } else { setPage("cases"); } }} />}
-      {page === "cases"        && <CaseFiles onOpenCase={c => { setActiveCaseFile(c); setPage("case_detail"); }} onBack={() => setPage("landing")} isMobile={isMobile} />}
-      {page === "case_detail"  && activeCaseFile && <CaseDetail caseFile={activeCaseFile} onBack={() => setPage("cases")} onAnalyze={analyze} isMobile={isMobile} />}
+      {page === "landing"      && <Landing onAnalyze={analyze} isMobile={isMobile} onNav={setPage} onOpenTool={(pg, value) => { setToolPrefill({ page: pg, value }); setPage(pg); }} onCases={(c) => { if (c) { setActiveCaseFile(c); setPage("case_detail"); } else { setPage("cases"); } }} />}
+      {page === "cases"        && <CaseFiles onOpenCase={c => { setActiveCaseFile(c); setPage("case_detail"); }} onBack={() => setPage("landing")} isMobile={isMobile} onNav={setPage} />}
+      {page === "case_detail"  && activeCaseFile && <CaseDetail caseFile={activeCaseFile} onBack={() => setPage("cases")} onAnalyze={analyze} isMobile={isMobile} onNav={setPage} />}
       {page === "scanning"     && <Scanning address={address || lnNodeId} isLightning={isScanningLightning} dataReady={scanDataReady} />}
       {page === "dashboard"    && <Dashboard address={address} addrInfo={addrInfo} utxos={utxos} txs={txs} isMobile={isMobile} onBack={() => setPage("landing")} onRescan={analyze} toast={toast} autoShare={autoShare} scanAt={scanAt} defaultSimple={defaultSimple} simpleMode={simpleMode} onSimpleModeChange={setSimpleMode} onCoach={() => setPage("coach")} delta={scoreDelta} />}
       {page === "ln_dashboard" && <LightningDashboard nodeId={lnNodeId} nodeData={lnNodeData} channels={lnChannels} isMobile={isMobile} onBack={() => setPage("landing")} onRescan={analyze} toast={toast} />}
-      {page === "coach"        && <CoachWaitlist onBack={() => setPage("landing")} isMobile={isMobile} />}
-      {page === "wallets"      && <WalletDirectory onBack={() => setPage("landing")} isMobile={isMobile} />}
-      {page === "inspector"    && <TransactionInspector onBack={() => setPage("landing")} isMobile={isMobile} onScan={analyze} />}
-      {page === "xpub"         && <XpubScan onBack={() => setPage("landing")} isMobile={isMobile} onScan={analyze} />}
+      {page === "coach"        && <CoachWaitlist onBack={() => setPage("landing")} isMobile={isMobile} onNav={setPage} />}
+      {page === "wallets"      && <WalletDirectory onBack={() => setPage("landing")} isMobile={isMobile} onNav={setPage} />}
+      {page === "inspector"    && <TransactionInspector onBack={() => setPage("landing")} isMobile={isMobile} onScan={analyze} onNav={setPage} prefill={toolPrefill?.page === "inspector" ? toolPrefill.value : null} />}
+      {page === "xpub"         && <XpubScan onBack={() => setPage("landing")} isMobile={isMobile} onScan={analyze} onNav={setPage} prefill={toolPrefill?.page === "xpub" ? toolPrefill.value : null} />}
       </div>
     </>
   );
