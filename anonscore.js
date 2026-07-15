@@ -18805,6 +18805,55 @@ function App() {
       if (pageParam === "coach") setPage("coach");else if (pageParam === "wallets") setPage("wallets");else if (pageParam === "inspector") setPage("inspector");else if (pageParam === "xpub") setPage("xpub");
     } catch {}
   }, []);
+  const _skipPush = useRef(false);
+  const _firstSync = useRef(true);
+  const pageUrl = useCallback((pg, cf) => {
+    if (pg === "coach" || pg === "wallets" || pg === "inspector" || pg === "xpub") return "/?page=" + pg;
+    if (pg === "case_detail" && cf) return "/?case=" + (cf.slug || cf.id);
+    if (pg === "landing" || pg === "cases") return "/";
+    return null;
+  }, []);
+  useEffect(() => {
+    const onPop = () => {
+      _skipPush.current = true;
+      try {
+        const params = new URLSearchParams(window.location.search);
+        const caseSlug = params.get("case");
+        if (caseSlug) {
+          const found = CASE_FILES.find(c => c.id === caseSlug || c.slug === caseSlug);
+          if (found) {
+            setActiveCaseFile(found);
+            setPage("case_detail");
+            return;
+          }
+        }
+        const pg = params.get("page");
+        setPage(["coach", "wallets", "inspector", "xpub"].includes(pg) ? pg : "landing");
+      } catch {
+        setPage("landing");
+      }
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
+  useEffect(() => {
+    if (_firstSync.current) {
+      _firstSync.current = false;
+      return;
+    }
+    if (_skipPush.current) {
+      _skipPush.current = false;
+      return;
+    }
+    const url = pageUrl(page, activeCaseFile);
+    if (url && window.location.pathname + window.location.search !== url) {
+      try {
+        window.history.pushState({
+          page
+        }, "", url);
+      } catch {}
+    }
+  }, [page, activeCaseFile, pageUrl]);
   const [address, setAddress] = useState("");
   const [addrInfo, setAddrInfo] = useState(null);
   const [utxos, setUtxos] = useState([]);
