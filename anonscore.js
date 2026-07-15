@@ -227,7 +227,7 @@ const LANDING_FACTS = [{
   url: "https://bitcoin.org/bitcoin.pdf"
 }, {
   stat: "546 sat",
-  desc: "minimum dust threshold — outputs below this are used by surveillance firms as tracking beacons",
+  desc: "dust threshold for legacy (P2PKH) outputs — ~294 sat for native SegWit; below it, outputs are used by surveillance firms as tracking beacons",
   source: "Bitcoin Core relay policy (GetDustThreshold)",
   url: "https://github.com/bitcoin/bitcoin/blob/master/src/policy/policy.cpp"
 }, {
@@ -1719,7 +1719,7 @@ const SCAN_STEPS = [{
   fact: "'0.1 BTC' is a Chainalysis red flag. '0.10431 BTC' looks like change — much less identifiable."
 }, {
   label: "Detecting CoinJoin patterns…",
-  fact: "CoinJoin breaks the chain of custody. With 50+ participants, tracking becomes computationally infeasible."
+  fact: "CoinJoin mixes your coins with others in one transaction — the more participants, the larger your anonymity set and the harder reliable tracking becomes."
 }, {
   label: "Analysing fee fingerprints…",
   fact: "Your wallet software can be identified by the fee rates it uses. Different wallets have different defaults."
@@ -1731,8 +1731,8 @@ const SCAN_STEPS = [{
   fact: "Most wallets can improve by 30+ points in under a week with no technical knowledge required."
 }];
 function classifyUtxo(u) {
-  if (u.value < 1000) return "critical";
-  if (u.value >= 100000 && u.value % 100000 === 0) return "medium";
+  if (isDustSat(u.value)) return "critical";
+  if (isRoundSat(u.value)) return "medium";
   if (u.value > 5000000) return "low";
   return "clean";
 }
@@ -1977,6 +1977,7 @@ function decodeSilentPayment(str) {
     }
   }
   if (bits >= 5 || acc & (1 << bits) - 1) return null;
+  if (version === 0 && out.length !== 66) return null;
   if (out.length < 66) return null;
   const scan = out.slice(0, 33),
     spend = out.slice(33, 66);
@@ -2023,13 +2024,12 @@ const _BOLT_MULT = {
 function decodeBolt11(str) {
   const d = _bech32Decode((str || "").trim());
   if (!d || d.spec !== "bech32" || !d.hrp.startsWith("ln")) return null;
-  const m = d.hrp.slice(2).match(/^(bcrt|bcs|bc|tb|sb)([0-9]*)([munp]?)$/);
+  const m = d.hrp.slice(2).match(/^(bcrt|tbs|bc|tb)([0-9]*)([munp]?)$/);
   if (!m) return null;
   const network = {
     bc: "mainnet",
     tb: "testnet",
-    bcs: "signet",
-    sb: "signet",
+    tbs: "signet",
     bcrt: "regtest"
   }[m[1]];
   let amountMsat = null;
@@ -2098,7 +2098,7 @@ function decodeBolt11(str) {
 }
 function detectBolt11(v) {
   const s = (v || "").trim().toLowerCase();
-  if (!/^ln(bc|tb|bcrt|bcs|sb)[0-9]*[munp]?1[a-z0-9]+$/.test(s)) return null;
+  if (!/^ln(bcrt|tbs|bc|tb)[0-9]*[munp]?1[a-z0-9]+$/.test(s)) return null;
   return decodeBolt11(s) ? "bolt11" : null;
 }
 function _bech32NoChecksum(str) {
@@ -2618,9 +2618,12 @@ function parseTransactionInput(raw) {
   };
   throw new Error("Unrecognized input — paste a PSBT (base64), raw transaction hex, or a 64-character txid");
 }
-const _txRound = v => v >= 100000 && (v % 1000000 === 0 || v % 500000 === 0);
+const DUST_SAT = 546;
+const isRoundSat = v => v >= 100000 && (v % 1000000 === 0 || v % 500000 === 0);
+const isDustSat = v => v > 0 && v < DUST_SAT;
+const _txRound = v => isRoundSat(v);
 const _txOpReturn = o => o.scriptpubkey_type === "op_return";
-const _txDust = o => !_txOpReturn(o) && o.value > 0 && o.value < 546;
+const _txDust = o => !_txOpReturn(o) && isDustSat(o.value);
 function analyzeTx(tx) {
   const vin = tx.vin || [],
     vout = tx.vout || [];
@@ -3419,8 +3422,8 @@ function runWalletEngine(scan) {
   const linkTxs = txs.filter(tx => new Set((tx.vin || []).map(v => v.prevout && v.prevout.scriptpubkey_address).filter(a => ownAddrs.has(a))).size >= 2);
   const consolidations = txs.filter(tx => spentByMe(tx) && (tx.vin || []).length >= 4 && (tx.vout || []).length <= 2);
   const coinjoins = txs.filter(tx => isCoinJoinShape(tx.vin, tx.vout));
-  const dustU = utxos.filter(u => u.value > 0 && u.value < 1000);
-  const roundU = utxos.filter(u => u.value >= 100000 && u.value % 100000 === 0);
+  const dustU = utxos.filter(u => isDustSat(u.value));
+  const roundU = utxos.filter(u => isRoundSat(u.value));
   const largest = utxos.reduce((m, u) => Math.max(m, u.value || 0), 0);
   const concentrated = balance > 0 && largest / balance > 0.9 && addrs.length > 1;
   let score = 100;
@@ -3575,7 +3578,7 @@ const DEMO_WALLET = {
     txs: []
   }]
 };
-function runEngine(utxos = [], txs = [], txCount = 0) {
+function runEngine(utxos = [], txs = [], txCount = 0, receiveCount = null) {
   if (txCount === 0 && utxos.length === 0) {
     return {
       score: null,
@@ -3601,13 +3604,14 @@ function runEngine(utxos = [], txs = [], txCount = 0) {
     });
     score += pts;
   };
-  if (txCount >= 10) add("reuse", "Address Reuse", "fail", `Used ${txCount}+ times — every spend permanently linked`, "This address has been used many times. Every reuse permanently links your transactions for any analyst to see.", "critical", -28);else if (txCount >= 4) add("reuse", "Address Reuse", "fail", `Used ${txCount} times — linkable on-chain`, "This address has been reused. Ideally, use a fresh address for every transaction.", "high", -15);else if (txCount >= 2) add("reuse", "Address Reuse", "warn", `Used ${txCount} times — minor exposure`, "Minor reuse. Generate a new address for your next receive.", "medium", -7);else add("reuse", "Address Reuse", "pass", "Fresh address — no reuse", "Great. This address has only been used once.", "clean", 0);
-  const dust = utxos.filter(u => u.value < 1000);
+  const rc = receiveCount != null ? receiveCount : txCount;
+  if (rc >= 10) add("reuse", "Address Reuse", "fail", `Received ${rc}+ times — every payment permanently linked`, "This address has received many payments. Every reuse permanently links your transactions for any analyst to see.", "critical", -28);else if (rc >= 4) add("reuse", "Address Reuse", "fail", `Received ${rc} times — linkable on-chain`, "This address has been reused to receive. Ideally, use a fresh address for every payment.", "high", -15);else if (rc >= 2) add("reuse", "Address Reuse", "warn", `Received ${rc} times — minor exposure`, "Minor reuse. Generate a new address for your next receive.", "medium", -7);else add("reuse", "Address Reuse", "pass", "Fresh address — received once", "Great. This address has only received once.", "clean", 0);
+  const dust = utxos.filter(u => isDustSat(u.value));
   if (dust.length > 2) add("dust", "Dust Attack", "fail", `${dust.length} dust UTXOs — tracking beacons planted`, "Small amounts sent by trackers. Spending them reveals your wallet cluster to surveillance firms.", "high", -12);else if (dust.length) add("dust", "Dust Attack", "warn", `${dust.length} dust UTXO — possible tracker`, "A tiny amount was sent to your address. Freeze it in Sparrow — never spend it.", "medium", -5);else add("dust", "Dust Attack", "pass", "No dust UTXOs", "No suspicious tiny amounts found.", "clean", 0);
-  const round = utxos.filter(u => u.value >= 100000 && u.value % 100000 === 0);
+  const round = utxos.filter(u => isRoundSat(u.value));
   if (round.length >= 2) add("round", "Round Amounts", "fail", `${round.length} round-number UTXOs — KYC withdrawal pattern`, "Round amounts like 0.1 BTC are a Chainalysis red flag. Analysts assume these came from KYC exchanges.", "high", -10);else if (round.length) add("round", "Round Amounts", "warn", "1 round-number UTXO — minor fingerprint", "One round amount. Use odd numbers next time you withdraw from an exchange.", "medium", -5);else add("round", "Round Amounts", "pass", "No suspicious round amounts", "Good — your UTXOs use non-round amounts.", "clean", 0);
   let cjCount = 0;
-  for (const tx of txs.slice(0, 20)) {
+  for (const tx of txs) {
     if (isCoinJoinShape(tx.vin, tx.vout)) cjCount++;
   }
   if (cjCount >= 2) add("cj", "CoinJoin Used", "pass", `${cjCount} CoinJoin transactions — strong mixing hygiene`, "You've used CoinJoin to break transaction links. This significantly improves your privacy.", "clean", +12);else if (cjCount === 1) add("cj", "CoinJoin Used", "warn", "1 CoinJoin — anonymity set may be small", "You've used CoinJoin once. More rounds with larger groups improve your score.", "medium", +4);else add("cj", "CoinJoin Used", "fail", "No CoinJoin — full history traceable", "Your transaction history is fully visible. CoinJoin breaks this chain permanently.", "high", -8);
@@ -4780,44 +4784,48 @@ const PROOF = {
 };
 const EpistemicLegend = ({
   kinds = ["proven", "inferred"],
-  color = T.textMid
-}) => React.createElement("div", {
-  role: "img",
-  "aria-label": "Legend: " + kinds.map(k => PROOF[k].label + " = " + PROOF[k].note).join("; "),
-  style: {
-    display: "flex",
-    flexWrap: "wrap",
-    gap: 14,
-    marginTop: 8
-  }
-}, kinds.map(k => React.createElement("span", {
-  key: k,
-  style: {
-    display: "inline-flex",
-    alignItems: "center",
-    gap: 6,
-    fontFamily: T.mono,
-    fontSize: 9.5,
-    color: T.textDim
-  }
-}, React.createElement("svg", {
-  width: "22",
-  height: "8",
-  "aria-hidden": "true"
-}, React.createElement("line", {
-  x1: "1",
-  y1: "4",
-  x2: "21",
-  y2: "4",
-  stroke: color,
-  strokeWidth: k === "proven" ? 2.2 : 1.3,
-  strokeDasharray: PROOF[k].dash === "none" ? undefined : PROOF[k].dash,
-  strokeLinecap: "round"
-})), React.createElement("span", {
-  style: {
-    color: T.textMid
-  }
-}, PROOF[k].glyph, " ", PROOF[k].label))));
+  color = T.textMid,
+  colors
+}) => {
+  const cf = k => colors && colors[k] || color;
+  return React.createElement("div", {
+    role: "img",
+    "aria-label": "Legend: " + kinds.map(k => PROOF[k].label + " = " + PROOF[k].note).join("; "),
+    style: {
+      display: "flex",
+      flexWrap: "wrap",
+      gap: 14,
+      marginTop: 8
+    }
+  }, kinds.map(k => React.createElement("span", {
+    key: k,
+    style: {
+      display: "inline-flex",
+      alignItems: "center",
+      gap: 6,
+      fontFamily: T.mono,
+      fontSize: 9.5,
+      color: T.textDim
+    }
+  }, React.createElement("svg", {
+    width: "22",
+    height: "8",
+    "aria-hidden": "true"
+  }, React.createElement("line", {
+    x1: "1",
+    y1: "4",
+    x2: "21",
+    y2: "4",
+    stroke: cf(k),
+    strokeWidth: k === "proven" ? 2.2 : 1.3,
+    strokeDasharray: PROOF[k].dash === "none" ? undefined : PROOF[k].dash,
+    strokeLinecap: "round"
+  })), React.createElement("span", {
+    style: {
+      color: T.textMid
+    }
+  }, PROOF[k].glyph, " ", PROOF[k].label))));
+};
 function Toast({
   toasts
 }) {
@@ -10965,6 +10973,20 @@ function TransactionInspector({
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
   const detected = detectTxInput(raw);
+  const derived = useMemo(() => {
+    if (!result) return null;
+    const tx = result.tx;
+    return {
+      tx,
+      a: analyzeTx(tx),
+      change: guessChange(tx),
+      clus: clusterUnification(tx),
+      fr: feeRate(tx),
+      link: txLinkability(tx),
+      fp: fingerprintTx(tx),
+      cj: classifyCoinjoin(tx.vin, tx.vout)
+    };
+  }, [result]);
   useEffect(() => {
     const prev = document.title;
     document.title = "Transaction Inspector — pre-broadcast privacy check — AnonScore";
@@ -11012,13 +11034,17 @@ function TransactionInspector({
     ...extra
   });
   let report = null;
-  if (result) {
-    const tx = result.tx;
-    const a = analyzeTx(tx);
-    const change = guessChange(tx);
-    const clus = clusterUnification(tx);
-    const fr = feeRate(tx);
-    const link = txLinkability(tx);
+  if (result && derived) {
+    const {
+      tx,
+      a,
+      change,
+      clus,
+      fr,
+      link,
+      fp,
+      cj
+    } = derived;
     const ent = link.available ? link.N === 1 ? {
       c: T.red,
       t: "Fully deterministic"
@@ -11035,8 +11061,6 @@ function TransactionInspector({
       c: T.green,
       t: "Strongly ambiguous"
     } : null;
-    const fp = fingerprintTx(tx);
-    const cj = classifyCoinjoin(tx.vin, tx.vout);
     const lpCell = v => Math.abs(v - 1) < 1e-9 ? {
       bg: T.red,
       fg: T.bg,
@@ -11252,7 +11276,7 @@ function TransactionInspector({
         ...label,
         color: T.green
       }
-    }, cj.type === "Whirlpool" ? "WHIRLPOOL COINJOIN" : cj.type === "Wasabi" ? "WASABI COINJOIN" : "COINJOIN DETECTED"), React.createElement("div", {
+    }, cj.type === "Whirlpool" ? "WHIRLPOOL COINJOIN" : cj.type === "Wasabi" ? "EQUAL-VALUE COINJOIN" : "COINJOIN DETECTED"), React.createElement("div", {
       style: {
         fontSize: 13,
         color: T.textMid,
@@ -11262,7 +11286,7 @@ function TransactionInspector({
       style: {
         color: T.text
       }
-    }, sats(cj.denom)), cj.type === "Whirlpool" ? " in a 5×5 pool" : cj.type === "Wasabi" ? " — an equal-value (ZeroLink) round, ~99% detectable by its structure alone" : "", ". Good: equal outputs break the deterministic input\u2192output trail for everyone in the round."), React.createElement("div", {
+    }, sats(cj.denom)), cj.type === "Whirlpool" ? " in a 5×5 pool" : cj.type === "Wasabi" ? " — an equal-value (ZeroLink / legacy Wasabi-style) round, ~99% detectable by its structure (not modern WabiSabi, which uses variable amounts)" : "", ". Good: equal outputs break the deterministic input\u2192output trail for everyone in the round."), React.createElement("div", {
       style: {
         background: T.amber + "10",
         border: `1px solid ${T.amber}33`,
@@ -11668,6 +11692,7 @@ function TransactionInspector({
     onChange: e => {
       setRaw(e.target.value);
       setError("");
+      setResult(null);
     },
     placeholder: "cHNidP8B\u2026  or  0200000001\u2026",
     "aria-label": "Paste a PSBT (base64), raw transaction hex, or a transaction id",
@@ -13364,7 +13389,7 @@ function buildAiContext(checks, recommendations, score, grade, walletMeta) {
       const flags = [];
       if (outCount >= 5 && inCount >= 5) flags.push("possible CoinJoin");
       if (inCount >= 4 && outCount <= 2) flags.push("consolidation");
-      if (totalOut >= 100000 && totalOut % 100000 === 0) flags.push("round amount");
+      if (isRoundSat(totalOut)) flags.push("round amount");
       return `  ${i + 1}. ${time} — ${inCount} inputs → ${outCount} outputs, ${satsBtc(totalOut)} total${fee ? `, ${fee}` : ""}${flags.length ? ` [${flags.join(", ")}]` : ""}`;
     }).join("\n");
     const utxoLines = utxos.slice(0, 10).map((u, i) => `  ${i + 1}. ${satsBtc(u.value)} — ${u.status?.confirmed ? "confirmed" : "unconfirmed"}, ${age(u.status?.block_time)}, type: ${u.scriptpubkey_type || "unknown"}`).join("\n");
@@ -14320,6 +14345,46 @@ function computeCluster(txs, address) {
     sample: list.length
   };
 }
+function computeCounterparties(txs, address, exclude) {
+  const skip = exclude instanceof Set ? exclude : new Set(exclude || []);
+  const cp = new Map();
+  (txs || []).forEach(tx => {
+    const vin = tx.vin || [],
+      vout = tx.vout || [];
+    if (isCoinJoinShape(vin, vout)) return;
+    const inAddrs = vin.map(v => v.prevout?.scriptpubkey_address).filter(Boolean);
+    const inSet = new Set(inAddrs);
+    if (inSet.has(address)) {
+      vout.forEach(o => {
+        const a = o.scriptpubkey_address;
+        if (a && a !== address && !inSet.has(a)) {
+          const e = cp.get(a) || {
+            paid: 0,
+            received: 0
+          };
+          e.paid++;
+          cp.set(a, e);
+        }
+      });
+    } else if (vout.some(o => o.scriptpubkey_address === address)) {
+      inSet.forEach(a => {
+        if (a && a !== address) {
+          const e = cp.get(a) || {
+            paid: 0,
+            received: 0
+          };
+          e.received++;
+          cp.set(a, e);
+        }
+      });
+    }
+  });
+  return [...cp.entries()].filter(([a]) => a !== address && !skip.has(a)).map(([addr, e]) => ({
+    addr,
+    count: e.paid + e.received,
+    kind: e.paid && e.received ? "both" : e.paid ? "paid" : "received"
+  })).sort((a, b) => b.count - a.count);
+}
 function isLookalikeAddress(a, b) {
   if (!a || !b || a === b) return false;
   const pfx = s => s.startsWith("bc1q") || s.startsWith("bc1p") ? 4 : s[0] === "1" || s[0] === "3" ? 1 : 0;
@@ -14369,21 +14434,26 @@ function ClusterMap({
   const isDemo = address === "DEMO" || address === "DEMO_A";
   const trunc = a => a.length > 17 ? `${a.slice(0, 10)}…${a.slice(-5)}` : a;
   const you = third ? "this wallet" : "your wallet";
-  const shown = linked.slice(0, 8);
-  const W = 520,
-    H = 220,
-    CX = W / 2,
-    CY = H / 2,
-    RX = 185,
-    RY = 78;
-  const pos = i => {
-    const a = i / shown.length * Math.PI * 2 - Math.PI / 2;
+  const clusterSet = new Set(linked.map(n => n.addr));
+  const counterparties = computeCounterparties(txs, address, clusterSet);
+  const hasGraph = linked.length > 0 || counterparties.length > 0;
+  const innerShown = linked.slice(0, 8),
+    outerShown = counterparties.slice(0, 10);
+  const W = 480,
+    H = 424,
+    CX = 240,
+    CY = 206,
+    RIN = 88,
+    ROUT = 164;
+  const ringPos = (i, n, R) => {
+    const a = i / Math.max(n, 1) * Math.PI * 2 - Math.PI / 2;
     return {
-      x: CX + RX * Math.cos(a),
-      y: CY + RY * Math.sin(a)
+      x: CX + R * Math.cos(a),
+      y: CY + R * Math.sin(a)
     };
   };
   const listRows = showAll ? linked : linked.slice(0, 4);
+  const cpRows = showAll ? counterparties : counterparties.slice(0, 4);
   return React.createElement("div", {
     style: {
       background: T.card,
@@ -14399,7 +14469,7 @@ function ClusterMap({
       letterSpacing: 2,
       marginBottom: 8
     }
-  }, "CLUSTER EXPOSURE"), React.createElement("div", {
+  }, "CONNECTIONS"), React.createElement("div", {
     style: {
       fontFamily: T.serif,
       fontSize: isMobile ? 19 : 22,
@@ -14407,41 +14477,85 @@ function ClusterMap({
       fontWeight: 400,
       marginBottom: 8
     }
-  }, linked.length ? `The chain ties ${linked.length} other address${linked.length !== 1 ? "es" : ""} to ${you}` : "Addresses the chain would tie to this one"), React.createElement("div", {
+  }, hasGraph ? `The neighborhood the chain draws around ${you}` : "The neighborhood the chain would draw around this address"), React.createElement("div", {
     style: {
       fontSize: 13,
       color: T.textMid,
       lineHeight: 1.65
     }
-  }, "Spend from several addresses in one transaction and every analyst assumes a single owner signed them all \u2014 the ", React.createElement("strong", {
+  }, linked.length > 0 ? React.createElement(React.Fragment, null, React.createElement("strong", {
+    style: {
+      color: T.red
+    }
+  }, linked.length, " address", linked.length !== 1 ? "es" : ""), " are ", React.createElement("strong", {
     style: {
       color: T.text
     }
-  }, "common-input heuristic"), ", the workhorse of chain surveillance. This is the cluster it builds around ", you, ", computed in your browser from the transactions above. These are ", React.createElement("strong", {
+  }, "provably ", you), " via the common-input heuristic (spent together \u2014 solid links). ") : "No co-spend proves other addresses are the same owner. ", counterparties.length > 0 && React.createElement(React.Fragment, null, React.createElement("strong", {
+    style: {
+      color: T.amber
+    }
+  }, counterparties.length), " more are ", React.createElement("strong", {
     style: {
       color: T.text
     }
-  }, "proven"), " links \u2014 solid, thickening with each shared spend."), linked.length > 0 && React.createElement(React.Fragment, null, React.createElement(EpistemicLegend, {
-    kinds: ["proven"],
-    color: T.red
+  }, "inferred counterparties"), " \u2014 addresses ", you, " paid or was paid by (dashed; a destination can be your own change, so these are likely, not proven). "), "Computed in your browser from the transactions above."), hasGraph && React.createElement(React.Fragment, null, React.createElement(EpistemicLegend, {
+    kinds: ["proven", "inferred"],
+    colors: {
+      proven: T.red,
+      inferred: T.amber
+    }
   }), React.createElement("svg", {
     viewBox: `0 0 ${W} ${H}`,
     role: "img",
-    "aria-label": `Cluster graph: ${linked.length} address${linked.length !== 1 ? "es" : ""} linked to the scanned address by co-spending.`,
+    "aria-label": `Connections graph: ${linked.length} proven same-owner address${linked.length !== 1 ? "es" : ""} and ${counterparties.length} inferred counterpart${counterparties.length !== 1 ? "ies" : "y"} around the scanned address.`,
     style: {
       display: "block",
       width: "100%",
-      maxWidth: 560,
+      maxWidth: 460,
       height: "auto",
       margin: "14px auto 0",
       overflow: "visible"
     }
-  }, shown.map((n, i) => {
-    const p = pos(i);
+  }, outerShown.map((n, i) => {
+    const p = ringPos(i, outerShown.length, ROUT);
+    return React.createElement("g", {
+      key: "cp" + n.addr,
+      style: {
+        animation: `clusterIn .5s ease ${0.25 + i * 0.05}s both`
+      }
+    }, React.createElement("line", {
+      x1: CX,
+      y1: CY,
+      x2: p.x,
+      y2: p.y,
+      stroke: T.amber,
+      strokeOpacity: "0.4",
+      strokeWidth: "1",
+      strokeDasharray: "5 3",
+      strokeLinecap: "round"
+    }), React.createElement("circle", {
+      cx: p.x,
+      cy: p.y,
+      r: "5",
+      fill: T.bg,
+      stroke: T.amber,
+      strokeWidth: "1.4",
+      strokeDasharray: "2.4 1.6"
+    }, React.createElement("title", null, n.addr, " \u2014 ", n.kind === "both" ? "paid and received" : n.kind === "paid" ? "paid" : "received from", ", ", n.count, "\xD7  (inferred counterparty)")), React.createElement("text", {
+      x: p.x,
+      y: p.y + (p.y >= CY ? 15 : -9),
+      textAnchor: "middle",
+      fontFamily: T.mono,
+      fontSize: "7.5",
+      fill: T.textDim
+    }, trunc(n.addr)));
+  }), innerShown.map((n, i) => {
+    const p = ringPos(i, innerShown.length, RIN);
     return React.createElement("g", {
       key: n.addr,
       style: {
-        animation: `clusterIn .5s ease ${0.15 + i * 0.09}s both`
+        animation: `clusterIn .5s ease ${0.15 + i * 0.07}s both`
       }
     }, React.createElement("line", {
       x1: CX,
@@ -14449,8 +14563,8 @@ function ClusterMap({
       x2: p.x,
       y2: p.y,
       stroke: T.red,
-      strokeOpacity: "0.5",
-      strokeWidth: 1 + Math.min(n.count, 5) * 0.35,
+      strokeOpacity: "0.55",
+      strokeWidth: 1.2 + Math.min(n.count, 5) * 0.4,
       strokeLinecap: "round"
     }), React.createElement("circle", {
       cx: p.x,
@@ -14465,22 +14579,22 @@ function ClusterMap({
       fill: T.bg,
       stroke: T.red,
       strokeWidth: "1.6"
-    }, React.createElement("title", null, n.addr, " \u2014 co-spent with the scanned address in ", n.count, " transaction", n.count !== 1 ? "s" : "")), React.createElement("text", {
+    }, React.createElement("title", null, n.addr, " \u2014 co-spent with the scanned address in ", n.count, " transaction", n.count !== 1 ? "s" : "", " (proven common-input)")), React.createElement("text", {
       x: p.x,
-      y: p.y + (p.y >= CY ? 22 : -14),
+      y: p.y + (p.y >= CY ? 18 : -11),
       textAnchor: "middle",
       fontFamily: T.mono,
-      fontSize: "8.5",
+      fontSize: "8",
       fill: T.textMid
     }, trunc(n.addr)));
-  }), linked.length > shown.length && React.createElement("text", {
+  }), (linked.length > innerShown.length || counterparties.length > outerShown.length) && React.createElement("text", {
     x: CX,
-    y: H - 4,
+    y: H - 2,
     textAnchor: "middle",
     fontFamily: T.mono,
     fontSize: "9",
     fill: T.textDim
-  }, "+", linked.length - shown.length, " more not drawn"), React.createElement("circle", {
+  }, [linked.length > innerShown.length ? `+${linked.length - innerShown.length} proven` : null, counterparties.length > outerShown.length ? `+${counterparties.length - outerShown.length} inferred` : null].filter(Boolean).join(" · "), " not drawn"), React.createElement("circle", {
     cx: CX,
     cy: CY,
     r: "30",
@@ -14503,14 +14617,21 @@ function ClusterMap({
     fontSize: "9",
     fill: T.cyan,
     letterSpacing: "1"
-  }, third ? "WALLET" : "YOU")), React.createElement("div", {
+  }, third ? "WALLET" : "YOU")), linked.length > 0 && React.createElement("div", {
     style: {
       display: "flex",
       flexDirection: "column",
       gap: 6,
       marginTop: 14
     }
-  }, listRows.map(n => {
+  }, React.createElement("div", {
+    style: {
+      fontFamily: T.mono,
+      fontSize: 9,
+      color: T.red,
+      letterSpacing: 1.5
+    }
+  }, "\u26D3 PROVEN \u2014 SAME OWNER"), listRows.map(n => {
     const scannable = !!onScan && !isDemo && isValidBitcoinAddress(n.addr);
     return React.createElement("div", {
       key: n.addr,
@@ -14554,7 +14675,66 @@ function ClusterMap({
         marginLeft: "auto"
       }
     }));
-  }), linked.length > 4 && React.createElement("button", {
+  })), counterparties.length > 0 && React.createElement("div", {
+    style: {
+      display: "flex",
+      flexDirection: "column",
+      gap: 6,
+      marginTop: 12
+    }
+  }, React.createElement("div", {
+    style: {
+      fontFamily: T.mono,
+      fontSize: 9,
+      color: T.amber,
+      letterSpacing: 1.5
+    }
+  }, "\u2248 INFERRED \u2014 COUNTERPARTIES"), cpRows.map(n => {
+    const scannable = !!onScan && !isDemo && isValidBitcoinAddress(n.addr);
+    return React.createElement("div", {
+      key: "cp" + n.addr,
+      style: {
+        display: "flex",
+        alignItems: "center",
+        gap: 10,
+        background: T.surface,
+        border: `1px solid ${T.borderLo}`,
+        borderRadius: 10,
+        padding: "8px 12px"
+      }
+    }, React.createElement("span", {
+      style: {
+        width: 7,
+        height: 7,
+        borderRadius: "50%",
+        border: `1.5px solid ${T.amber}`,
+        flexShrink: 0
+      }
+    }), React.createElement("span", {
+      style: {
+        fontFamily: T.mono,
+        fontSize: 12,
+        color: T.text,
+        minWidth: 0,
+        overflow: "hidden",
+        textOverflow: "ellipsis"
+      }
+    }, trunc(n.addr)), React.createElement("span", {
+      style: {
+        fontFamily: T.mono,
+        fontSize: 10,
+        color: T.textDim,
+        flexShrink: 0
+      }
+    }, n.kind === "both" ? "paid + received" : n.kind, " \xD7", n.count), scannable && React.createElement(AuditButton, {
+      onClick: () => onScan(n.addr),
+      color: T.amber,
+      ariaLabel: "Audit counterparty " + n.addr,
+      style: {
+        marginLeft: "auto"
+      }
+    }));
+  })), (linked.length > 4 || counterparties.length > 4) && React.createElement("button", {
     onClick: () => setShowAll(s => !s),
     style: {
       background: "none",
@@ -14563,10 +14743,10 @@ function ClusterMap({
       fontSize: 11,
       color: T.cyan,
       cursor: "pointer",
-      padding: "4px 0",
+      padding: "8px 0 0",
       textAlign: "left"
     }
-  }, showAll ? "▲ show fewer" : `▼ show all ${linked.length} linked addresses`))), linked.length === 0 && React.createElement("div", {
+  }, showAll ? "▲ show fewer" : `▼ show all (${linked.length} proven · ${counterparties.length} inferred)`)), !hasGraph && React.createElement("div", {
     style: {
       marginTop: 12,
       background: T.green + "12",
@@ -14582,7 +14762,7 @@ function ClusterMap({
       color: T.green,
       fontFamily: T.mono
     }
-  }, "\u2713"), " ", spends === 0 ? `None of the ${sample} most recent transactions spend from this address together with others — the heuristic has nothing to work with here.` : `No co-spend links across ${spends} spend${spends !== 1 ? "s" : ""} — each one used only this address, so the workhorse heuristic comes up empty.`), React.createElement("div", {
+  }, "\u2713"), " ", spends === 0 ? `None of the ${sample} most recent transactions spend from this address together with others, and no counterparties stand out — the graph has nothing to draw here.` : `No co-spend links across ${spends} spend${spends !== 1 ? "s" : ""} — each one used only this address, so the workhorse heuristic comes up empty.`), React.createElement("div", {
     style: {
       fontSize: 11.5,
       color: T.textDim,
@@ -14602,9 +14782,9 @@ function ExposureFlow({
   onScan
 }) {
   const list = (txs || []).slice(0, 8);
-  const isRound = v => v >= 100000 && (v % 1000000 === 0 || v % 500000 === 0);
+  const isRound = v => isRoundSat(v);
   const isOpReturn = o => o.scriptpubkey_type === "op_return";
-  const isDust = o => !isOpReturn(o) && o.value > 0 && o.value < 546;
+  const isDust = o => !isOpReturn(o) && isDustSat(o.value);
   const KIND = {
     dust: {
       color: T.red,
@@ -15127,7 +15307,8 @@ function Dashboard({
   const [aiWidgetMin, setAiWidgetMin] = useState(false);
   const openAi = () => setAiStage("consent");
   const txCount = addrInfo?.chain_stats?.tx_count || txs.length;
-  const analysis = useMemo(() => runEngine(utxos, txs, txCount), [utxos, txs, txCount]);
+  const receiveCount = addrInfo?.chain_stats?.funded_txo_count ?? null;
+  const analysis = useMemo(() => runEngine(utxos, txs, txCount, receiveCount), [utxos, txs, txCount, receiveCount]);
   const {
     score,
     grade,
@@ -16596,11 +16777,11 @@ function Dashboard({
       color
     } = RISK_META[risk];
     const flags = [];
-    if (u.value < 1000) flags.push({
+    if (isDustSat(u.value)) flags.push({
       t: "Dust — freeze this",
       c: T.red
     });
-    if (u.value >= 100000 && u.value % 100000 === 0) flags.push({
+    if (isRoundSat(u.value)) flags.push({
       t: "Round amount",
       c: T.btc
     });
@@ -16769,7 +16950,7 @@ function Dashboard({
       l: "Consolidation",
       c: T.red
     });
-    if (tx.vout?.[0]?.value >= 100000 && tx.vout[0].value % 100000 === 0) flags.push({
+    if ((tx.vout || []).some(o => isRoundSat(o.value))) flags.push({
       l: "Round amount",
       c: T.amber
     });
@@ -18743,7 +18924,7 @@ function App() {
         setTxs(demoData.txs);
         setScanAt(Date.now());
         setScoreDelta(null);
-        setScoreTint(scoreColor(runEngine(demoData.utxos, demoData.txs, demoData.addrInfo?.chain_stats?.tx_count || demoData.txs.length).score));
+        setScoreTint(scoreColor(runEngine(demoData.utxos, demoData.txs, demoData.addrInfo?.chain_stats?.tx_count || demoData.txs.length, demoData.addrInfo?.chain_stats?.funded_txo_count ?? null).score));
         setScanDataReady(true);
         await new Promise(r => setTimeout(r, 300));
         setPage("dashboard");
@@ -18755,7 +18936,7 @@ function App() {
         return;
       }
       const data = await fetchAddress(addr);
-      const analysis = runEngine(data.utxos, data.txs, data.addrInfo?.chain_stats?.tx_count || data.txs.length);
+      const analysis = runEngine(data.utxos, data.txs, data.addrInfo?.chain_stats?.tx_count || data.txs.length, data.addrInfo?.chain_stats?.funded_txo_count ?? null);
       const prevEntry = getHistory().find(e => e.addr === addr);
       const delta = prevEntry ? analysis.score - prevEntry.score : null;
       setScoreDelta(delta);
@@ -18882,7 +19063,10 @@ window.__ANONSCORE_TEST__ = Object.freeze({
   runLightningEngine,
   classifyUtxo,
   scoreGrade,
+  isRoundSat,
+  isDustSat,
   computeCluster,
+  computeCounterparties,
   computePoisoning,
   isLookalikeAddress,
   computeActivityClock,
