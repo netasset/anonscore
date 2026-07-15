@@ -2696,6 +2696,37 @@ const Pill = ({ children, active, onClick, color }) => (
   </button>
 );
 
+// The single "jump to another analysis" affordance — the app's connective tissue.
+// Reimplemented inline in six places before this; one component now, one label,
+// one hover, one aria pattern, so every jump reads and behaves identically.
+const AuditButton = ({ onClick, color = T.cyan, label = "Audit →", ariaLabel, size = 12, style }) => (
+  <button onClick={onClick} aria-label={ariaLabel || label}
+    style={{ flexShrink: 0, background: "transparent", border: `1px solid ${color}55`, borderRadius: 8, padding: "5px 12px", color, fontFamily: T.sans, fontSize: size, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap", transition: "background .15s", ...style }}
+    onMouseOver={e => (e.currentTarget.style.background = color + "14")} onMouseOut={e => (e.currentTarget.style.background = "transparent")}>{label}</button>
+);
+
+// EPISTEMIC ENCODING — the "verify, don't trust" grammar for connections. A link's
+// HUE carries valence (bad/good/caution); this SEPARATE, colour-blind-safe channel
+// (line style + glyph + verb) carries how SURE we are it's real, so a user never
+// mistakes an inferred guess for an on-chain fact.
+const PROOF = {
+  proven:    { glyph: "⛓", dash: "none", verb: "provably", label: "Proven", note: "on-chain fact (common-input / deterministic link)" },
+  inferred:  { glyph: "≈", dash: "5 3",  verb: "likely",   label: "Inferred", note: "probabilistic — a strong guess, not proof" },
+  heuristic: { glyph: "?", dash: "1.5 3", verb: "consistent with", label: "Heuristic", note: "a weak tell that can misfire" },
+};
+// A compact legend that decodes the line styles beside any connection graph.
+const EpistemicLegend = ({ kinds = ["proven", "inferred"], color = T.textMid }) => (
+  <div role="img" aria-label={"Legend: " + kinds.map(k => PROOF[k].label + " = " + PROOF[k].note).join("; ")}
+    style={{ display: "flex", flexWrap: "wrap", gap: 14, marginTop: 8 }}>
+    {kinds.map(k => (
+      <span key={k} style={{ display: "inline-flex", alignItems: "center", gap: 6, fontFamily: T.mono, fontSize: 9.5, color: T.textDim }}>
+        <svg width="22" height="8" aria-hidden="true"><line x1="1" y1="4" x2="21" y2="4" stroke={color} strokeWidth={k === "proven" ? 2.2 : 1.3} strokeDasharray={PROOF[k].dash === "none" ? undefined : PROOF[k].dash} strokeLinecap="round" /></svg>
+        <span style={{ color: T.textMid }}>{PROOF[k].glyph} {PROOF[k].label}</span>
+      </span>
+    ))}
+  </div>
+);
+
 function Toast({ toasts }) {
   return (
     <div role="region" aria-label="Notifications" aria-live="polite" style={{ position: "fixed", bottom: 80, right: 20, zIndex: 9999, display: "flex", flexDirection: "column", gap: 8, pointerEvents: "none" }}>
@@ -3802,7 +3833,10 @@ function CountUp({ value }) {
   return <span ref={ref}>{value}</span>;
 }
 
-function Landing({ onAnalyze, isMobile, onCases }) {
+function Landing({ onAnalyze, isMobile, onCases, onNav }) {
+  // Left-click a tool link → navigate in-app (no cold SPA reload); keep the href so
+  // middle-click / open-in-new-tab / deep-link still work.
+  const navLink = page => e => { if (onNav && e.button === 0 && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey) { e.preventDefault(); onNav(page); } };
   useLang(); // re-render this subtree when language changes
   // Nav shows the trust-signal row only when there's room for it beside the
   // centered logo (below this, they'd crowd the brand).
@@ -4172,9 +4206,7 @@ function Landing({ onAnalyze, isMobile, onCases }) {
                                 <div style={{ color: T.textDim, fontSize: 10, marginTop: 2 }}>funding tx → block {r.block.toLocaleString()} · tx #{r.tx} · output {r.out}</div>
                               </div>
                               {isValidLightningPubkey(r.pubkey) && (
-                                <button onClick={() => onAnalyze(r.pubkey, false, "ln_pubkey")} aria-label={"Audit peer node " + r.pubkey}
-                                  style={{ flexShrink: 0, background: "transparent", border: `1px solid ${T.ln}55`, borderRadius: 7, padding: "4px 10px", color: T.ln, fontFamily: T.sans, fontSize: 11, fontWeight: 600, cursor: "pointer" }}
-                                  onMouseOver={e => (e.currentTarget.style.background = T.ln + "14")} onMouseOut={e => (e.currentTarget.style.background = "transparent")}>Audit →</button>
+                                <AuditButton onClick={() => onAnalyze(r.pubkey, false, "ln_pubkey")} color={T.ln} size={11} ariaLabel={"Audit peer node " + r.pubkey} />
                               )}
                             </div>
                           ))}
@@ -4215,9 +4247,7 @@ function Landing({ onAnalyze, isMobile, onCases }) {
                             <strong style={{ color: T.ln }}>Exposes the payee's node pubkey directly</strong>{p.issuerId ? <> (<span style={{ fontFamily: T.mono, fontSize: 11 }}>{cut(p.issuerId)}</span>)</> : ""} — no blinded paths. An observer can look the node up, map its public channels and probe balances. Still better than a BOLT11 invoice (reusable, no static payment hash), but a blinded-path offer would hide the identity. {p.issuer ? "Issuer: " + p.issuer + "." : ""}
                             {p.issuerId && isValidLightningPubkey(p.issuerId) && (
                               <div style={{ marginTop: 8 }}>
-                                <button onClick={() => onAnalyze(p.issuerId, false, "ln_pubkey")} aria-label={"Audit issuer node " + p.issuerId}
-                                  style={{ background: "transparent", border: `1px solid ${T.ln}55`, borderRadius: 7, padding: "4px 12px", color: T.ln, fontFamily: T.sans, fontSize: 11.5, fontWeight: 600, cursor: "pointer" }}
-                                  onMouseOver={e => (e.currentTarget.style.background = T.ln + "14")} onMouseOut={e => (e.currentTarget.style.background = "transparent")}>Audit this node →</button>
+                                <AuditButton onClick={() => onAnalyze(p.issuerId, false, "ln_pubkey")} color={T.ln} label="Audit this node →" ariaLabel={"Audit issuer node " + p.issuerId} />
                               </div>
                             )}
                           </div>
@@ -4474,19 +4504,19 @@ function Landing({ onAnalyze, isMobile, onCases }) {
             onMouseOut={e => e.currentTarget.style.color = T.textMid}>
             How we're paid for
           </button>
-          <a href="/?page=wallets"
+          <a href="/?page=wallets" onClick={navLink("wallets")}
             style={{ fontFamily: T.mono, fontSize: 10, color: T.textMid, textDecoration: "underline dotted", textUnderlineOffset: 3, transition: "color .15s" }}
             onMouseOver={e => e.currentTarget.style.color = T.btc}
             onMouseOut={e => e.currentTarget.style.color = T.textMid}>
             Wallet directory
           </a>
-          <a href="/?page=inspector"
+          <a href="/?page=inspector" onClick={navLink("inspector")}
             style={{ fontFamily: T.mono, fontSize: 10, color: T.textMid, textDecoration: "underline dotted", textUnderlineOffset: 3, transition: "color .15s" }}
             onMouseOver={e => e.currentTarget.style.color = T.cyan}
             onMouseOut={e => e.currentTarget.style.color = T.textMid}>
             Transaction Inspector
           </a>
-          <a href="/?page=xpub"
+          <a href="/?page=xpub" onClick={navLink("xpub")}
             style={{ fontFamily: T.mono, fontSize: 10, color: T.textMid, textDecoration: "underline dotted", textUnderlineOffset: 3, transition: "color .15s" }}
             onMouseOver={e => e.currentTarget.style.color = T.cyan}
             onMouseOut={e => e.currentTarget.style.color = T.textMid}>
@@ -5093,9 +5123,7 @@ function FlowGraph({ inputs, outputs, lp, outIdx, isMobile, onAudit }) {
       <div style={{ color: T.textDim, fontSize: 10, marginTop: 2 }}>{o.sub}</div>
       {o.det && <div style={{ color: T.red, fontSize: 9, marginTop: 3, letterSpacing: 0.3 }}>⛓ provably from these inputs</div>}
       {o.address && onAudit && (
-        <button onClick={() => onAudit(o.address)} aria-label={"Audit output address " + o.address}
-          style={{ marginTop: 6, background: "transparent", border: `1px solid ${T.cyan}55`, borderRadius: 7, padding: "3px 10px", color: T.cyan, fontFamily: T.sans, fontSize: 11, fontWeight: 600, cursor: "pointer" }}
-          onMouseOver={e => (e.currentTarget.style.background = T.cyan + "14")} onMouseOut={e => (e.currentTarget.style.background = "transparent")}>Audit →</button>
+        <AuditButton onClick={() => onAudit(o.address)} size={11} ariaLabel={"Audit output address " + o.address} style={{ marginTop: 6 }} />
       )}
     </div>
   );
@@ -5115,7 +5143,11 @@ function FlowGraph({ inputs, outputs, lp, outIdx, isMobile, onAudit }) {
         {edges.map((e, k) => {
           const xm = (e.x1 + e.x2) / 2;
           return <path key={k} d={`M ${e.x1} ${e.y1} C ${xm} ${e.y1}, ${xm} ${e.y2}, ${e.x2} ${e.y2}`} fill="none"
-            stroke={e.neutral ? T.textDim : T.red} strokeWidth={e.det ? 2.2 : 1 + e.v * 1.6} strokeOpacity={e.neutral ? 0.14 : 0.14 + e.v * 0.72} strokeLinecap="round" />;
+            stroke={e.neutral ? T.textDim : T.red}
+            strokeWidth={e.det ? 2.4 : e.neutral ? 1 : 0.7 + e.v * 1.1}
+            strokeOpacity={e.det ? 0.92 : e.neutral ? 0.14 : 0.12 + e.v * 0.58}
+            strokeDasharray={e.det ? undefined : e.neutral ? "1.5 3" : "5 3"}
+            strokeLinecap="round" />;
         })}
       </svg>
       <div ref={leftRef} style={{ position: "relative", zIndex: 1, display: "flex", flexDirection: "column", gap: 6 }}>{inputs.map(inputCard)}</div>
@@ -5304,10 +5336,7 @@ function TransactionInspector({ onBack, isMobile, onScan }) {
                 <div key={ad} style={{ display: "flex", alignItems: "center", gap: 10, background: T.surface, border: `1px solid ${T.borderLo}`, borderRadius: 10, padding: "8px 12px" }}>
                   <span style={{ width: 7, height: 7, borderRadius: "50%", background: T.red, flexShrink: 0 }} />
                   <span style={{ fontFamily: T.mono, fontSize: 12, color: T.text, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>{trunc(ad)}</span>
-                  {onScan && isValidBitcoinAddress(ad) && (
-                    <button onClick={() => onScan(ad)} style={{ marginLeft: "auto", flexShrink: 0, background: "transparent", border: `1px solid ${T.cyan}55`, borderRadius: 8, padding: "5px 12px", color: T.cyan, fontFamily: T.sans, fontSize: 12, fontWeight: 600, cursor: "pointer" }}
-                      onMouseOver={e => e.currentTarget.style.background = T.cyan + "14"} onMouseOut={e => e.currentTarget.style.background = "transparent"}>Audit →</button>
-                  )}
+                  {onScan && isValidBitcoinAddress(ad) && <AuditButton onClick={() => onScan(ad)} ariaLabel={"Audit input address " + ad} style={{ marginLeft: "auto" }} />}
                 </div>
               ))}
             </div>
@@ -5323,8 +5352,9 @@ function TransactionInspector({ onBack, isMobile, onScan }) {
             </div>
           )}
           {link.available && (tx.vin || []).length >= 1 && (
-            <div style={{ fontSize: 11, color: T.textDim, lineHeight: 1.5, marginBottom: 10 }}>
-              Threads show which input funds which output. <span style={{ color: T.red }}>Solid red</span> = a deterministic link (provable on-chain); fainter threads are ambiguous — the more they blur, the less any single link can be proven.
+            <div style={{ fontSize: 11, color: T.textDim, lineHeight: 1.5, marginBottom: 8 }}>
+              Threads show which input funds which output. A <span style={{ color: T.red }}>solid</span> thread is a deterministic link (provable on-chain); dashed threads are ambiguous — the more they blur, the less any single link can be proven.
+              <EpistemicLegend kinds={["proven", "inferred"]} color={T.red} />
             </div>
           )}
           <FlowGraph
@@ -5538,7 +5568,7 @@ function XpubScan({ onBack, isMobile, onScan }) {
                     <span style={{ fontFamily: T.mono, fontSize: 12, color: T.text, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>{trunc(a.address)}</span>
                     {reused && <Tag label="reused" color={T.red} size={8} />}
                     <span style={{ fontFamily: T.mono, fontSize: 10, color: T.textDim, marginLeft: "auto" }}>{sats(bal)} · {a.chain_stats.tx_count} tx</span>
-                    {onScan && <button onClick={() => onScan(a.address)} style={{ flexShrink: 0, background: "transparent", border: `1px solid ${T.cyan}55`, borderRadius: 8, padding: "4px 10px", color: T.cyan, fontFamily: T.sans, fontSize: 11, fontWeight: 600, cursor: "pointer" }} onMouseOver={e => e.currentTarget.style.background = T.cyan + "14"} onMouseOut={e => e.currentTarget.style.background = "transparent"}>Audit →</button>}
+                    {onScan && <AuditButton onClick={() => onScan(a.address)} size={11} ariaLabel={"Audit derived address " + a.address} />}
                   </div>
                 );
               })}
@@ -6547,10 +6577,11 @@ function ClusterMap({ txs, address, isMobile, entity, onScan }) {
         {linked.length ? `The chain ties ${linked.length} other address${linked.length !== 1 ? "es" : ""} to ${you}` : "Addresses the chain would tie to this one"}
       </div>
       <div style={{ fontSize: 13, color: T.textMid, lineHeight: 1.65 }}>
-        Spend from several addresses in one transaction and every analyst assumes a single owner signed them all — the <strong style={{ color: T.text }}>common-input heuristic</strong>, the workhorse of chain surveillance. This is the cluster it builds around {you}, computed in your browser from the transactions above.
+        Spend from several addresses in one transaction and every analyst assumes a single owner signed them all — the <strong style={{ color: T.text }}>common-input heuristic</strong>, the workhorse of chain surveillance. This is the cluster it builds around {you}, computed in your browser from the transactions above. These are <strong style={{ color: T.text }}>proven</strong> links — solid, thickening with each shared spend.
       </div>
       {linked.length > 0 && (
         <>
+          <EpistemicLegend kinds={["proven"]} color={T.red} />
           <svg viewBox={`0 0 ${W} ${H}`} role="img"
             aria-label={`Cluster graph: ${linked.length} address${linked.length !== 1 ? "es" : ""} linked to the scanned address by co-spending.`}
             style={{ display: "block", width: "100%", maxWidth: 560, height: "auto", margin: "14px auto 0", overflow: "visible" }}>
@@ -6558,7 +6589,7 @@ function ClusterMap({ txs, address, isMobile, entity, onScan }) {
               const p = pos(i);
               return (
                 <g key={n.addr} style={{ animation: `clusterIn .5s ease ${0.15 + i * 0.09}s both` }}>
-                  <line x1={CX} y1={CY} x2={p.x} y2={p.y} stroke={T.red} strokeOpacity="0.4" strokeWidth="1.2" strokeDasharray="4 4" />
+                  <line x1={CX} y1={CY} x2={p.x} y2={p.y} stroke={T.red} strokeOpacity="0.5" strokeWidth={1 + Math.min(n.count, 5) * 0.35} strokeLinecap="round" />
                   <circle cx={p.x} cy={p.y} r="11" fill={T.red} opacity="0.14" />
                   <circle cx={p.x} cy={p.y} r="6" fill={T.bg} stroke={T.red} strokeWidth="1.6">
                     <title>{n.addr} — co-spent with the scanned address in {n.count} transaction{n.count !== 1 ? "s" : ""}</title>
@@ -6582,14 +6613,7 @@ function ClusterMap({ txs, address, isMobile, entity, onScan }) {
                   <span style={{ width: 7, height: 7, borderRadius: "50%", background: T.red, flexShrink: 0 }} />
                   <span style={{ fontFamily: T.mono, fontSize: 12, color: T.text, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>{trunc(n.addr)}</span>
                   <span style={{ fontFamily: T.mono, fontSize: 10, color: T.textDim, flexShrink: 0 }}>co-spent ×{n.count}</span>
-                  {scannable && (
-                    <button onClick={() => onScan(n.addr)}
-                      style={{ marginLeft: "auto", flexShrink: 0, background: "transparent", border: `1px solid ${T.cyan}55`, borderRadius: 8, padding: "5px 12px", color: T.cyan, fontFamily: T.sans, fontSize: 12, fontWeight: 600, cursor: "pointer", transition: "all .15s" }}
-                      onMouseOver={e => { e.currentTarget.style.background = T.cyan + "14"; }}
-                      onMouseOut={e => { e.currentTarget.style.background = "transparent"; }}>
-                      Audit →
-                    </button>
-                  )}
+                  {scannable && <AuditButton onClick={() => onScan(n.addr)} ariaLabel={"Audit linked address " + n.addr} style={{ marginLeft: "auto" }} />}
                 </div>
               );
             })}
@@ -7368,7 +7392,7 @@ function Dashboard({ address, addrInfo, utxos, txs, isMobile, onBack, onRescan, 
               </div>
               {txs.slice(0, 20).map((tx, i) => {
                 const flags = [];
-                if (tx.vout?.length >= 5) flags.push({ l: "CoinJoin", c: T.green });
+                if (isCoinJoinShape(tx.vin, tx.vout)) flags.push({ l: (classifyCoinjoin(tx.vin, tx.vout) || {}).type === "Whirlpool" ? "Whirlpool" : "CoinJoin", c: T.green });
                 if (tx.vin?.length >= 4 && tx.vout?.length <= 2) flags.push({ l: "Consolidation", c: T.red });
                 if (tx.vout?.[0]?.value >= 100000 && tx.vout[0].value % 100000 === 0) flags.push({ l: "Round amount", c: T.amber });
                 if (!flags.length) flags.push({ l: "Standard", c: T.textDim });
@@ -8213,7 +8237,7 @@ function App() {
 
       {/* Page transition: opacity-only fade on every navigation (keyed by page so it replays; no transform → sticky nav preserved) */}
       <div key={page} style={{ animation: "fadeIn .35s ease both" }}>
-      {page === "landing"      && <Landing onAnalyze={analyze} isMobile={isMobile} onCases={(c) => { if (c) { setActiveCaseFile(c); setPage("case_detail"); } else { setPage("cases"); } }} />}
+      {page === "landing"      && <Landing onAnalyze={analyze} isMobile={isMobile} onNav={setPage} onCases={(c) => { if (c) { setActiveCaseFile(c); setPage("case_detail"); } else { setPage("cases"); } }} />}
       {page === "cases"        && <CaseFiles onOpenCase={c => { setActiveCaseFile(c); setPage("case_detail"); }} onBack={() => setPage("landing")} isMobile={isMobile} />}
       {page === "case_detail"  && activeCaseFile && <CaseDetail caseFile={activeCaseFile} onBack={() => setPage("cases")} onAnalyze={analyze} isMobile={isMobile} />}
       {page === "scanning"     && <Scanning address={address || lnNodeId} isLightning={isScanningLightning} dataReady={scanDataReady} />}

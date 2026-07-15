@@ -4727,6 +4727,97 @@ const Pill = ({
     whiteSpace: "nowrap"
   }
 }, children);
+const AuditButton = ({
+  onClick,
+  color = T.cyan,
+  label = "Audit →",
+  ariaLabel,
+  size = 12,
+  style
+}) => React.createElement("button", {
+  onClick: onClick,
+  "aria-label": ariaLabel || label,
+  style: {
+    flexShrink: 0,
+    background: "transparent",
+    border: `1px solid ${color}55`,
+    borderRadius: 8,
+    padding: "5px 12px",
+    color,
+    fontFamily: T.sans,
+    fontSize: size,
+    fontWeight: 600,
+    cursor: "pointer",
+    whiteSpace: "nowrap",
+    transition: "background .15s",
+    ...style
+  },
+  onMouseOver: e => e.currentTarget.style.background = color + "14",
+  onMouseOut: e => e.currentTarget.style.background = "transparent"
+}, label);
+const PROOF = {
+  proven: {
+    glyph: "⛓",
+    dash: "none",
+    verb: "provably",
+    label: "Proven",
+    note: "on-chain fact (common-input / deterministic link)"
+  },
+  inferred: {
+    glyph: "≈",
+    dash: "5 3",
+    verb: "likely",
+    label: "Inferred",
+    note: "probabilistic — a strong guess, not proof"
+  },
+  heuristic: {
+    glyph: "?",
+    dash: "1.5 3",
+    verb: "consistent with",
+    label: "Heuristic",
+    note: "a weak tell that can misfire"
+  }
+};
+const EpistemicLegend = ({
+  kinds = ["proven", "inferred"],
+  color = T.textMid
+}) => React.createElement("div", {
+  role: "img",
+  "aria-label": "Legend: " + kinds.map(k => PROOF[k].label + " = " + PROOF[k].note).join("; "),
+  style: {
+    display: "flex",
+    flexWrap: "wrap",
+    gap: 14,
+    marginTop: 8
+  }
+}, kinds.map(k => React.createElement("span", {
+  key: k,
+  style: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 6,
+    fontFamily: T.mono,
+    fontSize: 9.5,
+    color: T.textDim
+  }
+}, React.createElement("svg", {
+  width: "22",
+  height: "8",
+  "aria-hidden": "true"
+}, React.createElement("line", {
+  x1: "1",
+  y1: "4",
+  x2: "21",
+  y2: "4",
+  stroke: color,
+  strokeWidth: k === "proven" ? 2.2 : 1.3,
+  strokeDasharray: PROOF[k].dash === "none" ? undefined : PROOF[k].dash,
+  strokeLinecap: "round"
+})), React.createElement("span", {
+  style: {
+    color: T.textMid
+  }
+}, PROOF[k].glyph, " ", PROOF[k].label))));
 function Toast({
   toasts
 }) {
@@ -7468,8 +7559,15 @@ function CountUp({
 function Landing({
   onAnalyze,
   isMobile,
-  onCases
+  onCases,
+  onNav
 }) {
+  const navLink = page => e => {
+    if (onNav && e.button === 0 && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey) {
+      e.preventDefault();
+      onNav(page);
+    }
+  };
   useLang();
   const [navWide, setNavWide] = useState(() => typeof window !== "undefined" && window.innerWidth >= 1040);
   useEffect(() => {
@@ -8477,24 +8575,12 @@ function Landing({
         fontSize: 10,
         marginTop: 2
       }
-    }, "funding tx \u2192 block ", r.block.toLocaleString(), " \xB7 tx #", r.tx, " \xB7 output ", r.out)), isValidLightningPubkey(r.pubkey) && React.createElement("button", {
+    }, "funding tx \u2192 block ", r.block.toLocaleString(), " \xB7 tx #", r.tx, " \xB7 output ", r.out)), isValidLightningPubkey(r.pubkey) && React.createElement(AuditButton, {
       onClick: () => onAnalyze(r.pubkey, false, "ln_pubkey"),
-      "aria-label": "Audit peer node " + r.pubkey,
-      style: {
-        flexShrink: 0,
-        background: "transparent",
-        border: `1px solid ${T.ln}55`,
-        borderRadius: 7,
-        padding: "4px 10px",
-        color: T.ln,
-        fontFamily: T.sans,
-        fontSize: 11,
-        fontWeight: 600,
-        cursor: "pointer"
-      },
-      onMouseOver: e => e.currentTarget.style.background = T.ln + "14",
-      onMouseOut: e => e.currentTarget.style.background = "transparent"
-    }, "Audit \u2192"))))) : React.createElement("div", {
+      color: T.ln,
+      size: 11,
+      ariaLabel: "Audit peer node " + r.pubkey
+    }))))) : React.createElement("div", {
       style: {
         fontSize: 12.5,
         color: T.textMid,
@@ -8580,23 +8666,12 @@ function Landing({
       style: {
         marginTop: 8
       }
-    }, React.createElement("button", {
+    }, React.createElement(AuditButton, {
       onClick: () => onAnalyze(p.issuerId, false, "ln_pubkey"),
-      "aria-label": "Audit issuer node " + p.issuerId,
-      style: {
-        background: "transparent",
-        border: `1px solid ${T.ln}55`,
-        borderRadius: 7,
-        padding: "4px 12px",
-        color: T.ln,
-        fontFamily: T.sans,
-        fontSize: 11.5,
-        fontWeight: 600,
-        cursor: "pointer"
-      },
-      onMouseOver: e => e.currentTarget.style.background = T.ln + "14",
-      onMouseOut: e => e.currentTarget.style.background = "transparent"
-    }, "Audit this node \u2192")))), (p.kind === "lnurl" || p.kind === "lnaddress") && React.createElement(React.Fragment, null, React.createElement("div", {
+      color: T.ln,
+      label: "Audit this node \u2192",
+      ariaLabel: "Audit issuer node " + p.issuerId
+    })))), (p.kind === "lnurl" || p.kind === "lnaddress") && React.createElement(React.Fragment, null, React.createElement("div", {
       style: {
         fontFamily: T.mono,
         fontSize: 12,
@@ -9429,6 +9504,7 @@ function Landing({
     onMouseOut: e => e.currentTarget.style.color = T.textMid
   }, "How we're paid for"), React.createElement("a", {
     href: "/?page=wallets",
+    onClick: navLink("wallets"),
     style: {
       fontFamily: T.mono,
       fontSize: 10,
@@ -9441,6 +9517,7 @@ function Landing({
     onMouseOut: e => e.currentTarget.style.color = T.textMid
   }, "Wallet directory"), React.createElement("a", {
     href: "/?page=inspector",
+    onClick: navLink("inspector"),
     style: {
       fontFamily: T.mono,
       fontSize: 10,
@@ -9453,6 +9530,7 @@ function Landing({
     onMouseOut: e => e.currentTarget.style.color = T.textMid
   }, "Transaction Inspector"), React.createElement("a", {
     href: "/?page=xpub",
+    onClick: navLink("xpub"),
     style: {
       fontFamily: T.mono,
       fontSize: 10,
@@ -10799,24 +10877,14 @@ function FlowGraph({
       marginTop: 3,
       letterSpacing: 0.3
     }
-  }, "\u26D3 provably from these inputs"), o.address && onAudit && React.createElement("button", {
+  }, "\u26D3 provably from these inputs"), o.address && onAudit && React.createElement(AuditButton, {
     onClick: () => onAudit(o.address),
-    "aria-label": "Audit output address " + o.address,
+    size: 11,
+    ariaLabel: "Audit output address " + o.address,
     style: {
-      marginTop: 6,
-      background: "transparent",
-      border: `1px solid ${T.cyan}55`,
-      borderRadius: 7,
-      padding: "3px 10px",
-      color: T.cyan,
-      fontFamily: T.sans,
-      fontSize: 11,
-      fontWeight: 600,
-      cursor: "pointer"
-    },
-    onMouseOver: e => e.currentTarget.style.background = T.cyan + "14",
-    onMouseOut: e => e.currentTarget.style.background = "transparent"
-  }, "Audit \u2192"));
+      marginTop: 6
+    }
+  }));
   if (isMobile) {
     return React.createElement("div", {
       style: {
@@ -10860,8 +10928,9 @@ function FlowGraph({
       d: `M ${e.x1} ${e.y1} C ${xm} ${e.y1}, ${xm} ${e.y2}, ${e.x2} ${e.y2}`,
       fill: "none",
       stroke: e.neutral ? T.textDim : T.red,
-      strokeWidth: e.det ? 2.2 : 1 + e.v * 1.6,
-      strokeOpacity: e.neutral ? 0.14 : 0.14 + e.v * 0.72,
+      strokeWidth: e.det ? 2.4 : e.neutral ? 1 : 0.7 + e.v * 1.1,
+      strokeOpacity: e.det ? 0.92 : e.neutral ? 0.14 : 0.12 + e.v * 0.58,
+      strokeDasharray: e.det ? undefined : e.neutral ? "1.5 3" : "5 3",
       strokeLinecap: "round"
     });
   })), React.createElement("div", {
@@ -11330,24 +11399,13 @@ function TransactionInspector({
         overflow: "hidden",
         textOverflow: "ellipsis"
       }
-    }, trunc(ad)), onScan && isValidBitcoinAddress(ad) && React.createElement("button", {
+    }, trunc(ad)), onScan && isValidBitcoinAddress(ad) && React.createElement(AuditButton, {
       onClick: () => onScan(ad),
+      ariaLabel: "Audit input address " + ad,
       style: {
-        marginLeft: "auto",
-        flexShrink: 0,
-        background: "transparent",
-        border: `1px solid ${T.cyan}55`,
-        borderRadius: 8,
-        padding: "5px 12px",
-        color: T.cyan,
-        fontFamily: T.sans,
-        fontSize: 12,
-        fontWeight: 600,
-        cursor: "pointer"
-      },
-      onMouseOver: e => e.currentTarget.style.background = T.cyan + "14",
-      onMouseOut: e => e.currentTarget.style.background = "transparent"
-    }, "Audit \u2192"))))), React.createElement("div", {
+        marginLeft: "auto"
+      }
+    }))))), React.createElement("div", {
       style: panel()
     }, React.createElement("div", {
       style: label
@@ -11367,13 +11425,16 @@ function TransactionInspector({
         fontSize: 11,
         color: T.textDim,
         lineHeight: 1.5,
-        marginBottom: 10
+        marginBottom: 8
       }
-    }, "Threads show which input funds which output. ", React.createElement("span", {
+    }, "Threads show which input funds which output. A ", React.createElement("span", {
       style: {
         color: T.red
       }
-    }, "Solid red"), " = a deterministic link (provable on-chain); fainter threads are ambiguous \u2014 the more they blur, the less any single link can be proven."), React.createElement(FlowGraph, {
+    }, "solid"), " thread is a deterministic link (provable on-chain); dashed threads are ambiguous \u2014 the more they blur, the less any single link can be proven.", React.createElement(EpistemicLegend, {
+      kinds: ["proven", "inferred"],
+      color: T.red
+    })), React.createElement(FlowGraph, {
       inputs: (tx.vin || []).map((v, i) => ({
         title: v.prevout ? trunc(v.prevout.scriptpubkey_address) : "input " + (i + 1) + " (no UTXO data)",
         sub: v.prevout ? sats(v.prevout.value) + " · " + v.prevout.scriptpubkey_type : "unknown",
@@ -12000,23 +12061,11 @@ function XpubScan({
             color: T.textDim,
             marginLeft: "auto"
           }
-        }, sats(bal), " \xB7 ", a.chain_stats.tx_count, " tx"), onScan && React.createElement("button", {
+        }, sats(bal), " \xB7 ", a.chain_stats.tx_count, " tx"), onScan && React.createElement(AuditButton, {
           onClick: () => onScan(a.address),
-          style: {
-            flexShrink: 0,
-            background: "transparent",
-            border: `1px solid ${T.cyan}55`,
-            borderRadius: 8,
-            padding: "4px 10px",
-            color: T.cyan,
-            fontFamily: T.sans,
-            fontSize: 11,
-            fontWeight: 600,
-            cursor: "pointer"
-          },
-          onMouseOver: e => e.currentTarget.style.background = T.cyan + "14",
-          onMouseOut: e => e.currentTarget.style.background = "transparent"
-        }, "Audit \u2192"));
+          size: 11,
+          ariaLabel: "Audit derived address " + a.address
+        }));
       }))), React.createElement("div", {
         style: {
           fontSize: 11.5,
@@ -14368,7 +14417,14 @@ function ClusterMap({
     style: {
       color: T.text
     }
-  }, "common-input heuristic"), ", the workhorse of chain surveillance. This is the cluster it builds around ", you, ", computed in your browser from the transactions above."), linked.length > 0 && React.createElement(React.Fragment, null, React.createElement("svg", {
+  }, "common-input heuristic"), ", the workhorse of chain surveillance. This is the cluster it builds around ", you, ", computed in your browser from the transactions above. These are ", React.createElement("strong", {
+    style: {
+      color: T.text
+    }
+  }, "proven"), " links \u2014 solid, thickening with each shared spend."), linked.length > 0 && React.createElement(React.Fragment, null, React.createElement(EpistemicLegend, {
+    kinds: ["proven"],
+    color: T.red
+  }), React.createElement("svg", {
     viewBox: `0 0 ${W} ${H}`,
     role: "img",
     "aria-label": `Cluster graph: ${linked.length} address${linked.length !== 1 ? "es" : ""} linked to the scanned address by co-spending.`,
@@ -14393,9 +14449,9 @@ function ClusterMap({
       x2: p.x,
       y2: p.y,
       stroke: T.red,
-      strokeOpacity: "0.4",
-      strokeWidth: "1.2",
-      strokeDasharray: "4 4"
+      strokeOpacity: "0.5",
+      strokeWidth: 1 + Math.min(n.count, 5) * 0.35,
+      strokeLinecap: "round"
     }), React.createElement("circle", {
       cx: p.x,
       cy: p.y,
@@ -14491,29 +14547,13 @@ function ClusterMap({
         color: T.textDim,
         flexShrink: 0
       }
-    }, "co-spent \xD7", n.count), scannable && React.createElement("button", {
+    }, "co-spent \xD7", n.count), scannable && React.createElement(AuditButton, {
       onClick: () => onScan(n.addr),
+      ariaLabel: "Audit linked address " + n.addr,
       style: {
-        marginLeft: "auto",
-        flexShrink: 0,
-        background: "transparent",
-        border: `1px solid ${T.cyan}55`,
-        borderRadius: 8,
-        padding: "5px 12px",
-        color: T.cyan,
-        fontFamily: T.sans,
-        fontSize: 12,
-        fontWeight: 600,
-        cursor: "pointer",
-        transition: "all .15s"
-      },
-      onMouseOver: e => {
-        e.currentTarget.style.background = T.cyan + "14";
-      },
-      onMouseOut: e => {
-        e.currentTarget.style.background = "transparent";
+        marginLeft: "auto"
       }
-    }, "Audit \u2192"));
+    }));
   }), linked.length > 4 && React.createElement("button", {
     onClick: () => setShowAll(s => !s),
     style: {
@@ -16721,8 +16761,8 @@ function Dashboard({
     }
   }, h))), txs.slice(0, 20).map((tx, i) => {
     const flags = [];
-    if (tx.vout?.length >= 5) flags.push({
-      l: "CoinJoin",
+    if (isCoinJoinShape(tx.vin, tx.vout)) flags.push({
+      l: (classifyCoinjoin(tx.vin, tx.vout) || {}).type === "Whirlpool" ? "Whirlpool" : "CoinJoin",
       c: T.green
     });
     if (tx.vin?.length >= 4 && tx.vout?.length <= 2) flags.push({
@@ -18772,6 +18812,7 @@ function App() {
   }, page === "landing" && React.createElement(Landing, {
     onAnalyze: analyze,
     isMobile: isMobile,
+    onNav: setPage,
     onCases: c => {
       if (c) {
         setActiveCaseFile(c);
