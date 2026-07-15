@@ -580,6 +580,30 @@ else {
   }
 }
 
+// Intel page: /?page=methodology exposes the full scoring brain pre-scan —
+// on-chain table, Lightning table, threat-model briefing, data sources.
+{
+  const ip = await ctx.newPage();
+  try {
+    await ip.goto(`http://127.0.0.1:${PORT}/?page=methodology`, { waitUntil: "load" });
+    await ip.waitForFunction(() => document.getElementById("root")?.childElementCount > 0, { timeout: 20000 });
+    await ip.waitForTimeout(500);
+    const intel = await ip.evaluate(() => ({
+      btc: /ON-CHAIN · 11 HEURISTICS/.test(document.body.innerText) && /Address Reuse/.test(document.body.innerText),
+      ln: /LIGHTNING · 8 HEURISTICS/.test(document.body.innerText) && /KYC Exchange Peer Channels/.test(document.body.innerText),
+      threats: /WHO ARE YOU HIDING FROM/.test(document.body.innerText) && /Surveillance firms/.test(document.body.innerText),
+      sources: /DATA SOURCES/.test(document.body.innerText) && /Nakamoto/.test(document.body.innerText),
+    }));
+    const bad = Object.entries(intel).filter(([, v]) => !v).map(([k]) => k);
+    if (bad.length) fail(`intel: methodology page missing sections: ${bad.join(", ")}`);
+    else pass("intel: /?page=methodology renders both scoring tables, threat briefing, sources");
+  } catch (e) {
+    fail("intel: " + e.message.slice(0, 140));
+  } finally {
+    await ip.close();
+  }
+}
+
 // Service worker should register and precache the static assets.
 await page.waitForFunction(
   () => navigator.serviceWorker?.controller || navigator.serviceWorker?.ready,
@@ -1036,6 +1060,17 @@ await axeRun("Dashboard", page);
     await axeRun("Wallet scan", axeX);
   } catch (e) { fail("xpub a11y: " + e.message.slice(0, 120)); }
   finally { await axeX.close(); }
+}
+// a11y on the methodology Intel page
+{
+  const axeM = await ctx.newPage();
+  try {
+    await axeM.goto(`http://127.0.0.1:${PORT}/?page=methodology`, { waitUntil: "load" });
+    await axeM.waitForFunction(() => document.getElementById("root")?.childElementCount > 0, { timeout: 15000 });
+    await axeM.waitForTimeout(500);
+    await axeRun("Methodology", axeM);
+  } catch (e) { fail("methodology a11y: " + e.message.slice(0, 120)); }
+  finally { await axeM.close(); }
 }
 const back = page.getByText(/← Back/).first();
 if (await back.count()) { await back.click(); await page.waitForTimeout(900); }

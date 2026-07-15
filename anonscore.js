@@ -4903,6 +4903,10 @@ const NAV_LINKS = [{
   page: "cases",
   label: "Case Files",
   href: "/?page=cases"
+}, {
+  page: "methodology",
+  label: "Methodology",
+  href: "/?page=methodology"
 }];
 function SiteNav({
   isMobile,
@@ -8091,7 +8095,14 @@ function Landing({
       letterSpacing: 2,
       fontWeight: 700
     }
-  }, "\uD83D\uDCC1 CASE FILES")), CASE_FILES.map((c, i) => {
+  }, "\uD83D\uDCC1 CASE FILES"), React.createElement("span", {
+    style: {
+      fontFamily: T.mono,
+      fontSize: 9,
+      color: T.textDim,
+      whiteSpace: "nowrap"
+    }
+  }, "\u2014 this audit, run on famous wallets")), CASE_FILES.map((c, i) => {
     const cat = CATEGORY_META[c.category];
     return React.createElement("button", {
       key: c.id,
@@ -9699,7 +9710,20 @@ function Landing({
     },
     onMouseOver: e => e.currentTarget.style.color = T.cyan,
     onMouseOut: e => e.currentTarget.style.color = T.textMid
-  }, "Wallet scan (xpub)")), React.createElement("div", {
+  }, "Wallet scan (xpub)"), React.createElement("a", {
+    href: "/?page=methodology",
+    onClick: navLink("methodology"),
+    style: {
+      fontFamily: T.mono,
+      fontSize: 10,
+      color: T.textMid,
+      textDecoration: "underline dotted",
+      textUnderlineOffset: 3,
+      transition: "color .15s"
+    },
+    onMouseOver: e => e.currentTarget.style.color = T.cyan,
+    onMouseOut: e => e.currentTarget.style.color = T.textMid
+  }, "Methodology")), React.createElement("div", {
     style: {
       display: "flex",
       alignItems: "center",
@@ -15215,6 +15239,108 @@ function ExposureFlow({
     }, explain));
   }));
 }
+const BTC_METHODOLOGY = [{
+  check: "Address Reuse",
+  deduct: "–7 to –28",
+  why: "Permanent public link between all transactions on this address.",
+  sev: "critical"
+}, {
+  check: "CoinJoin Usage",
+  deduct: "+4 to +12",
+  why: "Breaks transaction graph. Positive score if detected. Heavy penalty if absent.",
+  sev: "high"
+}, {
+  check: "Dust Attack",
+  deduct: "–5 to –12",
+  why: "Tracking beacons planted by surveillance firms. Spending them links your cluster.",
+  sev: "high"
+}, {
+  check: "Round Amounts",
+  deduct: "–5 to –10",
+  why: "0.1 BTC is a known KYC exchange withdrawal pattern flagged by Chainalysis.",
+  sev: "high"
+}, {
+  check: "Unsafe Consolidation",
+  deduct: "–4 to –10",
+  why: "Merging inputs from different sources permanently links their histories.",
+  sev: "high"
+}, {
+  check: "Fee Fingerprinting",
+  deduct: "–6",
+  why: "Identical fee rates across transactions identify your wallet software.",
+  sev: "medium"
+}, {
+  check: "Change Address Reuse",
+  deduct: "–10",
+  why: "Returning change to an input address exposes your full balance.",
+  sev: "high"
+}, {
+  check: "UTXO Count",
+  deduct: "–3 to –8",
+  why: "Too many = consolidation pressure. Too few = full balance exposed per spend.",
+  sev: "medium"
+}, {
+  check: "Balance Concentration",
+  deduct: "–5",
+  why: "90%+ in a single UTXO reveals near-total holdings on every transaction.",
+  sev: "medium"
+}, {
+  check: "Script Type Mix",
+  deduct: "–4",
+  why: "Using legacy + SegWit addresses creates cross-UTXO patterns analysts can exploit.",
+  sev: "low"
+}, {
+  check: "Change Detection",
+  deduct: "–4 to –8",
+  why: "Two-output payments where only one output matches the input's script type reveal which output is your change.",
+  sev: "medium"
+}];
+const BTC_DATA_SOURCES = [{
+  src: "Blockstream / mempool.space Esplora API",
+  desc: "Public blockchain data — UTXOs, transactions, address stats. Read-only, your choice of explorer — by default fetched via our open-source no-log relay so the explorer can't see your IP."
+}, {
+  src: "Bitcoin whitepaper §10 (Nakamoto, 2008)",
+  desc: "Nakamoto's own privacy guidance: use a new address for every payment. Reuse permanently links transactions — the heuristic behind our address-reuse check."
+}, {
+  src: "Chainalysis (Series F, May 2022)",
+  desc: "$8.6B valuation, ~$190M 2023 revenue (Sacra) — the scale of the blockchain-surveillance industry that reads this same public data."
+}, {
+  src: "Bitcoin Core relay policy",
+  desc: "The 546-sat dust threshold (GetDustThreshold) — outputs below it are used as tracking beacons."
+}];
+const LN_METHODOLOGY = [{
+  n: "01",
+  label: "Public Node Announcement",
+  desc: "Whether your node is publicly gossiped on the Lightning network. Public nodes expose their IP or Tor address to every peer."
+}, {
+  n: "02",
+  label: "KYC Exchange Peer Channels",
+  desc: "Channels to known KYC exchanges (Bitfinex, Kraken, Binance, OKX). These entities log routing metadata and can correlate payment flows through your node."
+}, {
+  n: "03",
+  label: "Tor / Clearnet Exposure",
+  desc: "Whether your node listens on clearnet (IP-visible) or Tor-only (anonymous). Clearnet nodes expose their physical location."
+}, {
+  n: "04",
+  label: "Channel Diversity",
+  desc: "Number of open channels. Low channel count limits routing path diversity, making payment flows easier to correlate."
+}, {
+  n: "05",
+  label: "Channel Capacity Concentration",
+  desc: "Whether one channel dominates your capacity. Heavy concentration makes routing patterns predictable."
+}, {
+  n: "06",
+  label: "Node Alias Privacy",
+  desc: "Whether your node alias looks like a real name. Aliases are publicly visible on the Lightning gossip network."
+}, {
+  n: "07",
+  label: "Node Establishment",
+  desc: "How long your node has been active. New nodes have limited routing history, making their activity more trackable."
+}, {
+  n: "08",
+  label: "On-Chain Channel Footprint",
+  desc: "Every channel open/close is an on-chain transaction. Funding channels from KYC exchange UTXOs permanently links your Lightning activity to your on-chain identity."
+}];
 const THREAT_MODELS = [{
   id: "snoop",
   label: "Nosy individuals",
@@ -15277,6 +15403,311 @@ const THREAT_MODELS = [{
     round: 1
   }
 }];
+function MethodologyPage({
+  onBack,
+  isMobile,
+  onNav
+}) {
+  useLang();
+  useEffect(() => {
+    const prev = document.title;
+    document.title = "Methodology — how AnonScore scores Bitcoin & Lightning privacy";
+    const desc = document.querySelector('meta[name="description"]');
+    const prevDesc = desc?.getAttribute("content");
+    desc?.setAttribute("content", "Every heuristic, every deduction, in the open: the 11 on-chain checks, 8 Lightning checks, threat models, and data sources behind the AnonScore privacy score. No black box.");
+    return () => {
+      document.title = prev;
+      if (desc && prevDesc) desc.setAttribute("content", prevDesc);
+    };
+  }, []);
+  const label = {
+    fontFamily: T.mono,
+    fontSize: 9,
+    color: T.textDim,
+    letterSpacing: 2,
+    marginBottom: 14
+  };
+  const panel = extra => ({
+    background: T.card,
+    border: `1px solid ${T.border}`,
+    borderRadius: 16,
+    padding: isMobile ? "18px 18px" : "24px 28px",
+    ...extra
+  });
+  return React.createElement("div", {
+    role: "main",
+    "aria-label": "Methodology \u2014 how AnonScore scores privacy",
+    style: {
+      minHeight: "100vh",
+      background: "transparent",
+      display: "flex",
+      flexDirection: "column"
+    }
+  }, React.createElement("h1", {
+    className: "sr-only"
+  }, "AnonScore Methodology \u2014 open Bitcoin and Lightning privacy scoring"), React.createElement(SiteNav, {
+    isMobile: isMobile,
+    onBack: onBack,
+    onNav: onNav,
+    current: "methodology",
+    badge: "METHODOLOGY"
+  }), React.createElement("div", {
+    style: {
+      flex: 1,
+      maxWidth: 860,
+      margin: "0 auto",
+      width: "100%",
+      padding: isMobile ? "28px 16px" : "44px 32px",
+      display: "flex",
+      flexDirection: "column",
+      gap: 14
+    }
+  }, React.createElement("div", {
+    style: {
+      textAlign: "center",
+      marginBottom: 12
+    }
+  }, React.createElement("div", {
+    style: {
+      fontFamily: T.mono,
+      fontSize: 10,
+      color: T.cyan,
+      letterSpacing: 2.5,
+      marginBottom: 14
+    }
+  }, "VERIFY, DON'T TRUST"), React.createElement("h2", {
+    style: {
+      fontFamily: T.serif,
+      fontSize: isMobile ? 30 : 40,
+      color: T.text,
+      lineHeight: 1.1,
+      fontWeight: 400,
+      marginBottom: 14
+    }
+  }, "Every heuristic, every deduction,", React.createElement("br", null), React.createElement("em", {
+    style: {
+      color: T.cyan
+    }
+  }, "in the open.")), React.createElement("p", {
+    style: {
+      fontSize: isMobile ? 14 : 16,
+      color: T.textMid,
+      lineHeight: 1.7,
+      maxWidth: 580,
+      margin: "0 auto",
+      fontWeight: 300
+    }
+  }, "This is the entire scoring brain \u2014 the same clustering logic the surveillance industry sells, published. Every rule below is implemented in plain JavaScript you can read, audit, and challenge.")), React.createElement("div", {
+    style: panel()
+  }, React.createElement("div", {
+    style: label
+  }, "WHO ARE YOU HIDING FROM?"), React.createElement("div", {
+    style: {
+      fontSize: 13,
+      color: T.textMid,
+      lineHeight: 1.65,
+      marginBottom: 14
+    }
+  }, "Privacy is relative to an adversary. These are the four we model \u2014 after a scan, the Fix-It plan re-ranks your fixes for whichever one you pick."), React.createElement("div", {
+    style: {
+      display: "grid",
+      gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr",
+      gap: 10
+    }
+  }, THREAT_MODELS.map(m => React.createElement("div", {
+    key: m.id,
+    style: {
+      background: T.surface,
+      border: `1px solid ${T.borderLo}`,
+      borderRadius: 10,
+      padding: "14px 16px"
+    }
+  }, React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: 8,
+      marginBottom: 6
+    }
+  }, React.createElement("span", {
+    "aria-hidden": "true",
+    style: {
+      fontSize: 16
+    }
+  }, m.icon), React.createElement("span", {
+    style: {
+      fontSize: 13,
+      fontWeight: 600,
+      color: T.text
+    }
+  }, m.label)), React.createElement("div", {
+    style: {
+      fontSize: 12,
+      color: T.textMid,
+      lineHeight: 1.6
+    }
+  }, m.sees))))), React.createElement("div", {
+    style: panel()
+  }, React.createElement("div", {
+    style: label
+  }, "ON-CHAIN \xB7 11 HEURISTICS"), React.createElement("div", {
+    style: {
+      fontSize: 13,
+      color: T.textMid,
+      lineHeight: 1.65,
+      marginBottom: 14
+    }
+  }, "Every wallet starts at 100. Each detected issue deducts points by its real-world impact on traceability \u2014 CoinJoin is the one positive signal."), React.createElement("div", {
+    style: {
+      display: "grid",
+      gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr",
+      gap: 10
+    }
+  }, BTC_METHODOLOGY.map((row, i) => React.createElement("div", {
+    key: i,
+    style: {
+      background: T.surface,
+      borderRadius: 10,
+      padding: "14px 16px",
+      border: `1px solid ${T.borderLo}`
+    }
+  }, React.createElement("div", {
+    style: {
+      display: "flex",
+      justifyContent: "space-between",
+      alignItems: "center",
+      marginBottom: 6
+    }
+  }, React.createElement("div", {
+    style: {
+      fontSize: 13,
+      fontWeight: 600,
+      color: T.text
+    }
+  }, row.check), React.createElement(Tag, {
+    label: row.deduct,
+    color: row.deduct.startsWith("+") ? T.green : RISK_META[row.sev]?.color || T.red,
+    size: 9
+  })), React.createElement("div", {
+    style: {
+      fontSize: 12,
+      color: T.textMid,
+      lineHeight: 1.55
+    }
+  }, row.why))))), React.createElement("div", {
+    style: panel()
+  }, React.createElement("div", {
+    style: label
+  }, "LIGHTNING \xB7 8 HEURISTICS"), React.createElement("div", {
+    style: {
+      display: "flex",
+      flexDirection: "column",
+      gap: 8
+    }
+  }, LN_METHODOLOGY.map(c => React.createElement("div", {
+    key: c.n,
+    style: {
+      display: "flex",
+      gap: 14,
+      background: T.surface,
+      border: `1px solid ${T.borderLo}`,
+      borderRadius: 10,
+      padding: "12px 16px"
+    }
+  }, React.createElement("div", {
+    style: {
+      fontFamily: T.mono,
+      fontSize: 10,
+      color: T.ln,
+      minWidth: 24,
+      marginTop: 1
+    }
+  }, c.n), React.createElement("div", null, React.createElement("div", {
+    style: {
+      fontSize: 13,
+      fontWeight: 600,
+      color: T.text,
+      marginBottom: 3
+    }
+  }, c.label), React.createElement("div", {
+    style: {
+      fontSize: 12.5,
+      color: T.textMid,
+      lineHeight: 1.55
+    }
+  }, c.desc)))))), React.createElement("div", {
+    style: panel()
+  }, React.createElement("div", {
+    style: label
+  }, "DATA SOURCES"), React.createElement("div", {
+    style: {
+      display: "flex",
+      flexDirection: "column",
+      gap: 10
+    }
+  }, BTC_DATA_SOURCES.map((src, i) => React.createElement("div", {
+    key: i,
+    style: {
+      display: "flex",
+      gap: 12,
+      paddingBottom: 10,
+      borderBottom: i < BTC_DATA_SOURCES.length - 1 ? `1px solid ${T.borderLo}` : undefined
+    }
+  }, React.createElement("div", {
+    style: {
+      width: 4,
+      borderRadius: 2,
+      background: T.cyan,
+      flexShrink: 0,
+      alignSelf: "stretch"
+    }
+  }), React.createElement("div", null, React.createElement("div", {
+    style: {
+      fontSize: 13,
+      fontWeight: 600,
+      color: T.text,
+      marginBottom: 3
+    }
+  }, src.src), React.createElement("div", {
+    style: {
+      fontSize: 12,
+      color: T.textMid,
+      lineHeight: 1.55
+    }
+  }, src.desc)))))), React.createElement("div", {
+    style: {
+      background: T.cyanLo,
+      border: `1px solid ${T.cyanMid}`,
+      borderRadius: 14,
+      padding: "16px 20px",
+      fontSize: 13,
+      color: T.textMid,
+      lineHeight: 1.65
+    }
+  }, React.createElement("strong", {
+    style: {
+      color: T.cyan
+    }
+  }, "Open source:"), " all of the above is implemented in plain JavaScript in this tool's source \u2014 no black box, no server-side scoring. Audit every rule at ", React.createElement("a", {
+    href: "https://github.com/netasset/anonscore",
+    target: "_blank",
+    rel: "noopener noreferrer",
+    style: {
+      color: T.cyan
+    }
+  }, "github.com/netasset/anonscore"), ", then ", React.createElement("a", {
+    href: "/",
+    onClick: e => {
+      if (onNav && e.button === 0 && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey) {
+        e.preventDefault();
+        onNav("landing");
+      }
+    },
+    style: {
+      color: T.cyan
+    }
+  }, "run it against a wallet"), ".")));
+}
 function Dashboard({
   address,
   addrInfo,
@@ -16629,7 +17060,24 @@ function Dashboard({
         e.currentTarget.style.background = "transparent";
         e.currentTarget.style.color = T.cyan;
       }
-    }, "Scan the whole wallet \u2192")))), React.createElement("div", {
+    }, "Scan the whole wallet \u2192")))), isMobile && onNav && React.createElement("div", {
+      style: {
+        textAlign: "center",
+        padding: "2px 0 0"
+      }
+    }, React.createElement("button", {
+      onClick: () => onNav("methodology"),
+      style: {
+        background: "none",
+        border: "none",
+        fontFamily: T.mono,
+        fontSize: 10,
+        color: T.textMid,
+        cursor: "pointer",
+        textDecoration: "underline dotted",
+        textUnderlineOffset: 3
+      }
+    }, "How scoring works \u2014 every heuristic, in the open \u2192")), React.createElement("div", {
       style: {
         background: T.surface,
         border: `1px solid ${T.border}`,
@@ -17224,62 +17672,7 @@ function Dashboard({
       gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr",
       gap: 10
     }
-  }, [{
-    check: "Address Reuse",
-    deduct: "–7 to –28",
-    why: "Permanent public link between all transactions on this address.",
-    sev: "critical"
-  }, {
-    check: "CoinJoin Usage",
-    deduct: "+4 to +12",
-    why: "Breaks transaction graph. Positive score if detected. Heavy penalty if absent.",
-    sev: "high"
-  }, {
-    check: "Dust Attack",
-    deduct: "–5 to –12",
-    why: "Tracking beacons planted by surveillance firms. Spending them links your cluster.",
-    sev: "high"
-  }, {
-    check: "Round Amounts",
-    deduct: "–5 to –10",
-    why: "0.1 BTC is a known KYC exchange withdrawal pattern flagged by Chainalysis.",
-    sev: "high"
-  }, {
-    check: "Unsafe Consolidation",
-    deduct: "–4 to –10",
-    why: "Merging inputs from different sources permanently links their histories.",
-    sev: "high"
-  }, {
-    check: "Fee Fingerprinting",
-    deduct: "–6",
-    why: "Identical fee rates across transactions identify your wallet software.",
-    sev: "medium"
-  }, {
-    check: "Change Address Reuse",
-    deduct: "–10",
-    why: "Returning change to an input address exposes your full balance.",
-    sev: "high"
-  }, {
-    check: "UTXO Count",
-    deduct: "–3 to –8",
-    why: "Too many = consolidation pressure. Too few = full balance exposed per spend.",
-    sev: "medium"
-  }, {
-    check: "Balance Concentration",
-    deduct: "–5",
-    why: "90%+ in a single UTXO reveals near-total holdings on every transaction.",
-    sev: "medium"
-  }, {
-    check: "Script Type Mix",
-    deduct: "–4",
-    why: "Using legacy + SegWit addresses creates cross-UTXO patterns analysts can exploit.",
-    sev: "low"
-  }, {
-    check: "Change Detection",
-    deduct: "–4 to –8",
-    why: "Two-output payments where only one output matches the input's script type reveal which output is your change.",
-    sev: "medium"
-  }].map((row, i) => React.createElement("div", {
+  }, BTC_METHODOLOGY.map((row, i) => React.createElement("div", {
     key: i,
     style: {
       background: T.surface,
@@ -17368,19 +17761,7 @@ function Dashboard({
       flexDirection: "column",
       gap: 10
     }
-  }, [{
-    src: "Blockstream / mempool.space Esplora API",
-    desc: "Public blockchain data — UTXOs, transactions, address stats. Read-only, your choice of explorer — by default fetched via our open-source no-log relay so the explorer can't see your IP."
-  }, {
-    src: "Bitcoin whitepaper §10 (Nakamoto, 2008)",
-    desc: "Nakamoto's own privacy guidance: use a new address for every payment. Reuse permanently links transactions — the heuristic behind our address-reuse check."
-  }, {
-    src: "Chainalysis (Series F, May 2022)",
-    desc: "$8.6B valuation, ~$190M 2023 revenue (Sacra) — the scale of the blockchain-surveillance industry that reads this same public data."
-  }, {
-    src: "Bitcoin Core relay policy",
-    desc: "The 546-sat dust threshold (GetDustThreshold) — outputs below it are used as tracking beacons."
-  }].map((s, i) => React.createElement("div", {
+  }, BTC_DATA_SOURCES.map((s, i) => React.createElement("div", {
     key: i,
     style: {
       display: "flex",
@@ -18688,39 +19069,7 @@ function LightningDashboard({
       letterSpacing: 2,
       marginBottom: 4
     }
-  }, "8 HEURISTICS \xB7 LIGHTNING NODE PRIVACY SCORING"), [{
-    n: "01",
-    label: "Public Node Announcement",
-    desc: "Whether your node is publicly gossiped on the Lightning network. Public nodes expose their IP or Tor address to every peer."
-  }, {
-    n: "02",
-    label: "KYC Exchange Peer Channels",
-    desc: "Channels to known KYC exchanges (Bitfinex, Kraken, Binance, OKX). These entities log routing metadata and can correlate payment flows through your node."
-  }, {
-    n: "03",
-    label: "Tor / Clearnet Exposure",
-    desc: "Whether your node listens on clearnet (IP-visible) or Tor-only (anonymous). Clearnet nodes expose their physical location."
-  }, {
-    n: "04",
-    label: "Channel Diversity",
-    desc: "Number of open channels. Low channel count limits routing path diversity, making payment flows easier to correlate."
-  }, {
-    n: "05",
-    label: "Channel Capacity Concentration",
-    desc: "Whether one channel dominates your capacity. Heavy concentration makes routing patterns predictable."
-  }, {
-    n: "06",
-    label: "Node Alias Privacy",
-    desc: "Whether your node alias looks like a real name. Aliases are publicly visible on the Lightning gossip network."
-  }, {
-    n: "07",
-    label: "Node Establishment",
-    desc: "How long your node has been active. New nodes have limited routing history, making their activity more trackable."
-  }, {
-    n: "08",
-    label: "On-Chain Channel Footprint",
-    desc: "Every channel open/close is an on-chain transaction. Funding channels from KYC exchange UTXOs permanently links your Lightning activity to your on-chain identity."
-  }].map(c => React.createElement("div", {
+  }, "8 HEURISTICS \xB7 LIGHTNING NODE PRIVACY SCORING"), LN_METHODOLOGY.map(c => React.createElement("div", {
     key: c.n,
     style: {
       display: "flex",
@@ -18984,13 +19333,13 @@ function App() {
       if (pageParam === "coach") setPage("coach");else if (pageParam === "wallets") {
         setPage("wallets");
         setWalletPick(params.get("pick") || null);
-      } else if (pageParam === "inspector") setPage("inspector");else if (pageParam === "xpub") setPage("xpub");else if (pageParam === "cases") setPage("cases");
+      } else if (pageParam === "inspector") setPage("inspector");else if (pageParam === "xpub") setPage("xpub");else if (pageParam === "cases") setPage("cases");else if (pageParam === "methodology") setPage("methodology");
     } catch {}
   }, []);
   const _skipPush = useRef(false);
   const _firstSync = useRef(true);
   const pageUrl = useCallback((pg, cf) => {
-    if (pg === "coach" || pg === "wallets" || pg === "inspector" || pg === "xpub" || pg === "cases") return "/?page=" + pg;
+    if (pg === "coach" || pg === "wallets" || pg === "inspector" || pg === "xpub" || pg === "cases" || pg === "methodology") return "/?page=" + pg;
     if (pg === "case_detail" && cf) return "/?case=" + (cf.slug || cf.id);
     if (pg === "landing") return "/";
     return null;
@@ -19010,7 +19359,7 @@ function App() {
           }
         }
         const pg = params.get("page");
-        setPage(["coach", "wallets", "inspector", "xpub", "cases"].includes(pg) ? pg : "landing");
+        setPage(["coach", "wallets", "inspector", "xpub", "cases", "methodology"].includes(pg) ? pg : "landing");
       } catch {
         setPage("landing");
       }
@@ -19300,6 +19649,10 @@ function App() {
       setWalletPick(wSlug(name));
       setPage("wallets");
     }
+  }), page === "methodology" && React.createElement(MethodologyPage, {
+    onBack: () => setPage("landing"),
+    isMobile: isMobile,
+    onNav: setPage
   })));
 }
 window.__ANONSCORE_TEST__ = Object.freeze({
