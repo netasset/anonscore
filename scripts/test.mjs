@@ -431,6 +431,42 @@ else {
   }
 }
 
+// Browser history: in-app navigation must sync the URL and honour Back/Forward
+// (the mid-session shareable-URL + working-back-button contract), while a fresh
+// deep link still resolves on load.
+{
+  const hp = await ctx.newPage();
+  try {
+    await hp.goto(`http://127.0.0.1:${PORT}/`, { waitUntil: "load" });
+    await hp.waitForFunction(() => document.getElementById("root")?.childElementCount > 0, { timeout: 20000 });
+    await hp.waitForTimeout(500);
+    // Click the footer "Transaction Inspector" link — SPA nav (preventDefault + setPage).
+    await hp.getByText("Transaction Inspector", { exact: true }).click();
+    await hp.waitForTimeout(500);
+    const afterNav = await hp.evaluate(() => ({ url: location.search, inspector: /BEFORE YOU BROADCAST/.test(document.body.innerText) }));
+    if (!/page=inspector/.test(afterNav.url)) fail(`history: in-app nav to Inspector didn't push ?page=inspector (got "${afterNav.url}")`);
+    else if (!afterNav.inspector) fail("history: Inspector didn't render after in-app nav");
+    else pass("history: in-app nav pushes a shareable ?page=inspector URL");
+    // Browser Back → should return to landing (URL cleared, hero visible).
+    await hp.goBack();
+    await hp.waitForTimeout(500);
+    const afterBack = await hp.evaluate(() => ({ url: location.search, landing: /Is your Bitcoin/.test(document.body.innerText) }));
+    if (/page=inspector/.test(afterBack.url)) fail(`history: Back didn't clear the URL (still "${afterBack.url}")`);
+    else if (!afterBack.landing) fail("history: Back didn't restore the landing page");
+    else pass("history: browser Back returns to landing");
+    // Browser Forward → should restore the Inspector.
+    await hp.goForward();
+    await hp.waitForTimeout(500);
+    const afterFwd = await hp.evaluate(() => ({ url: location.search, inspector: /BEFORE YOU BROADCAST/.test(document.body.innerText) }));
+    if (!/page=inspector/.test(afterFwd.url) || !afterFwd.inspector) fail(`history: Forward didn't restore the Inspector (url "${afterFwd.url}")`);
+    else pass("history: browser Forward restores the Inspector");
+  } catch (e) {
+    fail("history: " + e.message.slice(0, 120));
+  } finally {
+    await hp.close();
+  }
+}
+
 // Service worker should register and precache the static assets.
 await page.waitForFunction(
   () => navigator.serviceWorker?.controller || navigator.serviceWorker?.ready,
