@@ -551,6 +551,18 @@ const unit = await page.evaluate(() => {
     const cjCheck = batchRes.checks.find(c => c.key === "cj");
     t("engine: single-input batch is not miscredited as CoinJoin", !!cjCheck && cjCheck.status === "fail");
     t("engine: grade boundaries (A/F)", E.scoreGrade(95) === "A" && E.scoreGrade(30) === "F");
+    // Audit fix M1: reuse judged by RECEIVE count, not tx_count. A normally-spent
+    // single-use address (received once, spent once → tx_count 2, funded_txo_count 1)
+    // must PASS reuse, matching the wallet engine and the documented definition.
+    const rc1 = E.runEngine([coin(5e7)], [], 2, 1).checks.find(c => c.key === "reuse");
+    t("engine: received-once address passes reuse (M1 — not flagged by tx_count)", rc1.status === "pass");
+    const rc5 = E.runEngine([coin(5e7)], [], 5, 5).checks.find(c => c.key === "reuse");
+    t("engine: received-5× address fails reuse", rc5.status === "fail");
+    // Audit fix M2/L1: one shared round/dust predicate across engines + forensic surfaces
+    t("engine: isRoundSat = 500k/1M rule (300k NOT round, 500k round, 5M round)",
+      E.isRoundSat(300000) === false && E.isRoundSat(500000) === true && E.isRoundSat(5000000) === true && E.isRoundSat(50000) === false);
+    t("engine: isDustSat = below the 546-sat limit (545 dust, 546 not, 700 not)",
+      E.isDustSat(545) === true && E.isDustSat(546) === false && E.isDustSat(700) === false);
     t("engine: validators (genesis addr, junk, LN pubkey)",
       E.isValidBitcoinAddress("1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa") === true &&
       E.isValidBitcoinAddress("not-an-address") === false &&

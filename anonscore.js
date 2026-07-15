@@ -227,7 +227,7 @@ const LANDING_FACTS = [{
   url: "https://bitcoin.org/bitcoin.pdf"
 }, {
   stat: "546 sat",
-  desc: "minimum dust threshold — outputs below this are used by surveillance firms as tracking beacons",
+  desc: "dust threshold for legacy (P2PKH) outputs — ~294 sat for native SegWit; below it, outputs are used by surveillance firms as tracking beacons",
   source: "Bitcoin Core relay policy (GetDustThreshold)",
   url: "https://github.com/bitcoin/bitcoin/blob/master/src/policy/policy.cpp"
 }, {
@@ -1719,7 +1719,7 @@ const SCAN_STEPS = [{
   fact: "'0.1 BTC' is a Chainalysis red flag. '0.10431 BTC' looks like change — much less identifiable."
 }, {
   label: "Detecting CoinJoin patterns…",
-  fact: "CoinJoin breaks the chain of custody. With 50+ participants, tracking becomes computationally infeasible."
+  fact: "CoinJoin mixes your coins with others in one transaction — the more participants, the larger your anonymity set and the harder reliable tracking becomes."
 }, {
   label: "Analysing fee fingerprints…",
   fact: "Your wallet software can be identified by the fee rates it uses. Different wallets have different defaults."
@@ -1731,8 +1731,8 @@ const SCAN_STEPS = [{
   fact: "Most wallets can improve by 30+ points in under a week with no technical knowledge required."
 }];
 function classifyUtxo(u) {
-  if (u.value < 1000) return "critical";
-  if (u.value >= 100000 && u.value % 100000 === 0) return "medium";
+  if (isDustSat(u.value)) return "critical";
+  if (isRoundSat(u.value)) return "medium";
   if (u.value > 5000000) return "low";
   return "clean";
 }
@@ -1977,6 +1977,7 @@ function decodeSilentPayment(str) {
     }
   }
   if (bits >= 5 || acc & (1 << bits) - 1) return null;
+  if (version === 0 && out.length !== 66) return null;
   if (out.length < 66) return null;
   const scan = out.slice(0, 33),
     spend = out.slice(33, 66);
@@ -2023,13 +2024,12 @@ const _BOLT_MULT = {
 function decodeBolt11(str) {
   const d = _bech32Decode((str || "").trim());
   if (!d || d.spec !== "bech32" || !d.hrp.startsWith("ln")) return null;
-  const m = d.hrp.slice(2).match(/^(bcrt|bcs|bc|tb|sb)([0-9]*)([munp]?)$/);
+  const m = d.hrp.slice(2).match(/^(bcrt|tbs|bc|tb)([0-9]*)([munp]?)$/);
   if (!m) return null;
   const network = {
     bc: "mainnet",
     tb: "testnet",
-    bcs: "signet",
-    sb: "signet",
+    tbs: "signet",
     bcrt: "regtest"
   }[m[1]];
   let amountMsat = null;
@@ -2098,7 +2098,7 @@ function decodeBolt11(str) {
 }
 function detectBolt11(v) {
   const s = (v || "").trim().toLowerCase();
-  if (!/^ln(bc|tb|bcrt|bcs|sb)[0-9]*[munp]?1[a-z0-9]+$/.test(s)) return null;
+  if (!/^ln(bcrt|tbs|bc|tb)[0-9]*[munp]?1[a-z0-9]+$/.test(s)) return null;
   return decodeBolt11(s) ? "bolt11" : null;
 }
 function _bech32NoChecksum(str) {
@@ -2618,9 +2618,12 @@ function parseTransactionInput(raw) {
   };
   throw new Error("Unrecognized input — paste a PSBT (base64), raw transaction hex, or a 64-character txid");
 }
-const _txRound = v => v >= 100000 && (v % 1000000 === 0 || v % 500000 === 0);
+const DUST_SAT = 546;
+const isRoundSat = v => v >= 100000 && (v % 1000000 === 0 || v % 500000 === 0);
+const isDustSat = v => v > 0 && v < DUST_SAT;
+const _txRound = v => isRoundSat(v);
 const _txOpReturn = o => o.scriptpubkey_type === "op_return";
-const _txDust = o => !_txOpReturn(o) && o.value > 0 && o.value < 546;
+const _txDust = o => !_txOpReturn(o) && isDustSat(o.value);
 function analyzeTx(tx) {
   const vin = tx.vin || [],
     vout = tx.vout || [];
@@ -3419,8 +3422,8 @@ function runWalletEngine(scan) {
   const linkTxs = txs.filter(tx => new Set((tx.vin || []).map(v => v.prevout && v.prevout.scriptpubkey_address).filter(a => ownAddrs.has(a))).size >= 2);
   const consolidations = txs.filter(tx => spentByMe(tx) && (tx.vin || []).length >= 4 && (tx.vout || []).length <= 2);
   const coinjoins = txs.filter(tx => isCoinJoinShape(tx.vin, tx.vout));
-  const dustU = utxos.filter(u => u.value > 0 && u.value < 1000);
-  const roundU = utxos.filter(u => u.value >= 100000 && u.value % 100000 === 0);
+  const dustU = utxos.filter(u => isDustSat(u.value));
+  const roundU = utxos.filter(u => isRoundSat(u.value));
   const largest = utxos.reduce((m, u) => Math.max(m, u.value || 0), 0);
   const concentrated = balance > 0 && largest / balance > 0.9 && addrs.length > 1;
   let score = 100;
@@ -3575,7 +3578,7 @@ const DEMO_WALLET = {
     txs: []
   }]
 };
-function runEngine(utxos = [], txs = [], txCount = 0) {
+function runEngine(utxos = [], txs = [], txCount = 0, receiveCount = null) {
   if (txCount === 0 && utxos.length === 0) {
     return {
       score: null,
@@ -3601,13 +3604,14 @@ function runEngine(utxos = [], txs = [], txCount = 0) {
     });
     score += pts;
   };
-  if (txCount >= 10) add("reuse", "Address Reuse", "fail", `Used ${txCount}+ times — every spend permanently linked`, "This address has been used many times. Every reuse permanently links your transactions for any analyst to see.", "critical", -28);else if (txCount >= 4) add("reuse", "Address Reuse", "fail", `Used ${txCount} times — linkable on-chain`, "This address has been reused. Ideally, use a fresh address for every transaction.", "high", -15);else if (txCount >= 2) add("reuse", "Address Reuse", "warn", `Used ${txCount} times — minor exposure`, "Minor reuse. Generate a new address for your next receive.", "medium", -7);else add("reuse", "Address Reuse", "pass", "Fresh address — no reuse", "Great. This address has only been used once.", "clean", 0);
-  const dust = utxos.filter(u => u.value < 1000);
+  const rc = receiveCount != null ? receiveCount : txCount;
+  if (rc >= 10) add("reuse", "Address Reuse", "fail", `Received ${rc}+ times — every payment permanently linked`, "This address has received many payments. Every reuse permanently links your transactions for any analyst to see.", "critical", -28);else if (rc >= 4) add("reuse", "Address Reuse", "fail", `Received ${rc} times — linkable on-chain`, "This address has been reused to receive. Ideally, use a fresh address for every payment.", "high", -15);else if (rc >= 2) add("reuse", "Address Reuse", "warn", `Received ${rc} times — minor exposure`, "Minor reuse. Generate a new address for your next receive.", "medium", -7);else add("reuse", "Address Reuse", "pass", "Fresh address — received once", "Great. This address has only received once.", "clean", 0);
+  const dust = utxos.filter(u => isDustSat(u.value));
   if (dust.length > 2) add("dust", "Dust Attack", "fail", `${dust.length} dust UTXOs — tracking beacons planted`, "Small amounts sent by trackers. Spending them reveals your wallet cluster to surveillance firms.", "high", -12);else if (dust.length) add("dust", "Dust Attack", "warn", `${dust.length} dust UTXO — possible tracker`, "A tiny amount was sent to your address. Freeze it in Sparrow — never spend it.", "medium", -5);else add("dust", "Dust Attack", "pass", "No dust UTXOs", "No suspicious tiny amounts found.", "clean", 0);
-  const round = utxos.filter(u => u.value >= 100000 && u.value % 100000 === 0);
+  const round = utxos.filter(u => isRoundSat(u.value));
   if (round.length >= 2) add("round", "Round Amounts", "fail", `${round.length} round-number UTXOs — KYC withdrawal pattern`, "Round amounts like 0.1 BTC are a Chainalysis red flag. Analysts assume these came from KYC exchanges.", "high", -10);else if (round.length) add("round", "Round Amounts", "warn", "1 round-number UTXO — minor fingerprint", "One round amount. Use odd numbers next time you withdraw from an exchange.", "medium", -5);else add("round", "Round Amounts", "pass", "No suspicious round amounts", "Good — your UTXOs use non-round amounts.", "clean", 0);
   let cjCount = 0;
-  for (const tx of txs.slice(0, 20)) {
+  for (const tx of txs) {
     if (isCoinJoinShape(tx.vin, tx.vout)) cjCount++;
   }
   if (cjCount >= 2) add("cj", "CoinJoin Used", "pass", `${cjCount} CoinJoin transactions — strong mixing hygiene`, "You've used CoinJoin to break transaction links. This significantly improves your privacy.", "clean", +12);else if (cjCount === 1) add("cj", "CoinJoin Used", "warn", "1 CoinJoin — anonymity set may be small", "You've used CoinJoin once. More rounds with larger groups improve your score.", "medium", +4);else add("cj", "CoinJoin Used", "fail", "No CoinJoin — full history traceable", "Your transaction history is fully visible. CoinJoin breaks this chain permanently.", "high", -8);
@@ -11256,7 +11260,7 @@ function TransactionInspector({
         ...label,
         color: T.green
       }
-    }, cj.type === "Whirlpool" ? "WHIRLPOOL COINJOIN" : cj.type === "Wasabi" ? "WASABI COINJOIN" : "COINJOIN DETECTED"), React.createElement("div", {
+    }, cj.type === "Whirlpool" ? "WHIRLPOOL COINJOIN" : cj.type === "Wasabi" ? "EQUAL-VALUE COINJOIN" : "COINJOIN DETECTED"), React.createElement("div", {
       style: {
         fontSize: 13,
         color: T.textMid,
@@ -11266,7 +11270,7 @@ function TransactionInspector({
       style: {
         color: T.text
       }
-    }, sats(cj.denom)), cj.type === "Whirlpool" ? " in a 5×5 pool" : cj.type === "Wasabi" ? " — an equal-value (ZeroLink) round, ~99% detectable by its structure alone" : "", ". Good: equal outputs break the deterministic input\u2192output trail for everyone in the round."), React.createElement("div", {
+    }, sats(cj.denom)), cj.type === "Whirlpool" ? " in a 5×5 pool" : cj.type === "Wasabi" ? " — an equal-value (ZeroLink / legacy Wasabi-style) round, ~99% detectable by its structure (not modern WabiSabi, which uses variable amounts)" : "", ". Good: equal outputs break the deterministic input\u2192output trail for everyone in the round."), React.createElement("div", {
       style: {
         background: T.amber + "10",
         border: `1px solid ${T.amber}33`,
@@ -13368,7 +13372,7 @@ function buildAiContext(checks, recommendations, score, grade, walletMeta) {
       const flags = [];
       if (outCount >= 5 && inCount >= 5) flags.push("possible CoinJoin");
       if (inCount >= 4 && outCount <= 2) flags.push("consolidation");
-      if (totalOut >= 100000 && totalOut % 100000 === 0) flags.push("round amount");
+      if (isRoundSat(totalOut)) flags.push("round amount");
       return `  ${i + 1}. ${time} — ${inCount} inputs → ${outCount} outputs, ${satsBtc(totalOut)} total${fee ? `, ${fee}` : ""}${flags.length ? ` [${flags.join(", ")}]` : ""}`;
     }).join("\n");
     const utxoLines = utxos.slice(0, 10).map((u, i) => `  ${i + 1}. ${satsBtc(u.value)} — ${u.status?.confirmed ? "confirmed" : "unconfirmed"}, ${age(u.status?.block_time)}, type: ${u.scriptpubkey_type || "unknown"}`).join("\n");
@@ -14761,9 +14765,9 @@ function ExposureFlow({
   onScan
 }) {
   const list = (txs || []).slice(0, 8);
-  const isRound = v => v >= 100000 && (v % 1000000 === 0 || v % 500000 === 0);
+  const isRound = v => isRoundSat(v);
   const isOpReturn = o => o.scriptpubkey_type === "op_return";
-  const isDust = o => !isOpReturn(o) && o.value > 0 && o.value < 546;
+  const isDust = o => !isOpReturn(o) && isDustSat(o.value);
   const KIND = {
     dust: {
       color: T.red,
@@ -15286,7 +15290,8 @@ function Dashboard({
   const [aiWidgetMin, setAiWidgetMin] = useState(false);
   const openAi = () => setAiStage("consent");
   const txCount = addrInfo?.chain_stats?.tx_count || txs.length;
-  const analysis = useMemo(() => runEngine(utxos, txs, txCount), [utxos, txs, txCount]);
+  const receiveCount = addrInfo?.chain_stats?.funded_txo_count ?? null;
+  const analysis = useMemo(() => runEngine(utxos, txs, txCount, receiveCount), [utxos, txs, txCount, receiveCount]);
   const {
     score,
     grade,
@@ -16755,11 +16760,11 @@ function Dashboard({
       color
     } = RISK_META[risk];
     const flags = [];
-    if (u.value < 1000) flags.push({
+    if (isDustSat(u.value)) flags.push({
       t: "Dust — freeze this",
       c: T.red
     });
-    if (u.value >= 100000 && u.value % 100000 === 0) flags.push({
+    if (isRoundSat(u.value)) flags.push({
       t: "Round amount",
       c: T.btc
     });
@@ -16928,7 +16933,7 @@ function Dashboard({
       l: "Consolidation",
       c: T.red
     });
-    if (tx.vout?.[0]?.value >= 100000 && tx.vout[0].value % 100000 === 0) flags.push({
+    if ((tx.vout || []).some(o => isRoundSat(o.value))) flags.push({
       l: "Round amount",
       c: T.amber
     });
@@ -18902,7 +18907,7 @@ function App() {
         setTxs(demoData.txs);
         setScanAt(Date.now());
         setScoreDelta(null);
-        setScoreTint(scoreColor(runEngine(demoData.utxos, demoData.txs, demoData.addrInfo?.chain_stats?.tx_count || demoData.txs.length).score));
+        setScoreTint(scoreColor(runEngine(demoData.utxos, demoData.txs, demoData.addrInfo?.chain_stats?.tx_count || demoData.txs.length, demoData.addrInfo?.chain_stats?.funded_txo_count ?? null).score));
         setScanDataReady(true);
         await new Promise(r => setTimeout(r, 300));
         setPage("dashboard");
@@ -18914,7 +18919,7 @@ function App() {
         return;
       }
       const data = await fetchAddress(addr);
-      const analysis = runEngine(data.utxos, data.txs, data.addrInfo?.chain_stats?.tx_count || data.txs.length);
+      const analysis = runEngine(data.utxos, data.txs, data.addrInfo?.chain_stats?.tx_count || data.txs.length, data.addrInfo?.chain_stats?.funded_txo_count ?? null);
       const prevEntry = getHistory().find(e => e.addr === addr);
       const delta = prevEntry ? analysis.score - prevEntry.score : null;
       setScoreDelta(delta);
@@ -19041,6 +19046,8 @@ window.__ANONSCORE_TEST__ = Object.freeze({
   runLightningEngine,
   classifyUtxo,
   scoreGrade,
+  isRoundSat,
+  isDustSat,
   computeCluster,
   computeCounterparties,
   computePoisoning,

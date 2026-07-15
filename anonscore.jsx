@@ -156,7 +156,7 @@ const LANDING_CHECKS = [
 const LANDING_FACTS = [
   { stat:"$8.6B",  desc:"valuation of Chainalysis — the largest blockchain-surveillance firm, whose customers include governments and exchanges (~$190M 2023 revenue)",  source:"Chainalysis Series F, May 2022", url:"https://www.chainalysis.com/blog/series-f/" },
   { stat:"§10",    desc:"of the Bitcoin whitepaper says to use a new address for every payment. Reusing one permanently links all its transactions — the most common avoidable privacy mistake.", source:"Bitcoin whitepaper (Nakamoto, 2008)", url:"https://bitcoin.org/bitcoin.pdf" },
-  { stat:"546 sat",desc:"minimum dust threshold — outputs below this are used by surveillance firms as tracking beacons", source:"Bitcoin Core relay policy (GetDustThreshold)", url:"https://github.com/bitcoin/bitcoin/blob/master/src/policy/policy.cpp" },
+  { stat:"546 sat",desc:"dust threshold for legacy (P2PKH) outputs — ~294 sat for native SegWit; below it, outputs are used by surveillance firms as tracking beacons", source:"Bitcoin Core relay policy (GetDustThreshold)", url:"https://github.com/bitcoin/bitcoin/blob/master/src/policy/policy.cpp" },
   { stat:"~38/100", desc:"what this tool scores a typical wallet — address reuse, no CoinJoin, round-amount withdrawals. An illustrative baseline you can reproduce, not survey data.", source:"AnonScore scoring rubric — we store no scan data", url:"" },
 ];
 
@@ -1046,7 +1046,7 @@ const SCAN_STEPS = [
   { label:"Looking for dust attacks…",    fact:"Exchanges and surveillance firms send dust to wallets they want to track. It's legal." },
   { label:"Scanning for consolidations…", fact:"Merging a KYC coin with a private coin permanently links them — forever, on-chain." },
   { label:"Checking round amounts…",      fact:"'0.1 BTC' is a Chainalysis red flag. '0.10431 BTC' looks like change — much less identifiable." },
-  { label:"Detecting CoinJoin patterns…", fact:"CoinJoin breaks the chain of custody. With 50+ participants, tracking becomes computationally infeasible." },
+  { label:"Detecting CoinJoin patterns…", fact:"CoinJoin mixes your coins with others in one transaction — the more participants, the larger your anonymity set and the harder reliable tracking becomes." },
   { label:"Analysing fee fingerprints…",  fact:"Your wallet software can be identified by the fee rates it uses. Different wallets have different defaults." },
   { label:"Calculating privacy score…",   fact:"Score 0 = fully traceable in seconds. Score 100 = requires nation-state resources to de-anonymise." },
   { label:"Building your fix plan…",      fact:"Most wallets can improve by 30+ points in under a week with no technical knowledge required." },
@@ -1056,8 +1056,8 @@ const SCAN_STEPS = [
    UTXO CLASSIFIER — hoisted, not per-render
 ───────────────────────────────────────────── */
 function classifyUtxo(u) {
-  if (u.value < 1000) return "critical";
-  if (u.value >= 100000 && u.value % 100000 === 0) return "medium";
+  if (isDustSat(u.value)) return "critical";
+  if (isRoundSat(u.value)) return "medium";
   if (u.value > 5000000) return "low";
   return "clean";
 }
@@ -1207,7 +1207,8 @@ function decodeSilentPayment(str) {
   let acc = 0, bits = 0; const out = [];
   for (const v of d.data.slice(1)) { acc = (acc << 5) | v; bits += 5; while (bits >= 8) { bits -= 8; out.push((acc >> bits) & 0xff); } }
   if (bits >= 5 || (acc & ((1 << bits) - 1))) return null;
-  if (out.length < 66) return null;                 // v1–30 may append; read the first 66
+  if (version === 0 && out.length !== 66) return null;   // BIP352: v0 data part is EXACTLY 66 bytes
+  if (out.length < 66) return null;                      // v1–30 may append trailing bytes; read the first 66
   const scan = out.slice(0, 33), spend = out.slice(33, 66);
   const ok = b => b[0] === 0x02 || b[0] === 0x03;
   if (!ok(scan) || !ok(spend)) return null;
@@ -1229,9 +1230,9 @@ const _BOLT_MULT = { m: 1e8, u: 1e5, n: 1e2, p: 0.1 };   // multiplier → msat 
 function decodeBolt11(str) {
   const d = _bech32Decode((str || "").trim());
   if (!d || d.spec !== "bech32" || !d.hrp.startsWith("ln")) return null;
-  const m = d.hrp.slice(2).match(/^(bcrt|bcs|bc|tb|sb)([0-9]*)([munp]?)$/);
+  const m = d.hrp.slice(2).match(/^(bcrt|tbs|bc|tb)([0-9]*)([munp]?)$/);   // tbs (signet) before tb so it wins
   if (!m) return null;
-  const network = { bc: "mainnet", tb: "testnet", bcs: "signet", sb: "signet", bcrt: "regtest" }[m[1]];
+  const network = { bc: "mainnet", tb: "testnet", tbs: "signet", bcrt: "regtest" }[m[1]];
   let amountMsat = null;
   if (m[2]) { const num = parseInt(m[2], 10); amountMsat = m[3] ? Math.round(num * _BOLT_MULT[m[3]]) : num * 1e11; }
   const data = d.data;
@@ -1268,7 +1269,7 @@ function decodeBolt11(str) {
   }
   return { network, amountMsat, timestamp, paymentHash: f.p, description: f.d ?? null, payeePubkey: f.n ?? null, expiry: f.x ?? null, descHash: f.h ?? null, routes };
 }
-function detectBolt11(v) { const s = (v || "").trim().toLowerCase(); if (!/^ln(bc|tb|bcrt|bcs|sb)[0-9]*[munp]?1[a-z0-9]+$/.test(s)) return null; return decodeBolt11(s) ? "bolt11" : null; }
+function detectBolt11(v) { const s = (v || "").trim().toLowerCase(); if (!/^ln(bcrt|tbs|bc|tb)[0-9]*[munp]?1[a-z0-9]+$/.test(s)) return null; return decodeBolt11(s) ? "bolt11" : null; }
 
 /* BOLT12 OFFER decode + privacy lint (pure JS, no network). Offers are the
    privacy upgrade to BOLT11: reusable without a static invoice/payment-hash to
@@ -1521,11 +1522,21 @@ function parseTransactionInput(raw) {
   throw new Error("Unrecognized input — paste a PSBT (base64), raw transaction hex, or a 64-character txid");
 }
 
+// CANONICAL amount predicates — ONE definition of "round" and "dust", shared by
+// the score engines AND every forensic surface (Exposure Map, Inspector), so the
+// same coin can never get contradictory verdicts. Round = a clean KYC-withdrawal
+// amount: an exact 0.005-or-larger multiple of 0.005/0.01 BTC (the 500k/1M-sat
+// rule — more defensible than "any 0.001-multiple"). Dust = below the canonical
+// 546-sat relay dust limit.
+const DUST_SAT = 546;
+const isRoundSat = v => v >= 100000 && (v % 1000000 === 0 || v % 500000 === 0);
+const isDustSat = v => v > 0 && v < DUST_SAT;
+
 // -- transaction privacy analysis (mirrors the on-chain Exposure heuristics,
 //    applied to one not-yet-broadcast transaction) --
-const _txRound = v => v >= 100000 && (v % 1000000 === 0 || v % 500000 === 0);
+const _txRound = v => isRoundSat(v);
 const _txOpReturn = o => o.scriptpubkey_type === "op_return";
-const _txDust = o => !_txOpReturn(o) && o.value > 0 && o.value < 546;
+const _txDust = o => !_txOpReturn(o) && isDustSat(o.value);
 function analyzeTx(tx) {
   const vin = tx.vin || [], vout = tx.vout || [];
   const inAddrs = new Set(vin.map(v => v.prevout && v.prevout.scriptpubkey_address).filter(Boolean));
@@ -1978,8 +1989,8 @@ function runWalletEngine(scan) {
   const linkTxs = txs.filter(tx => new Set((tx.vin || []).map(v => v.prevout && v.prevout.scriptpubkey_address).filter(a => ownAddrs.has(a))).size >= 2);
   const consolidations = txs.filter(tx => spentByMe(tx) && (tx.vin || []).length >= 4 && (tx.vout || []).length <= 2);
   const coinjoins = txs.filter(tx => isCoinJoinShape(tx.vin, tx.vout));
-  const dustU = utxos.filter(u => u.value > 0 && u.value < 1000);
-  const roundU = utxos.filter(u => u.value >= 100000 && u.value % 100000 === 0);
+  const dustU = utxos.filter(u => isDustSat(u.value));
+  const roundU = utxos.filter(u => isRoundSat(u.value));
   const largest = utxos.reduce((m, u) => Math.max(m, u.value || 0), 0);
   const concentrated = balance > 0 && largest / balance > 0.9 && addrs.length > 1;
 
@@ -2040,7 +2051,7 @@ const DEMO_WALLET = {
 /* ─────────────────────────────────────────────
    PRIVACY ENGINE — 11 heuristics
 ───────────────────────────────────────────── */
-function runEngine(utxos = [], txs = [], txCount = 0) {
+function runEngine(utxos = [], txs = [], txCount = 0, receiveCount = null) {
   // Guard: no on-chain history at all — new/unused address
   if (txCount === 0 && utxos.length === 0) {
     return {
@@ -2061,20 +2072,24 @@ function runEngine(utxos = [], txs = [], txCount = 0) {
     score += pts;
   };
 
-  // 1. Address reuse
-  if (txCount >= 10)     add("reuse","Address Reuse","fail",`Used ${txCount}+ times — every spend permanently linked`,"This address has been used many times. Every reuse permanently links your transactions for any analyst to see.","critical",-28);
-  else if (txCount >= 4) add("reuse","Address Reuse","fail",`Used ${txCount} times — linkable on-chain`,"This address has been reused. Ideally, use a fresh address for every transaction.","high",-15);
-  else if (txCount >= 2) add("reuse","Address Reuse","warn",`Used ${txCount} times — minor exposure`,"Minor reuse. Generate a new address for your next receive.","medium",-7);
-  else                   add("reuse","Address Reuse","pass","Fresh address — no reuse","Great. This address has only been used once.","clean",0);
+  // 1. Address reuse — judged by RECEIVE count (funded_txo_count), matching the
+  // wallet engine and the true definition: receiving MORE THAN ONCE on one
+  // address is reuse. A normal receive-then-spend (tx_count 2, funded_txo_count 1)
+  // is NOT reuse. Falls back to tx_count only when receive count is unavailable.
+  const rc = receiveCount != null ? receiveCount : txCount;
+  if (rc >= 10)     add("reuse","Address Reuse","fail",`Received ${rc}+ times — every payment permanently linked`,"This address has received many payments. Every reuse permanently links your transactions for any analyst to see.","critical",-28);
+  else if (rc >= 4) add("reuse","Address Reuse","fail",`Received ${rc} times — linkable on-chain`,"This address has been reused to receive. Ideally, use a fresh address for every payment.","high",-15);
+  else if (rc >= 2) add("reuse","Address Reuse","warn",`Received ${rc} times — minor exposure`,"Minor reuse. Generate a new address for your next receive.","medium",-7);
+  else              add("reuse","Address Reuse","pass","Fresh address — received once","Great. This address has only received once.","clean",0);
 
   // 2. Dust
-  const dust = utxos.filter(u => u.value < 1000);
+  const dust = utxos.filter(u => isDustSat(u.value));
   if (dust.length > 2)   add("dust","Dust Attack","fail",`${dust.length} dust UTXOs — tracking beacons planted`,"Small amounts sent by trackers. Spending them reveals your wallet cluster to surveillance firms.","high",-12);
   else if (dust.length)  add("dust","Dust Attack","warn",`${dust.length} dust UTXO — possible tracker`,"A tiny amount was sent to your address. Freeze it in Sparrow — never spend it.","medium",-5);
   else                   add("dust","Dust Attack","pass","No dust UTXOs","No suspicious tiny amounts found.","clean",0);
 
   // 3. Round amounts
-  const round = utxos.filter(u => u.value >= 100000 && u.value % 100000 === 0);
+  const round = utxos.filter(u => isRoundSat(u.value));
   if (round.length >= 2) add("round","Round Amounts","fail",`${round.length} round-number UTXOs — KYC withdrawal pattern`,"Round amounts like 0.1 BTC are a Chainalysis red flag. Analysts assume these came from KYC exchanges.","high",-10);
   else if (round.length) add("round","Round Amounts","warn","1 round-number UTXO — minor fingerprint","One round amount. Use odd numbers next time you withdraw from an exchange.","medium",-5);
   else                   add("round","Round Amounts","pass","No suspicious round amounts","Good — your UTXOs use non-round amounts.","clean",0);
@@ -2082,7 +2097,7 @@ function runEngine(utxos = [], txs = [], txCount = 0) {
   // 4. CoinJoin — requires multiple inputs (participants), not just repeated
   // outputs, so a single-sender batch payout isn't miscredited as a mix.
   let cjCount = 0;
-  for (const tx of txs.slice(0, 20)) {
+  for (const tx of txs) {                        // scan the full window, like every other check
     if (isCoinJoinShape(tx.vin, tx.vout)) cjCount++;
   }
   if (cjCount >= 2)      add("cj","CoinJoin Used","pass",`${cjCount} CoinJoin transactions — strong mixing hygiene`,"You've used CoinJoin to break transaction links. This significantly improves your privacy.","clean",+12);
@@ -5288,9 +5303,9 @@ function TransactionInspector({ onBack, isMobile, onScan }) {
         {/* coinjoin classification + post-mix consolidation warning */}
         {cj && (
           <div style={panel({ borderColor: T.green + "3a" })}>
-            <div style={{ ...label, color: T.green }}>{cj.type === "Whirlpool" ? "WHIRLPOOL COINJOIN" : cj.type === "Wasabi" ? "WASABI COINJOIN" : "COINJOIN DETECTED"}</div>
+            <div style={{ ...label, color: T.green }}>{cj.type === "Whirlpool" ? "WHIRLPOOL COINJOIN" : cj.type === "Wasabi" ? "EQUAL-VALUE COINJOIN" : "COINJOIN DETECTED"}</div>
             <div style={{ fontSize: 13, color: T.textMid, lineHeight: 1.6 }}>
-              {cj.participants} equal outputs of <strong style={{ color: T.text }}>{sats(cj.denom)}</strong>{cj.type === "Whirlpool" ? " in a 5×5 pool" : cj.type === "Wasabi" ? " — an equal-value (ZeroLink) round, ~99% detectable by its structure alone" : ""}. Good: equal outputs break the deterministic input→output trail for everyone in the round.
+              {cj.participants} equal outputs of <strong style={{ color: T.text }}>{sats(cj.denom)}</strong>{cj.type === "Whirlpool" ? " in a 5×5 pool" : cj.type === "Wasabi" ? " — an equal-value (ZeroLink / legacy Wasabi-style) round, ~99% detectable by its structure (not modern WabiSabi, which uses variable amounts)" : ""}. Good: equal outputs break the deterministic input→output trail for everyone in the round.
             </div>
             <div style={{ background: T.amber + "10", border: `1px solid ${T.amber}33`, borderRadius: 10, padding: "9px 12px", fontSize: 12.5, color: T.textMid, lineHeight: 1.6, marginTop: 10 }}>
               <strong style={{ color: T.amber }}>Don't undo it by consolidating.</strong> If you later spend several of these mixed outputs together, the common-input heuristic re-links them into one cluster — measured to erode a mix's anonymity set by <strong style={{ color: T.text }}>10–50%</strong>, worst in the first day. Spend mixed coins one output at a time, and let them rest.
@@ -6083,7 +6098,7 @@ function buildAiContext(checks, recommendations, score, grade, walletMeta) {
       const flags    = [];
       if (outCount >= 5 && inCount >= 5) flags.push("possible CoinJoin");
       if (inCount >= 4 && outCount <= 2) flags.push("consolidation");
-      if (totalOut >= 100000 && totalOut % 100000 === 0) flags.push("round amount");
+      if (isRoundSat(totalOut)) flags.push("round amount");
       return `  ${i+1}. ${time} — ${inCount} inputs → ${outCount} outputs, ${satsBtc(totalOut)} total${fee ? `, ${fee}` : ""}${flags.length ? ` [${flags.join(", ")}]` : ""}`;
     }).join("\n");
 
@@ -6714,12 +6729,12 @@ function ClusterMap({ txs, address, isMobile, entity, onScan }) {
 
 function ExposureFlow({ txs, isMobile, onFix, entity, address, onScan }) {
   const list = (txs || []).slice(0, 8);
-  const isRound = v => v >= 100000 && (v % 1000000 === 0 || v % 500000 === 0);
+  const isRound = v => isRoundSat(v);            // canonical shared predicate
   // A dust "beacon" is a tiny *spendable* output planted to track you. An
   // OP_RETURN is a provably-unspendable data carrier (value 0) — NOT dust, and
   // flagging it as a tracking beacon (red, +leaky) is simply wrong. Guard both.
   const isOpReturn = o => o.scriptpubkey_type === "op_return";
-  const isDust = o => !isOpReturn(o) && o.value > 0 && o.value < 546;
+  const isDust = o => !isOpReturn(o) && isDustSat(o.value);
   const KIND = {
     dust:  { color: T.red,    label: "Dust (tracking beacon)" },
     reuse: { color: T.red,    label: "Change → address reuse" },
@@ -6916,7 +6931,8 @@ function Dashboard({ address, addrInfo, utxos, txs, isMobile, onBack, onRescan, 
   const openAi = () => setAiStage("consent");
 
   const txCount = addrInfo?.chain_stats?.tx_count || txs.length;
-  const analysis = useMemo(() => runEngine(utxos, txs, txCount), [utxos, txs, txCount]);
+  const receiveCount = addrInfo?.chain_stats?.funded_txo_count ?? null;   // reuse = received >1×
+  const analysis = useMemo(() => runEngine(utxos, txs, txCount, receiveCount), [utxos, txs, txCount, receiveCount]);
   const { score, grade, riskLabel, riskColor, checks, recommendations, isEmpty } = analysis;
   // Use addrInfo aggregate balance (accurate) — falls back to summing sampled UTXOs for demo/edge cases
   const totalSats = useMemo(() => {
@@ -7417,8 +7433,8 @@ function Dashboard({ address, addrInfo, utxos, txs, isMobile, onBack, onRescan, 
               const risk = classifyUtxo(u);
               const { color } = RISK_META[risk];
               const flags = [];
-              if (u.value < 1000) flags.push({ t: "Dust — freeze this", c: T.red });
-              if (u.value >= 100000 && u.value % 100000 === 0) flags.push({ t: "Round amount", c: T.btc });
+              if (isDustSat(u.value)) flags.push({ t: "Dust — freeze this", c: T.red });
+              if (isRoundSat(u.value)) flags.push({ t: "Round amount", c: T.btc });
               const open = selectedUtxo === i;
               return (
                 <div key={u.txid + i} onClick={() => setSelectedUtxo(open ? null : i)}
@@ -7465,7 +7481,7 @@ function Dashboard({ address, addrInfo, utxos, txs, isMobile, onBack, onRescan, 
                 const flags = [];
                 if (isCoinJoinShape(tx.vin, tx.vout)) flags.push({ l: (classifyCoinjoin(tx.vin, tx.vout) || {}).type === "Whirlpool" ? "Whirlpool" : "CoinJoin", c: T.green });
                 if (tx.vin?.length >= 4 && tx.vout?.length <= 2) flags.push({ l: "Consolidation", c: T.red });
-                if (tx.vout?.[0]?.value >= 100000 && tx.vout[0].value % 100000 === 0) flags.push({ l: "Round amount", c: T.amber });
+                if ((tx.vout || []).some(o => isRoundSat(o.value))) flags.push({ l: "Round amount", c: T.amber });
                 if (!flags.length) flags.push({ l: "Standard", c: T.textDim });
                 return (
                   <div key={tx.txid} style={{ display: "grid", gridTemplateColumns: "130px 90px 60px 60px 1fr 110px", padding: "10px 20px", borderBottom: `1px solid ${T.borderLo}`, alignItems: "center", animation: `fadeUp .3s ease ${i * .03}s both`, opacity: 0, transition: "background .12s" }}
@@ -8255,7 +8271,7 @@ function App() {
         setTxs(demoData.txs);
         setScanAt(Date.now());
         setScoreDelta(null); // demos don't track progress
-        setScoreTint(scoreColor(runEngine(demoData.utxos, demoData.txs, demoData.addrInfo?.chain_stats?.tx_count || demoData.txs.length).score));
+        setScoreTint(scoreColor(runEngine(demoData.utxos, demoData.txs, demoData.addrInfo?.chain_stats?.tx_count || demoData.txs.length, demoData.addrInfo?.chain_stats?.funded_txo_count ?? null).score));
         setScanDataReady(true);
         await new Promise(r => setTimeout(r, 300));
         setPage("dashboard");
@@ -8264,7 +8280,7 @@ function App() {
       }
 
       const data = await fetchAddress(addr);
-      const analysis = runEngine(data.utxos, data.txs, data.addrInfo?.chain_stats?.tx_count || data.txs.length);
+      const analysis = runEngine(data.utxos, data.txs, data.addrInfo?.chain_stats?.tx_count || data.txs.length, data.addrInfo?.chain_stats?.funded_txo_count ?? null);
       // Progress vs the previous scan of this address — read BEFORE addToHistory
       // replaces the entry. The history (and therefore this) never leaves the browser.
       const prevEntry = getHistory().find(e => e.addr === addr);
@@ -8327,7 +8343,7 @@ function App() {
 // can test the scoring logic straight from their browser console (and so CI can
 // unit-test the built bundle directly). No state, no user data: pure functions.
 window.__ANONSCORE_TEST__ = Object.freeze({
-  runEngine, runLightningEngine, classifyUtxo, scoreGrade,
+  runEngine, runLightningEngine, classifyUtxo, scoreGrade, isRoundSat, isDustSat,
   computeCluster, computeCounterparties, computePoisoning, isLookalikeAddress, computeActivityClock,
   isValidBitcoinAddress, isValidLightningPubkey, detectInputType,
   // Transaction Inspector — parser + analysis (validated against BIP174/173/350)
