@@ -259,7 +259,7 @@ const STRINGS = {
     "cta.audit": "⚡ Audit →",
     "sample.divider": "or try a sample",
     "sample.risky": "₿ Risky wallet",
-    "sample.pristine": "✨ Pristine wallet",
+    "sample.pristine": "✨ Strong privacy",
     "sample.lightning": "⚡ Lightning node",
     "recent.title": "RECENT SCANS",
     "err.empty": "Please enter a Bitcoin address or Lightning node pubkey.",
@@ -320,7 +320,7 @@ const STRINGS = {
     "cta.audit": "⚡ Auditar →",
     "sample.divider": "o prueba un ejemplo",
     "sample.risky": "₿ Billetera riesgosa",
-    "sample.pristine": "✨ Billetera impecable",
+    "sample.pristine": "✨ Privacidad fuerte",
     "sample.lightning": "⚡ Nodo Lightning",
     "recent.title": "ESCANEOS RECIENTES",
     "err.empty": "Ingresa una dirección de Bitcoin o la clave pública de un nodo Lightning.",
@@ -2312,14 +2312,17 @@ const atUtcHour = (days, hour) => Math.floor(now() / 86400) * 86400 - 86400 * da
 // Pristine demo — designed to score A. CoinJoin-mixed, no dust, no round
 // amounts, single script type, balanced UTXO set, low tx count, no
 // consolidation. This is what the audit is trying to teach users to look like.
+// Strong-privacy sample. INTERNALLY CONSISTENT: every UTXO is one of the
+// three transactions' outputs paid to this address (the "me" outputs), so
+// funded_txo_count (3) == tx_count (3) == utxos.length. Its one honest caveat
+// is receiving all three to the SAME address — minor reuse that costs a few
+// points even for an otherwise-excellent (CoinJoin, no dust/round) wallet.
 const DEMO_A = {
-  addrInfo: { chain_stats: { tx_count: 3 } },
+  addrInfo: { chain_stats: { tx_count: 3, funded_txo_count: 3, spent_txo_count: 0 } },
   utxos: [
-    { txid:"7a82bc91e3411d05",vout:1,value:17431892,scriptpubkey_type:"v0_p2wpkh",status:{confirmed:true,block_time:now()-86400*30}},
-    { txid:"2e91a4bc77f01122",vout:2,value:11254731,scriptpubkey_type:"v0_p2wpkh",status:{confirmed:true,block_time:now()-86400*60}},
+    { txid:"7a82bc91e3411d05",vout:5,value:17431892,scriptpubkey_type:"v0_p2wpkh",status:{confirmed:true,block_time:now()-86400*30}},
+    { txid:"2e91a4bc77f01122",vout:4,value:11254731,scriptpubkey_type:"v0_p2wpkh",status:{confirmed:true,block_time:now()-86400*60}},
     { txid:"d4f1b206c8a99933",vout:0,value:8721400, scriptpubkey_type:"v0_p2wpkh",status:{confirmed:true,block_time:now()-86400*90}},
-    { txid:"a51cc1f4d0118855",vout:3,value:15182374,scriptpubkey_type:"v0_p2wpkh",status:{confirmed:true,block_time:now()-86400*45}},
-    { txid:"38ee9c7be5f02266",vout:1,value:9847251, scriptpubkey_type:"v0_p2wpkh",status:{confirmed:true,block_time:now()-86400*15}},
   ],
   txs: [
     // CoinJoin #1 — 5 inputs (participants), 8 outputs, 5 share the 5,000,000-sat denomination
