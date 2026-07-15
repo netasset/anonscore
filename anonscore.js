@@ -315,7 +315,7 @@ const STRINGS = {
     "cta.audit": "⚡ Audit →",
     "sample.divider": "or try a sample",
     "sample.risky": "₿ Risky wallet",
-    "sample.pristine": "✨ Pristine wallet",
+    "sample.pristine": "✨ Strong privacy",
     "sample.lightning": "⚡ Lightning node",
     "recent.title": "RECENT SCANS",
     "err.empty": "Please enter a Bitcoin address or Lightning node pubkey.",
@@ -376,7 +376,7 @@ const STRINGS = {
     "cta.audit": "⚡ Auditar →",
     "sample.divider": "o prueba un ejemplo",
     "sample.risky": "₿ Billetera riesgosa",
-    "sample.pristine": "✨ Billetera impecable",
+    "sample.pristine": "✨ Privacidad fuerte",
     "sample.lightning": "⚡ Nodo Lightning",
     "recent.title": "ESCANEOS RECIENTES",
     "err.empty": "Ingresa una dirección de Bitcoin o la clave pública de un nodo Lightning.",
@@ -3982,12 +3982,14 @@ const atUtcHour = (days, hour) => Math.floor(now() / 86400) * 86400 - 86400 * da
 const DEMO_A = {
   addrInfo: {
     chain_stats: {
-      tx_count: 3
+      tx_count: 3,
+      funded_txo_count: 3,
+      spent_txo_count: 0
     }
   },
   utxos: [{
     txid: "7a82bc91e3411d05",
-    vout: 1,
+    vout: 5,
     value: 17431892,
     scriptpubkey_type: "v0_p2wpkh",
     status: {
@@ -3996,7 +3998,7 @@ const DEMO_A = {
     }
   }, {
     txid: "2e91a4bc77f01122",
-    vout: 2,
+    vout: 4,
     value: 11254731,
     scriptpubkey_type: "v0_p2wpkh",
     status: {
@@ -4011,24 +4013,6 @@ const DEMO_A = {
     status: {
       confirmed: true,
       block_time: now() - 86400 * 90
-    }
-  }, {
-    txid: "a51cc1f4d0118855",
-    vout: 3,
-    value: 15182374,
-    scriptpubkey_type: "v0_p2wpkh",
-    status: {
-      confirmed: true,
-      block_time: now() - 86400 * 45
-    }
-  }, {
-    txid: "38ee9c7be5f02266",
-    vout: 1,
-    value: 9847251,
-    scriptpubkey_type: "v0_p2wpkh",
-    status: {
-      confirmed: true,
-      block_time: now() - 86400 * 15
     }
   }],
   txs: [{
