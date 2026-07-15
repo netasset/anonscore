@@ -467,6 +467,143 @@ else {
   }
 }
 
+// Hub spine: the shared SiteNav must expose the toolkit on every sub-page,
+// ?page=cases must resolve, and the landing input must hand off xpubs/PSBTs
+// to their sibling tools instead of erroring ("universal front door").
+{
+  const np = await ctx.newPage();
+  try {
+    // ?page=cases resolves to the case-files index
+    await np.goto(`http://127.0.0.1:${PORT}/?page=cases`, { waitUntil: "load" });
+    await np.waitForFunction(() => document.getElementById("root")?.childElementCount > 0, { timeout: 20000 });
+    await np.waitForTimeout(400);
+    const casesOk = await np.evaluate(() => /Case Files/.test(document.body.innerText));
+    if (!casesOk) fail("hub: /?page=cases didn't render the case-files index");
+    else pass("hub: /?page=cases resolves to the case-files index");
+
+    // SiteNav on a sub-page links to the sibling tools; in-app click syncs the URL
+    await np.goto(`http://127.0.0.1:${PORT}/?page=inspector`, { waitUntil: "load" });
+    await np.waitForFunction(() => document.getElementById("root")?.childElementCount > 0, { timeout: 20000 });
+    await np.waitForTimeout(400);
+    const navLinks = await np.evaluate(() =>
+      [...document.querySelectorAll("nav a")].map(a => (a.textContent || "").trim()).filter(Boolean));
+    const missing = ["Wallet scan", "Wallets", "Case Files"].filter(l => !navLinks.includes(l));
+    if (missing.length) fail(`hub: SiteNav on Inspector missing links: ${missing.join(", ")} (saw: ${navLinks.join(" | ")})`);
+    else {
+      await np.getByText("Wallet scan", { exact: true }).click();
+      await np.waitForTimeout(400);
+      const st = await np.evaluate(() => ({ url: location.search, xpub: /entire wallet/.test(document.body.innerText) }));
+      if (!/page=xpub/.test(st.url) || !st.xpub) fail(`hub: SiteNav click didn't reach the xpub page (url "${st.url}")`);
+      else pass("hub: SiteNav links every sub-page to the sibling tools (URL-synced)");
+    }
+
+    // Front door: paste an xpub on the landing → handoff card → prefilled Wallet scan
+    const ZPUB = "zpub6rFR7y4Q2AijBEqTUquhVz398htDFrtymD9xYYfG1m4wAcvPhXNfE3EfH1r1ADqtfSdVCToUG868RvUUkgDKf31mGDtKsAYz2oz2AGutZYs";
+    await np.goto(`http://127.0.0.1:${PORT}/`, { waitUntil: "load" });
+    await np.waitForFunction(() => document.getElementById("root")?.childElementCount > 0, { timeout: 20000 });
+    await np.waitForTimeout(400);
+    await np.locator('input[aria-label*="Paste a Bitcoin address"]').fill(ZPUB);
+    await np.keyboard.press("Enter");
+    await np.waitForTimeout(400);
+    const xpubCard = await np.evaluate(() => /EXTENDED PUBLIC KEY/.test(document.body.innerText));
+    if (!xpubCard) fail("hub: landing didn't show the xpub handoff card");
+    else {
+      await np.getByText("Audit the whole wallet →").click();
+      await np.waitForTimeout(400);
+      const prefilled = await np.evaluate(z => [...document.querySelectorAll("textarea")].some(t => t.value === z), ZPUB);
+      if (!prefilled) fail("hub: xpub page textarea wasn't prefilled after handoff");
+      else pass("hub: landing hands an xpub to the Wallet scan, prefilled");
+    }
+
+    // Front door: paste a raw tx → handoff card → Inspector auto-parses it
+    const RAWTX = "0200000000010100000000000000000000000000000000000000000000000000000000000000000000000000fdffffff018038010000000000160014abababababababababababababababababababab02483045022100111111111111111111111111111111111111111111111111111111111111111102202222222222222222222222222222222222222222222222222222222222222222012103cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd00000000";
+    await np.goto(`http://127.0.0.1:${PORT}/`, { waitUntil: "load" });
+    await np.waitForFunction(() => document.getElementById("root")?.childElementCount > 0, { timeout: 20000 });
+    await np.waitForTimeout(400);
+    await np.locator('input[aria-label*="Paste a Bitcoin address"]').fill(RAWTX);
+    await np.keyboard.press("Enter");
+    await np.waitForTimeout(400);
+    const txCard = await np.evaluate(() => /PRE-BROADCAST INSPECTOR/.test(document.body.innerText));
+    if (!txCard) fail("hub: landing didn't show the transaction handoff card");
+    else {
+      await np.getByText("Inspect before you broadcast →").click();
+      await np.waitForTimeout(600);
+      const report = await np.evaluate(() => /PRE-BROADCAST VERDICT/.test(document.body.innerText));
+      if (!report) fail("hub: Inspector didn't auto-parse the handed-off transaction");
+      else pass("hub: landing hands a raw tx to the Inspector, parsed on arrival");
+    }
+  } catch (e) {
+    fail("hub: " + e.message.slice(0, 140));
+  } finally {
+    await np.close();
+  }
+}
+
+// Handoff mesh: after a scan, the Fix-It plan must close the loop into the
+// sibling tools (NEXT MOVES → Inspector / whole-wallet scan), each fix states
+// its grade consequence, and tool chips link our own directory reviews.
+{
+  const mp = await ctx.newPage();
+  try {
+    await mp.goto(`http://127.0.0.1:${PORT}/`, { waitUntil: "load" });
+    await mp.waitForFunction(() => document.getElementById("root")?.childElementCount > 0, { timeout: 20000 });
+    await mp.waitForTimeout(800);
+    await mp.getByText("Risky wallet").click();
+    await mp.waitForTimeout(3500);
+    const mesh = await mp.evaluate(() => ({
+      next: /NEXT MOVES/.test(document.body.innerText),
+      insp: [...document.querySelectorAll("button")].some(b => /Open the Inspector →/.test(b.textContent || "")),
+      xpub: [...document.querySelectorAll("button")].some(b => /Scan the whole wallet →/.test(b.textContent || "")),
+      review: [...document.querySelectorAll("button")].some(b => (b.textContent || "").trim() === "review"),
+      projGrade: /\(grade [A-F]\)/.test(document.body.innerText),
+    }));
+    if (!mesh.next || !mesh.insp || !mesh.xpub) fail(`mesh: NEXT MOVES card incomplete (${JSON.stringify(mesh)})`);
+    else pass("mesh: Fix-It closes the loop — NEXT MOVES → Inspector + whole-wallet scan");
+    if (!mesh.projGrade) fail("mesh: projection block doesn't state the projected grade");
+    else pass("mesh: projection states its grade consequence");
+    if (!mesh.review) fail("mesh: no 'review' link on tool chips despite WALLET_REVIEWS entries");
+    else {
+      // Click a review link → directory opens with that card highlighted
+      await mp.locator("button", { hasText: /^review$/ }).first().click();
+      await mp.waitForTimeout(700);
+      const dir = await mp.evaluate(() => ({
+        url: location.search,
+        picked: !![...document.querySelectorAll("article")].find(a => a.id.startsWith("wd-") && a.style.boxShadow && a.style.boxShadow !== "none"),
+      }));
+      if (!/page=wallets/.test(dir.url) || !dir.picked) fail(`mesh: review link didn't highlight the directory card (${JSON.stringify(dir)})`);
+      else pass("mesh: fix-plan 'review' link jumps to the highlighted directory card");
+    }
+  } catch (e) {
+    fail("mesh: " + e.message.slice(0, 140));
+  } finally {
+    await mp.close();
+  }
+}
+
+// Intel page: /?page=methodology exposes the full scoring brain pre-scan —
+// on-chain table, Lightning table, threat-model briefing, data sources.
+{
+  const ip = await ctx.newPage();
+  try {
+    await ip.goto(`http://127.0.0.1:${PORT}/?page=methodology`, { waitUntil: "load" });
+    await ip.waitForFunction(() => document.getElementById("root")?.childElementCount > 0, { timeout: 20000 });
+    await ip.waitForTimeout(500);
+    const intel = await ip.evaluate(() => ({
+      btc: /ON-CHAIN · 11 HEURISTICS/.test(document.body.innerText) && /Address Reuse/.test(document.body.innerText),
+      ln: /LIGHTNING · 8 HEURISTICS/.test(document.body.innerText) && /KYC Exchange Peer Channels/.test(document.body.innerText),
+      threats: /WHO ARE YOU HIDING FROM/.test(document.body.innerText) && /Surveillance firms/.test(document.body.innerText),
+      sources: /DATA SOURCES/.test(document.body.innerText) && /Nakamoto/.test(document.body.innerText),
+    }));
+    const bad = Object.entries(intel).filter(([, v]) => !v).map(([k]) => k);
+    if (bad.length) fail(`intel: methodology page missing sections: ${bad.join(", ")}`);
+    else pass("intel: /?page=methodology renders both scoring tables, threat briefing, sources");
+  } catch (e) {
+    fail("intel: " + e.message.slice(0, 140));
+  } finally {
+    await ip.close();
+  }
+}
+
 // Service worker should register and precache the static assets.
 await page.waitForFunction(
   () => navigator.serviceWorker?.controller || navigator.serviceWorker?.ready,
@@ -923,6 +1060,17 @@ await axeRun("Dashboard", page);
     await axeRun("Wallet scan", axeX);
   } catch (e) { fail("xpub a11y: " + e.message.slice(0, 120)); }
   finally { await axeX.close(); }
+}
+// a11y on the methodology Intel page
+{
+  const axeM = await ctx.newPage();
+  try {
+    await axeM.goto(`http://127.0.0.1:${PORT}/?page=methodology`, { waitUntil: "load" });
+    await axeM.waitForFunction(() => document.getElementById("root")?.childElementCount > 0, { timeout: 15000 });
+    await axeM.waitForTimeout(500);
+    await axeRun("Methodology", axeM);
+  } catch (e) { fail("methodology a11y: " + e.message.slice(0, 120)); }
+  finally { await axeM.close(); }
 }
 const back = page.getByText(/← Back/).first();
 if (await back.count()) { await back.click(); await page.waitForTimeout(900); }

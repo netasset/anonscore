@@ -285,7 +285,7 @@ const STRINGS = {
     "hero.h1.line1": "Is your Bitcoin",
     "hero.h1.line2": "stack leaking?",
     "hero.h1.em": "Find out in 60 seconds.",
-    "hero.sub": "Paste a Bitcoin address or a Lightning node pubkey. Get a privacy score, every issue explained, and a ranked fix plan — free, open source, nothing stored.",
+    "hero.sub": "Surveillance firms run these exact heuristics against you. We run them for you — entirely in your browser, before anyone else looks. A privacy score, every issue explained, and a ranked fix plan. Free, open source, nothing stored.",
     "spectrum.low": "0 · Fully traceable",
     "spectrum.avg": "typical wallet: ~38",
     "spectrum.high": "100 · Invisible",
@@ -319,7 +319,7 @@ const STRINGS = {
     "sample.lightning": "⚡ Lightning node",
     "recent.title": "RECENT SCANS",
     "err.empty": "Please enter a Bitcoin address or Lightning node pubkey.",
-    "err.invalid": "Paste a Bitcoin address (bc1…, 1…, 3…) or a Lightning node pubkey (66-char hex).",
+    "err.invalid": "Not recognized. This console reads: a Bitcoin address (bc1…, 1…, 3…), a Lightning node pubkey (66-char hex), a BOLT11 invoice, a BOLT12 offer, an LNURL, a Silent Payment address (sp1…), an xpub/ypub/zpub, a PSBT or raw transaction, or a Cashu token.",
     "err.lnaddress": "Lightning addresses can't be audited yet — paste your node's 66-character pubkey instead.",
     "finalcta.h2.a": "A typical wallet scores ~38/100.",
     "finalcta.h2.b": "Where does yours land?",
@@ -346,7 +346,7 @@ const STRINGS = {
     "hero.h1.line1": "¿Tu stack de Bitcoin",
     "hero.h1.line2": "está filtrando datos?",
     "hero.h1.em": "Descúbrelo en 60 segundos.",
-    "hero.sub": "Pega una dirección de Bitcoin o la clave pública de un nodo Lightning. Obtén una puntuación de privacidad, cada problema explicado y un plan de mejora priorizado — gratis, código abierto, nada se guarda.",
+    "hero.sub": "Las firmas de vigilancia ejecutan estas mismas heurísticas contra ti. Nosotros las ejecutamos para ti — completamente en tu navegador, antes de que nadie más mire. Una puntuación de privacidad, cada problema explicado y un plan de mejora priorizado. Gratis, código abierto, nada se guarda.",
     "spectrum.low": "0 · Totalmente rastreable",
     "spectrum.avg": "billetera típica: ~38",
     "spectrum.high": "100 · Invisible",
@@ -380,7 +380,7 @@ const STRINGS = {
     "sample.lightning": "⚡ Nodo Lightning",
     "recent.title": "ESCANEOS RECIENTES",
     "err.empty": "Ingresa una dirección de Bitcoin o la clave pública de un nodo Lightning.",
-    "err.invalid": "Pega una dirección de Bitcoin (bc1…, 1…, 3…) o una clave pública de nodo Lightning (66 caracteres hex).",
+    "err.invalid": "No reconocido. Esta consola lee: una dirección de Bitcoin (bc1…, 1…, 3…), la clave pública de un nodo Lightning (66 hex), una factura BOLT11, una oferta BOLT12, un LNURL, una dirección de Pago Silencioso (sp1…), un xpub/ypub/zpub, una PSBT o transacción sin firmar, o un token Cashu.",
     "err.lnaddress": "Las direcciones Lightning aún no se pueden auditar — pega la clave pública (66 caracteres hex) de tu nodo.",
     "finalcta.h2.a": "Una billetera típica puntúa ~38/100.",
     "finalcta.h2.b": "¿Dónde queda la tuya?",
@@ -4766,6 +4766,83 @@ const PROOF = {
     note: "a weak tell that can misfire"
   }
 };
+const wSlug = name => (name || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+function FixToolChips({
+  tools,
+  tool,
+  onReview
+}) {
+  const list = tools || (tool ? [{
+    name: tool,
+    note: ""
+  }] : []);
+  if (!list.length) return null;
+  return React.createElement("div", {
+    style: {
+      marginTop: 10,
+      display: "flex",
+      flexWrap: "wrap",
+      gap: 6,
+      alignItems: "center"
+    }
+  }, React.createElement("span", {
+    style: {
+      fontFamily: T.mono,
+      fontSize: 9,
+      color: T.textDim,
+      letterSpacing: 1
+    }
+  }, "OPTIONS:"), list.map((t, ti) => {
+    const href = toolLink(t.name);
+    const aff = toolIsAffiliate(t.name);
+    const base = {
+      fontFamily: T.mono,
+      fontSize: 9,
+      padding: "3px 8px",
+      borderRadius: 4,
+      background: T.cyan + "18",
+      color: T.cyan,
+      border: `1px solid ${T.cyan}30`,
+      letterSpacing: 0.3,
+      textDecoration: "none",
+      cursor: href ? "pointer" : t.note ? "help" : "default"
+    };
+    const label = aff ? `${t.name} · affiliate` : t.name;
+    const chip = href ? React.createElement("a", {
+      href: href,
+      target: "_blank",
+      rel: "noopener noreferrer nofollow",
+      title: aff ? `${t.note ? t.note + " · " : ""}AnonScore earns a referral when you sign up — see /how-we-get-paid` : t.note,
+      style: base
+    }, label) : React.createElement("span", {
+      title: t.note,
+      style: base
+    }, t.name);
+    const reviewed = onReview && WALLET_REVIEWS.some(w => w.name === t.name);
+    return React.createElement("span", {
+      key: ti,
+      style: {
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 4
+      }
+    }, chip, reviewed && React.createElement("button", {
+      onClick: () => onReview(t.name),
+      title: "Our independent review of " + t.name + " — strengths and honest watch-outs",
+      style: {
+        background: "none",
+        border: "none",
+        padding: 0,
+        fontFamily: T.mono,
+        fontSize: 9,
+        color: T.textMid,
+        cursor: "pointer",
+        textDecoration: "underline dotted",
+        textUnderlineOffset: 2
+      }
+    }, "review"));
+  }));
+}
 const EpistemicLegend = ({
   kinds = ["proven", "inferred"],
   color = T.textMid,
@@ -4810,6 +4887,119 @@ const EpistemicLegend = ({
     }
   }, PROOF[k].glyph, " ", PROOF[k].label))));
 };
+const NAV_LINKS = [{
+  page: "inspector",
+  label: "Inspector",
+  href: "/?page=inspector"
+}, {
+  page: "xpub",
+  label: "Wallet scan",
+  href: "/?page=xpub"
+}, {
+  page: "wallets",
+  label: "Wallets",
+  href: "/?page=wallets"
+}, {
+  page: "cases",
+  label: "Case Files",
+  href: "/?page=cases"
+}, {
+  page: "methodology",
+  label: "Methodology",
+  href: "/?page=methodology"
+}];
+function SiteNav({
+  isMobile,
+  onBack,
+  backLabel = "← Back",
+  onNav,
+  current,
+  badge,
+  badgeColor = T.cyan
+}) {
+  const go = page => e => {
+    if (onNav && e.button === 0 && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey) {
+      e.preventDefault();
+      onNav(page);
+    }
+  };
+  return React.createElement("nav", {
+    "aria-label": "AnonScore",
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: 10,
+      padding: isMobile ? "12px 16px" : "14px 32px",
+      borderBottom: `1px solid ${T.border}`,
+      background: T.bg,
+      position: "sticky",
+      top: 0,
+      zIndex: 100
+    }
+  }, onBack && React.createElement("button", {
+    onClick: onBack,
+    style: {
+      background: "transparent",
+      border: `1.5px solid ${T.border}`,
+      borderRadius: 8,
+      padding: "7px 12px",
+      color: T.textMid,
+      fontFamily: T.sans,
+      fontSize: 13,
+      cursor: "pointer",
+      transition: "border .15s"
+    },
+    onMouseOver: e => e.currentTarget.style.borderColor = T.cyan,
+    onMouseOut: e => e.currentTarget.style.borderColor = T.border
+  }, backLabel), React.createElement("a", {
+    href: "/",
+    onClick: go("landing"),
+    "aria-label": "AnonScore home",
+    style: {
+      fontFamily: T.display,
+      fontSize: 15,
+      letterSpacing: 4,
+      fontWeight: 700,
+      color: T.text,
+      textDecoration: "none"
+    }
+  }, "ANON", React.createElement("span", {
+    style: {
+      color: T.cyan
+    }
+  }, "SCORE")), React.createElement("div", {
+    style: {
+      flex: 1
+    }
+  }), !isMobile && NAV_LINKS.filter(l => l.page !== current).map(l => React.createElement("a", {
+    key: l.page,
+    href: l.href,
+    onClick: go(l.page),
+    style: {
+      fontFamily: T.mono,
+      fontSize: 10,
+      color: T.textMid,
+      textDecoration: "none",
+      letterSpacing: 0.5,
+      padding: "4px 6px",
+      transition: "color .15s"
+    },
+    onMouseOver: e => e.currentTarget.style.color = T.cyan,
+    onMouseOut: e => e.currentTarget.style.color = T.textMid
+  }, l.label)), badge && React.createElement("span", {
+    style: {
+      fontFamily: T.mono,
+      fontSize: 9,
+      color: badgeColor,
+      background: badgeColor + "14",
+      border: `1px solid ${badgeColor}44`,
+      borderRadius: 6,
+      padding: "4px 9px",
+      letterSpacing: 1,
+      whiteSpace: "nowrap"
+    }
+  }, badge));
+}
 function Toast({
   toasts
 }) {
@@ -6499,7 +6689,8 @@ const STATUS_META = {
 function CaseFiles({
   onOpenCase,
   onBack,
-  isMobile
+  isMobile,
+  onNav
 }) {
   const PAGE_ROLE_LABEL = "AnonScore case files — notable Bitcoin wallets";
   const [filter, setFilter] = useState("all");
@@ -6514,55 +6705,14 @@ function CaseFiles({
       display: "flex",
       flexDirection: "column"
     }
-  }, React.createElement("nav", {
-    style: {
-      display: "flex",
-      alignItems: "center",
-      gap: 10,
-      padding: isMobile ? "12px 16px" : "12px 32px",
-      borderBottom: `1px solid ${T.border}`,
-      background: T.bg,
-      position: "sticky",
-      top: 0,
-      zIndex: 100
-    }
-  }, React.createElement("button", {
-    onClick: onBack,
-    style: {
-      background: "transparent",
-      border: `1.5px solid ${T.border}`,
-      borderRadius: 8,
-      padding: "7px 12px",
-      color: T.textMid,
-      fontFamily: T.sans,
-      fontSize: 13,
-      cursor: "pointer",
-      transition: "border .15s"
-    },
-    onMouseOver: e => e.currentTarget.style.borderColor = T.cyan,
-    onMouseOut: e => e.currentTarget.style.borderColor = T.border
-  }, "\u2190 Back"), React.createElement("div", {
-    style: {
-      fontFamily: T.display,
-      fontSize: 15,
-      letterSpacing: 4,
-      fontWeight: 700
-    }
-  }, "ANON", React.createElement("span", {
-    style: {
-      color: T.cyan
-    }
-  }, "SCORE")), React.createElement("div", {
-    style: {
-      flex: 1
-    }
+  }, React.createElement(SiteNav, {
+    isMobile: isMobile,
+    onBack: onBack,
+    onNav: onNav,
+    current: "cases",
+    badge: "CASE FILES",
+    badgeColor: T.btc
   }), React.createElement("div", {
-    style: {
-      fontFamily: T.mono,
-      fontSize: 10,
-      color: T.textDim
-    }
-  }, "CASE FILES")), React.createElement("div", {
     style: {
       flex: 1,
       padding: isMobile ? "24px 16px" : "40px 48px",
@@ -6758,7 +6908,8 @@ function CaseDetail({
   caseFile,
   onBack,
   onAnalyze,
-  isMobile
+  isMobile,
+  onNav
 }) {
   const PAGE_ROLE_LABEL = "AnonScore case file: " + caseFile.title;
   const [shareMode, setShareMode] = useState(null);
@@ -6806,59 +6957,15 @@ function CaseDetail({
       display: "flex",
       flexDirection: "column"
     }
-  }, React.createElement("nav", {
-    style: {
-      display: "flex",
-      alignItems: "center",
-      gap: 10,
-      padding: isMobile ? "12px 16px" : "12px 32px",
-      borderBottom: `1px solid ${T.border}`,
-      background: T.bg,
-      position: "sticky",
-      top: 0,
-      zIndex: 100
-    }
-  }, React.createElement("button", {
-    onClick: onBack,
-    style: {
-      background: "transparent",
-      border: `1.5px solid ${T.border}`,
-      borderRadius: 8,
-      padding: "7px 12px",
-      color: T.textMid,
-      fontFamily: T.sans,
-      fontSize: 13,
-      cursor: "pointer"
-    },
-    onMouseOver: e => e.currentTarget.style.borderColor = T.cyan,
-    onMouseOut: e => e.currentTarget.style.borderColor = T.border
-  }, "\u2190 Cases"), React.createElement("div", {
-    style: {
-      fontFamily: T.display,
-      fontSize: 15,
-      letterSpacing: 4,
-      fontWeight: 700
-    }
-  }, "ANON", React.createElement("span", {
-    style: {
-      color: T.cyan
-    }
-  }, "SCORE")), React.createElement("div", {
-    style: {
-      flex: 1
-    }
-  }), React.createElement("span", {
-    style: {
-      fontFamily: T.mono,
-      fontSize: 9,
-      color: cat.color,
-      background: cat.color + "18",
-      border: `1px solid ${cat.color}33`,
-      borderRadius: 4,
-      padding: "3px 8px",
-      letterSpacing: 1
-    }
-  }, "CASE #", caseFile.id)), React.createElement("div", {
+  }, React.createElement(SiteNav, {
+    isMobile: isMobile,
+    onBack: onBack,
+    backLabel: "\u2190 Cases",
+    onNav: onNav,
+    current: "cases",
+    badge: `CASE #${caseFile.id}`,
+    badgeColor: cat.color
+  }), React.createElement("div", {
     style: {
       flex: 1,
       padding: isMobile ? "24px 16px" : "40px 48px",
@@ -7552,7 +7659,8 @@ function Landing({
   onAnalyze,
   isMobile,
   onCases,
-  onNav
+  onNav,
+  onOpenTool
 }) {
   const navLink = page => e => {
     if (onNav && e.button === 0 && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey) {
@@ -7572,6 +7680,7 @@ function Landing({
   const [spInfo, setSpInfo] = useState(null);
   const [lnInvoice, setLnInvoice] = useState(null);
   const [lnPay, setLnPay] = useState(null);
+  const [toolHint, setToolHint] = useState(null);
   const [history, setHistory] = useState(() => getHistory());
   const deleteHistory = addr => {
     removeFromHistory(addr);
@@ -7650,6 +7759,7 @@ function Landing({
     setSpInfo(null);
     setLnInvoice(null);
     setLnPay(null);
+    setToolHint(null);
     if (!v) {
       setError(t("err.empty"));
       return;
@@ -7694,6 +7804,26 @@ function Landing({
           ...cs
         });
         return;
+      }
+      if (detectXpub(v)) {
+        setError("");
+        setToolHint({
+          kind: "xpub",
+          value: v
+        });
+        return;
+      }
+      const txk = detectTxInput(v);
+      if (txk === "psbt" || txk === "rawhex") {
+        try {
+          parseTransactionInput(v);
+          setError("");
+          setToolHint({
+            kind: "tx",
+            value: v
+          });
+          return;
+        } catch {}
       }
       setError(t("err.invalid"));
       return;
@@ -7845,47 +7975,32 @@ function Landing({
     style: {
       display: "flex",
       alignItems: "center",
-      gap: 8,
+      gap: 2,
       minWidth: 0,
       justifySelf: "start"
     }
-  }, navWide && React.createElement(React.Fragment, null, React.createElement("span", {
+  }, navWide && NAV_LINKS.map(l => React.createElement("a", {
+    key: l.page,
+    href: l.href,
+    onClick: l.page === "cases" ? e => {
+      if (e.button === 0 && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey) {
+        e.preventDefault();
+        onCases(null);
+      }
+    } : navLink(l.page),
     style: {
       fontFamily: T.mono,
       fontSize: 10,
-      color: T.textDim
-    }
-  }, t("nav.nocookies")), React.createElement("span", {
-    style: {
-      color: T.borderLo
-    }
-  }, "\xB7"), React.createElement("span", {
-    style: {
-      fontFamily: T.mono,
-      fontSize: 10,
-      color: T.textDim
-    }
-  }, t("nav.nothingstored")), React.createElement("span", {
-    style: {
-      color: T.borderLo
-    }
-  }, "\xB7"), React.createElement("span", {
-    style: {
-      fontFamily: T.mono,
-      fontSize: 10,
-      color: T.textDim
-    }
-  }, t("nav.tor")), React.createElement("span", {
-    style: {
-      color: T.borderLo
-    }
-  }, "\xB7"), React.createElement("span", {
-    style: {
-      fontFamily: T.mono,
-      fontSize: 10,
-      color: T.textDim
-    }
-  }, t("nav.opensource")))), React.createElement("div", {
+      color: T.textMid,
+      textDecoration: "none",
+      letterSpacing: 0.5,
+      padding: "4px 7px",
+      transition: "color .15s",
+      whiteSpace: "nowrap"
+    },
+    onMouseOver: e => e.currentTarget.style.color = T.cyan,
+    onMouseOut: e => e.currentTarget.style.color = T.textMid
+  }, l.label))), React.createElement("div", {
     style: {
       display: "flex",
       alignItems: "center",
@@ -7980,7 +8095,14 @@ function Landing({
       letterSpacing: 2,
       fontWeight: 700
     }
-  }, "\uD83D\uDCC1 CASE FILES")), CASE_FILES.map((c, i) => {
+  }, "\uD83D\uDCC1 CASE FILES"), React.createElement("span", {
+    style: {
+      fontFamily: T.mono,
+      fontSize: 9,
+      color: T.textDim,
+      whiteSpace: "nowrap"
+    }
+  }, "\u2014 this audit, run on famous wallets")), CASE_FILES.map((c, i) => {
     const cat = CATEGORY_META[c.category];
     return React.createElement("button", {
       key: c.id,
@@ -8257,7 +8379,7 @@ function Landing({
       marginBottom: 7,
       textAlign: "left"
     }
-  }, isLn ? "NODE PUBKEY" : "BITCOIN ADDRESS OR LN PUBKEY"), React.createElement("div", {
+  }, isLn ? "NODE PUBKEY" : "ADDRESS · NODE PUBKEY · INVOICE · OFFER · XPUB · PSBT · ECASH"), React.createElement("div", {
     style: {
       display: "flex",
       gap: 8
@@ -8745,7 +8867,61 @@ function Landing({
         marginTop: 10
       }
     }, "Decoded entirely in your browser."));
-  })()), React.createElement("div", {
+  })(), toolHint && React.createElement("div", {
+    style: {
+      marginTop: 12,
+      textAlign: "left",
+      background: T.cyan + "0e",
+      border: `1px solid ${T.cyan}40`,
+      borderRadius: 14,
+      padding: "14px 16px",
+      animation: "slideDown .25s ease"
+    }
+  }, React.createElement("div", {
+    style: {
+      fontFamily: T.mono,
+      fontSize: 9,
+      color: T.cyan,
+      letterSpacing: 1.5,
+      marginBottom: 8
+    }
+  }, toolHint.kind === "xpub" ? "EXTENDED PUBLIC KEY · WHOLE-WALLET SCAN" : "TRANSACTION · PRE-BROADCAST INSPECTOR"), React.createElement("div", {
+    style: {
+      fontSize: 13.5,
+      color: T.textMid,
+      lineHeight: 1.65,
+      marginBottom: 12
+    }
+  }, toolHint.kind === "xpub" ? React.createElement(React.Fragment, null, "That's an ", React.createElement("strong", {
+    style: {
+      color: T.text
+    }
+  }, "extended public key"), " \u2014 the map of an entire wallet, not one address. The Wallet scan derives every address from it ", React.createElement("strong", {
+    style: {
+      color: T.text
+    }
+  }, "in your browser"), ", gap-limit scans them, and scores the whole wallet \u2014 including the reuse and cross-address links no single-address scan can see.") : React.createElement(React.Fragment, null, "That's a ", React.createElement("strong", {
+    style: {
+      color: T.text
+    }
+  }, "transaction"), ", not an address. The Inspector shows what it leaks \u2014 change detection, wallet fingerprint, input\u2192output linkability \u2014 ", React.createElement("strong", {
+    style: {
+      color: T.text
+    }
+  }, "before you broadcast"), ", so you can still fix it. Fully offline; it never leaves the page.")), React.createElement("button", {
+    onClick: () => onOpenTool && onOpenTool(toolHint.kind === "xpub" ? "xpub" : "inspector", toolHint.value),
+    style: {
+      background: T.cyan,
+      border: "none",
+      borderRadius: 10,
+      padding: "10px 18px",
+      color: T.bg,
+      fontFamily: T.sans,
+      fontWeight: 700,
+      fontSize: 13,
+      cursor: "pointer"
+    }
+  }, toolHint.kind === "xpub" ? "Audit the whole wallet →" : "Inspect before you broadcast →"))), React.createElement("div", {
     style: {
       display: "flex",
       alignItems: "center",
@@ -8905,7 +9081,8 @@ function Landing({
       onMouseOver: e => e.currentTarget.style.borderColor = col,
       onMouseOut: e => e.currentTarget.style.borderColor = T.border
     }, React.createElement("button", {
-      onClick: () => onAnalyze(h.addr, false, h.isLightning ? "ln_pubkey" : "btc"),
+      onClick: () => h.isXpub ? onNav && onNav("xpub") : onAnalyze(h.addr, false, h.isLightning ? "ln_pubkey" : "btc"),
+      title: h.isXpub ? "Wallet scans are keyed by fingerprint — the xpub itself is never stored. Re-paste it to rescan." : undefined,
       style: {
         display: "flex",
         alignItems: "center",
@@ -8935,7 +9112,7 @@ function Landing({
         textOverflow: "ellipsis",
         whiteSpace: "nowrap"
       }
-    }, h.isLightning ? "⚡ " : "₿ ", h.addr === "DEMO" || h.addr === "DEMO_A" || h.addr === "DEMO_LN" ? "Demo" : h.addr.slice(0, 14) + "…"), React.createElement("div", {
+    }, h.isXpub ? "🔑 " : h.isLightning ? "⚡ " : "₿ ", h.isXpub ? "Wallet " + h.addr.slice(7) : h.addr === "DEMO" || h.addr === "DEMO_A" || h.addr === "DEMO_LN" ? "Demo" : h.addr.slice(0, 14) + "…"), React.createElement("div", {
       style: {
         fontFamily: T.serif,
         fontSize: 14,
@@ -8956,7 +9133,7 @@ function Landing({
         color: T.textDim,
         flexShrink: 0
       }
-    }, "\u21BA")), React.createElement("button", {
+    }, h.isXpub ? "→" : "↺")), React.createElement("button", {
       onClick: () => deleteHistory(h.addr),
       style: {
         background: "none",
@@ -9533,7 +9710,20 @@ function Landing({
     },
     onMouseOver: e => e.currentTarget.style.color = T.cyan,
     onMouseOut: e => e.currentTarget.style.color = T.textMid
-  }, "Wallet scan (xpub)")), React.createElement("div", {
+  }, "Wallet scan (xpub)"), React.createElement("a", {
+    href: "/?page=methodology",
+    onClick: navLink("methodology"),
+    style: {
+      fontFamily: T.mono,
+      fontSize: 10,
+      color: T.textMid,
+      textDecoration: "underline dotted",
+      textUnderlineOffset: 3,
+      transition: "color .15s"
+    },
+    onMouseOver: e => e.currentTarget.style.color = T.cyan,
+    onMouseOut: e => e.currentTarget.style.color = T.textMid
+  }, "Methodology")), React.createElement("div", {
     style: {
       display: "flex",
       alignItems: "center",
@@ -10950,10 +11140,12 @@ function FlowGraph({
 function TransactionInspector({
   onBack,
   isMobile,
-  onScan
+  onScan,
+  onNav,
+  prefill
 }) {
   useLang();
-  const [raw, setRaw] = useState("");
+  const [raw, setRaw] = useState(prefill || "");
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
   const detected = detectTxInput(raw);
@@ -11001,6 +11193,9 @@ function TransactionInspector({
     setRaw(DEMO_PSBT);
     inspect(DEMO_PSBT);
   };
+  useEffect(() => {
+    if (prefill) inspect(prefill);
+  }, []);
   const sats = v => v == null ? "—" : v >= 1e8 ? "₿" + (v / 1e8).toFixed(4) : v.toLocaleString() + " sats";
   const trunc = a => !a ? "—" : a.startsWith("script:") ? "unrecognized script" : a.length > 26 ? a.slice(0, 13) + "…" + a.slice(-6) : a;
   const label = {
@@ -11552,60 +11747,13 @@ function TransactionInspector({
     }
   }, React.createElement("h1", {
     className: "sr-only"
-  }, "Bitcoin Transaction Inspector \u2014 pre-broadcast privacy analysis"), React.createElement("nav", {
-    style: {
-      display: "flex",
-      alignItems: "center",
-      gap: 10,
-      padding: isMobile ? "12px 16px" : "14px 32px",
-      borderBottom: `1px solid ${T.border}`,
-      background: T.bg,
-      position: "sticky",
-      top: 0,
-      zIndex: 100
-    }
-  }, React.createElement("button", {
-    onClick: onBack,
-    style: {
-      background: "transparent",
-      border: `1.5px solid ${T.border}`,
-      borderRadius: 8,
-      padding: "7px 12px",
-      color: T.textMid,
-      fontFamily: T.sans,
-      fontSize: 13,
-      cursor: "pointer",
-      transition: "border .15s"
-    },
-    onMouseOver: e => e.currentTarget.style.borderColor = T.cyan,
-    onMouseOut: e => e.currentTarget.style.borderColor = T.border
-  }, "\u2190 Back"), React.createElement("div", {
-    style: {
-      fontFamily: T.display,
-      fontSize: 15,
-      letterSpacing: 4,
-      fontWeight: 700
-    }
-  }, "ANON", React.createElement("span", {
-    style: {
-      color: T.cyan
-    }
-  }, "SCORE")), React.createElement("div", {
-    style: {
-      flex: 1
-    }
-  }), React.createElement("span", {
-    style: {
-      fontFamily: T.mono,
-      fontSize: 9,
-      color: T.cyan,
-      background: T.cyanLo,
-      border: `1px solid ${T.cyan}44`,
-      borderRadius: 6,
-      padding: "4px 9px",
-      letterSpacing: 1
-    }
-  }, "INSPECTOR")), React.createElement("div", {
+  }, "Bitcoin Transaction Inspector \u2014 pre-broadcast privacy analysis"), React.createElement(SiteNav, {
+    isMobile: isMobile,
+    onBack: onBack,
+    onNav: onNav,
+    current: "inspector",
+    badge: "INSPECTOR"
+  }), React.createElement("div", {
     style: {
       flex: 1,
       maxWidth: 760,
@@ -11780,10 +11928,13 @@ function TransactionInspector({
 function XpubScan({
   onBack,
   isMobile,
-  onScan
+  onScan,
+  onNav,
+  prefill,
+  onOpenWalletReview
 }) {
   useLang();
-  const [raw, setRaw] = useState("");
+  const [raw, setRaw] = useState(prefill || "");
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState(null);
   const [result, setResult] = useState(null);
@@ -11815,7 +11966,25 @@ function XpubScan({
           used: p.used
         })
       });
-      setResult(runWalletEngine(scan));
+      const rep = runWalletEngine(scan);
+      if (!rep.isEmpty) {
+        try {
+          const k = decodeXpub(raw.trim());
+          const fp = Array.from(_hash160(k.keyData).slice(0, 4)).map(b => b.toString(16).padStart(2, "0")).join("");
+          const key = "wallet:" + fp;
+          const prev = getHistory().find(e => e.addr === key);
+          rep.delta = prev ? rep.score - prev.score : null;
+          addToHistory({
+            addr: key,
+            score: rep.score,
+            grade: rep.grade,
+            label: rep.riskLabel,
+            scanAt: Date.now(),
+            isXpub: true
+          });
+        } catch {}
+      }
+      setResult(rep);
     } catch (e) {
       setError(e && e.message ? e.message : "Couldn't scan that key.");
     } finally {
@@ -11883,7 +12052,11 @@ function XpubScan({
         k: "BALANCE",
         v: sats(r.stats.balance),
         c: T.blue
-      }];
+      }, ...(r.delta != null && r.delta !== 0 ? [{
+        k: "SINCE LAST SCAN",
+        v: (r.delta > 0 ? "+" : "") + r.delta,
+        c: r.delta > 0 ? T.green : T.red
+      }] : [])];
       report = React.createElement("div", {
         style: {
           display: "flex",
@@ -12019,7 +12192,11 @@ function XpubScan({
           lineHeight: 1.55,
           marginTop: 3
         }
-      }, rec.plain)))))), React.createElement("div", {
+      }, rec.plain), React.createElement(FixToolChips, {
+        tools: rec.tools,
+        tool: rec.tool,
+        onReview: onOpenWalletReview
+      })))))), React.createElement("div", {
         style: panel()
       }, React.createElement("div", {
         style: label
@@ -12096,60 +12273,13 @@ function XpubScan({
     }
   }, React.createElement("h1", {
     className: "sr-only"
-  }, "Bitcoin Wallet Privacy Scan from an Extended Public Key (xpub)"), React.createElement("nav", {
-    style: {
-      display: "flex",
-      alignItems: "center",
-      gap: 10,
-      padding: isMobile ? "12px 16px" : "14px 32px",
-      borderBottom: `1px solid ${T.border}`,
-      background: T.bg,
-      position: "sticky",
-      top: 0,
-      zIndex: 100
-    }
-  }, React.createElement("button", {
-    onClick: onBack,
-    style: {
-      background: "transparent",
-      border: `1.5px solid ${T.border}`,
-      borderRadius: 8,
-      padding: "7px 12px",
-      color: T.textMid,
-      fontFamily: T.sans,
-      fontSize: 13,
-      cursor: "pointer",
-      transition: "border .15s"
-    },
-    onMouseOver: e => e.currentTarget.style.borderColor = T.cyan,
-    onMouseOut: e => e.currentTarget.style.borderColor = T.border
-  }, "\u2190 Back"), React.createElement("div", {
-    style: {
-      fontFamily: T.display,
-      fontSize: 15,
-      letterSpacing: 4,
-      fontWeight: 700
-    }
-  }, "ANON", React.createElement("span", {
-    style: {
-      color: T.cyan
-    }
-  }, "SCORE")), React.createElement("div", {
-    style: {
-      flex: 1
-    }
-  }), React.createElement("span", {
-    style: {
-      fontFamily: T.mono,
-      fontSize: 9,
-      color: T.cyan,
-      background: T.cyanLo,
-      border: `1px solid ${T.cyan}44`,
-      borderRadius: 6,
-      padding: "4px 9px",
-      letterSpacing: 1
-    }
-  }, "WALLET SCAN")), React.createElement("div", {
+  }, "Bitcoin Wallet Privacy Scan from an Extended Public Key (xpub)"), React.createElement(SiteNav, {
+    isMobile: isMobile,
+    onBack: onBack,
+    onNav: onNav,
+    current: "xpub",
+    badge: "WALLET SCAN"
+  }), React.createElement("div", {
     style: {
       flex: 1,
       maxWidth: 780,
@@ -12354,11 +12484,21 @@ function XpubScan({
 }
 function WalletDirectory({
   onBack,
-  isMobile
+  isMobile,
+  onNav,
+  pick
 }) {
   useLang();
   const [cat, setCat] = useState("all");
   const [query, setQuery] = useState("");
+  useEffect(() => {
+    if (!pick) return;
+    const tm = setTimeout(() => document.getElementById("wd-" + pick)?.scrollIntoView({
+      behavior: "smooth",
+      block: "center"
+    }), 150);
+    return () => clearTimeout(tm);
+  }, [pick]);
   const anyAff = WALLET_REVIEWS.some(w => toolIsAffiliate(w.name));
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -12394,60 +12534,14 @@ function WalletDirectory({
     }
   }, React.createElement("h1", {
     className: "sr-only"
-  }, "Privacy-First Bitcoin & Lightning Wallet Directory"), React.createElement("nav", {
-    style: {
-      display: "flex",
-      alignItems: "center",
-      gap: 10,
-      padding: isMobile ? "12px 16px" : "14px 32px",
-      borderBottom: `1px solid ${T.border}`,
-      background: T.bg,
-      position: "sticky",
-      top: 0,
-      zIndex: 100
-    }
-  }, React.createElement("button", {
-    onClick: onBack,
-    style: {
-      background: "transparent",
-      border: `1.5px solid ${T.border}`,
-      borderRadius: 8,
-      padding: "7px 12px",
-      color: T.textMid,
-      fontFamily: T.sans,
-      fontSize: 13,
-      cursor: "pointer",
-      transition: "border .15s"
-    },
-    onMouseOver: e => e.currentTarget.style.borderColor = T.cyan,
-    onMouseOut: e => e.currentTarget.style.borderColor = T.border
-  }, "\u2190 Back"), React.createElement("div", {
-    style: {
-      fontFamily: T.display,
-      fontSize: 15,
-      letterSpacing: 4,
-      fontWeight: 700
-    }
-  }, "ANON", React.createElement("span", {
-    style: {
-      color: T.cyan
-    }
-  }, "SCORE")), React.createElement("div", {
-    style: {
-      flex: 1
-    }
-  }), React.createElement("span", {
-    style: {
-      fontFamily: T.mono,
-      fontSize: 9,
-      color: T.btc,
-      background: T.btcLo,
-      border: `1px solid ${T.btcMid}`,
-      borderRadius: 6,
-      padding: "4px 9px",
-      letterSpacing: 1
-    }
-  }, "DIRECTORY")), React.createElement("div", {
+  }, "Privacy-First Bitcoin & Lightning Wallet Directory"), React.createElement(SiteNav, {
+    isMobile: isMobile,
+    onBack: onBack,
+    onNav: onNav,
+    current: "wallets",
+    badge: "DIRECTORY",
+    badgeColor: T.btc
+  }), React.createElement("div", {
     style: {
       flex: 1,
       maxWidth: 980,
@@ -12620,11 +12714,14 @@ function WalletDirectory({
     }, list.map(w => {
       const href = toolLink(w.name);
       const aff = toolIsAffiliate(w.name);
+      const picked = pick && wSlug(w.name) === pick;
       return React.createElement("article", {
         key: w.name,
+        id: "wd-" + wSlug(w.name),
         style: {
           background: T.card,
-          border: `1px solid ${T.border}`,
+          border: `1px solid ${picked ? T.cyan + "88" : T.border}`,
+          boxShadow: picked ? `0 0 28px -8px ${T.cyan}88` : "none",
           borderRadius: 14,
           padding: "18px 20px",
           display: "flex",
@@ -12806,7 +12903,8 @@ function WalletDirectory({
 }
 function CoachWaitlist({
   onBack,
-  isMobile
+  isMobile,
+  onNav
 }) {
   const [email, setEmail] = useState("");
   const [status, setStatus] = useState("idle");
@@ -12858,60 +12956,12 @@ function CoachWaitlist({
     }
   }, React.createElement("h1", {
     className: "sr-only"
-  }, "Privacy Coach \u2014 paid AI tier (early access waitlist)"), React.createElement("nav", {
-    style: {
-      display: "flex",
-      alignItems: "center",
-      gap: 10,
-      padding: isMobile ? "12px 16px" : "14px 32px",
-      borderBottom: `1px solid ${T.border}`,
-      background: T.bg,
-      position: "sticky",
-      top: 0,
-      zIndex: 100
-    }
-  }, React.createElement("button", {
-    onClick: onBack,
-    style: {
-      background: "transparent",
-      border: `1.5px solid ${T.border}`,
-      borderRadius: 8,
-      padding: "7px 12px",
-      color: T.textMid,
-      fontFamily: T.sans,
-      fontSize: 13,
-      cursor: "pointer",
-      transition: "border .15s"
-    },
-    onMouseOver: e => e.currentTarget.style.borderColor = T.cyan,
-    onMouseOut: e => e.currentTarget.style.borderColor = T.border
-  }, "\u2190 Back"), React.createElement("div", {
-    style: {
-      fontFamily: T.display,
-      fontSize: 15,
-      letterSpacing: 4,
-      fontWeight: 700
-    }
-  }, "ANON", React.createElement("span", {
-    style: {
-      color: T.cyan
-    }
-  }, "SCORE")), React.createElement("div", {
-    style: {
-      flex: 1
-    }
-  }), React.createElement("span", {
-    style: {
-      fontFamily: T.mono,
-      fontSize: 9,
-      color: T.cyan,
-      background: T.cyanLo,
-      border: `1px solid ${T.cyanMid}`,
-      borderRadius: 6,
-      padding: "4px 9px",
-      letterSpacing: 1
-    }
-  }, "EARLY ACCESS")), React.createElement("div", {
+  }, "Privacy Coach \u2014 paid AI tier (early access waitlist)"), React.createElement(SiteNav, {
+    isMobile: isMobile,
+    onBack: onBack,
+    onNav: onNav,
+    badge: "EARLY ACCESS"
+  }), React.createElement("div", {
     style: {
       flex: 1,
       maxWidth: 760,
@@ -15189,6 +15239,108 @@ function ExposureFlow({
     }, explain));
   }));
 }
+const BTC_METHODOLOGY = [{
+  check: "Address Reuse",
+  deduct: "–7 to –28",
+  why: "Permanent public link between all transactions on this address.",
+  sev: "critical"
+}, {
+  check: "CoinJoin Usage",
+  deduct: "+4 to +12",
+  why: "Breaks transaction graph. Positive score if detected. Heavy penalty if absent.",
+  sev: "high"
+}, {
+  check: "Dust Attack",
+  deduct: "–5 to –12",
+  why: "Tracking beacons planted by surveillance firms. Spending them links your cluster.",
+  sev: "high"
+}, {
+  check: "Round Amounts",
+  deduct: "–5 to –10",
+  why: "0.1 BTC is a known KYC exchange withdrawal pattern flagged by Chainalysis.",
+  sev: "high"
+}, {
+  check: "Unsafe Consolidation",
+  deduct: "–4 to –10",
+  why: "Merging inputs from different sources permanently links their histories.",
+  sev: "high"
+}, {
+  check: "Fee Fingerprinting",
+  deduct: "–6",
+  why: "Identical fee rates across transactions identify your wallet software.",
+  sev: "medium"
+}, {
+  check: "Change Address Reuse",
+  deduct: "–10",
+  why: "Returning change to an input address exposes your full balance.",
+  sev: "high"
+}, {
+  check: "UTXO Count",
+  deduct: "–3 to –8",
+  why: "Too many = consolidation pressure. Too few = full balance exposed per spend.",
+  sev: "medium"
+}, {
+  check: "Balance Concentration",
+  deduct: "–5",
+  why: "90%+ in a single UTXO reveals near-total holdings on every transaction.",
+  sev: "medium"
+}, {
+  check: "Script Type Mix",
+  deduct: "–4",
+  why: "Using legacy + SegWit addresses creates cross-UTXO patterns analysts can exploit.",
+  sev: "low"
+}, {
+  check: "Change Detection",
+  deduct: "–4 to –8",
+  why: "Two-output payments where only one output matches the input's script type reveal which output is your change.",
+  sev: "medium"
+}];
+const BTC_DATA_SOURCES = [{
+  src: "Blockstream / mempool.space Esplora API",
+  desc: "Public blockchain data — UTXOs, transactions, address stats. Read-only, your choice of explorer — by default fetched via our open-source no-log relay so the explorer can't see your IP."
+}, {
+  src: "Bitcoin whitepaper §10 (Nakamoto, 2008)",
+  desc: "Nakamoto's own privacy guidance: use a new address for every payment. Reuse permanently links transactions — the heuristic behind our address-reuse check."
+}, {
+  src: "Chainalysis (Series F, May 2022)",
+  desc: "$8.6B valuation, ~$190M 2023 revenue (Sacra) — the scale of the blockchain-surveillance industry that reads this same public data."
+}, {
+  src: "Bitcoin Core relay policy",
+  desc: "The 546-sat dust threshold (GetDustThreshold) — outputs below it are used as tracking beacons."
+}];
+const LN_METHODOLOGY = [{
+  n: "01",
+  label: "Public Node Announcement",
+  desc: "Whether your node is publicly gossiped on the Lightning network. Public nodes expose their IP or Tor address to every peer."
+}, {
+  n: "02",
+  label: "KYC Exchange Peer Channels",
+  desc: "Channels to known KYC exchanges (Bitfinex, Kraken, Binance, OKX). These entities log routing metadata and can correlate payment flows through your node."
+}, {
+  n: "03",
+  label: "Tor / Clearnet Exposure",
+  desc: "Whether your node listens on clearnet (IP-visible) or Tor-only (anonymous). Clearnet nodes expose their physical location."
+}, {
+  n: "04",
+  label: "Channel Diversity",
+  desc: "Number of open channels. Low channel count limits routing path diversity, making payment flows easier to correlate."
+}, {
+  n: "05",
+  label: "Channel Capacity Concentration",
+  desc: "Whether one channel dominates your capacity. Heavy concentration makes routing patterns predictable."
+}, {
+  n: "06",
+  label: "Node Alias Privacy",
+  desc: "Whether your node alias looks like a real name. Aliases are publicly visible on the Lightning gossip network."
+}, {
+  n: "07",
+  label: "Node Establishment",
+  desc: "How long your node has been active. New nodes have limited routing history, making their activity more trackable."
+}, {
+  n: "08",
+  label: "On-Chain Channel Footprint",
+  desc: "Every channel open/close is an on-chain transaction. Funding channels from KYC exchange UTXOs permanently links your Lightning activity to your on-chain identity."
+}];
 const THREAT_MODELS = [{
   id: "snoop",
   label: "Nosy individuals",
@@ -15251,6 +15403,311 @@ const THREAT_MODELS = [{
     round: 1
   }
 }];
+function MethodologyPage({
+  onBack,
+  isMobile,
+  onNav
+}) {
+  useLang();
+  useEffect(() => {
+    const prev = document.title;
+    document.title = "Methodology — how AnonScore scores Bitcoin & Lightning privacy";
+    const desc = document.querySelector('meta[name="description"]');
+    const prevDesc = desc?.getAttribute("content");
+    desc?.setAttribute("content", "Every heuristic, every deduction, in the open: the 11 on-chain checks, 8 Lightning checks, threat models, and data sources behind the AnonScore privacy score. No black box.");
+    return () => {
+      document.title = prev;
+      if (desc && prevDesc) desc.setAttribute("content", prevDesc);
+    };
+  }, []);
+  const label = {
+    fontFamily: T.mono,
+    fontSize: 9,
+    color: T.textDim,
+    letterSpacing: 2,
+    marginBottom: 14
+  };
+  const panel = extra => ({
+    background: T.card,
+    border: `1px solid ${T.border}`,
+    borderRadius: 16,
+    padding: isMobile ? "18px 18px" : "24px 28px",
+    ...extra
+  });
+  return React.createElement("div", {
+    role: "main",
+    "aria-label": "Methodology \u2014 how AnonScore scores privacy",
+    style: {
+      minHeight: "100vh",
+      background: "transparent",
+      display: "flex",
+      flexDirection: "column"
+    }
+  }, React.createElement("h1", {
+    className: "sr-only"
+  }, "AnonScore Methodology \u2014 open Bitcoin and Lightning privacy scoring"), React.createElement(SiteNav, {
+    isMobile: isMobile,
+    onBack: onBack,
+    onNav: onNav,
+    current: "methodology",
+    badge: "METHODOLOGY"
+  }), React.createElement("div", {
+    style: {
+      flex: 1,
+      maxWidth: 860,
+      margin: "0 auto",
+      width: "100%",
+      padding: isMobile ? "28px 16px" : "44px 32px",
+      display: "flex",
+      flexDirection: "column",
+      gap: 14
+    }
+  }, React.createElement("div", {
+    style: {
+      textAlign: "center",
+      marginBottom: 12
+    }
+  }, React.createElement("div", {
+    style: {
+      fontFamily: T.mono,
+      fontSize: 10,
+      color: T.cyan,
+      letterSpacing: 2.5,
+      marginBottom: 14
+    }
+  }, "VERIFY, DON'T TRUST"), React.createElement("h2", {
+    style: {
+      fontFamily: T.serif,
+      fontSize: isMobile ? 30 : 40,
+      color: T.text,
+      lineHeight: 1.1,
+      fontWeight: 400,
+      marginBottom: 14
+    }
+  }, "Every heuristic, every deduction,", React.createElement("br", null), React.createElement("em", {
+    style: {
+      color: T.cyan
+    }
+  }, "in the open.")), React.createElement("p", {
+    style: {
+      fontSize: isMobile ? 14 : 16,
+      color: T.textMid,
+      lineHeight: 1.7,
+      maxWidth: 580,
+      margin: "0 auto",
+      fontWeight: 300
+    }
+  }, "This is the entire scoring brain \u2014 the same clustering logic the surveillance industry sells, published. Every rule below is implemented in plain JavaScript you can read, audit, and challenge.")), React.createElement("div", {
+    style: panel()
+  }, React.createElement("div", {
+    style: label
+  }, "WHO ARE YOU HIDING FROM?"), React.createElement("div", {
+    style: {
+      fontSize: 13,
+      color: T.textMid,
+      lineHeight: 1.65,
+      marginBottom: 14
+    }
+  }, "Privacy is relative to an adversary. These are the four we model \u2014 after a scan, the Fix-It plan re-ranks your fixes for whichever one you pick."), React.createElement("div", {
+    style: {
+      display: "grid",
+      gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr",
+      gap: 10
+    }
+  }, THREAT_MODELS.map(m => React.createElement("div", {
+    key: m.id,
+    style: {
+      background: T.surface,
+      border: `1px solid ${T.borderLo}`,
+      borderRadius: 10,
+      padding: "14px 16px"
+    }
+  }, React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: 8,
+      marginBottom: 6
+    }
+  }, React.createElement("span", {
+    "aria-hidden": "true",
+    style: {
+      fontSize: 16
+    }
+  }, m.icon), React.createElement("span", {
+    style: {
+      fontSize: 13,
+      fontWeight: 600,
+      color: T.text
+    }
+  }, m.label)), React.createElement("div", {
+    style: {
+      fontSize: 12,
+      color: T.textMid,
+      lineHeight: 1.6
+    }
+  }, m.sees))))), React.createElement("div", {
+    style: panel()
+  }, React.createElement("div", {
+    style: label
+  }, "ON-CHAIN \xB7 11 HEURISTICS"), React.createElement("div", {
+    style: {
+      fontSize: 13,
+      color: T.textMid,
+      lineHeight: 1.65,
+      marginBottom: 14
+    }
+  }, "Every wallet starts at 100. Each detected issue deducts points by its real-world impact on traceability \u2014 CoinJoin is the one positive signal."), React.createElement("div", {
+    style: {
+      display: "grid",
+      gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr",
+      gap: 10
+    }
+  }, BTC_METHODOLOGY.map((row, i) => React.createElement("div", {
+    key: i,
+    style: {
+      background: T.surface,
+      borderRadius: 10,
+      padding: "14px 16px",
+      border: `1px solid ${T.borderLo}`
+    }
+  }, React.createElement("div", {
+    style: {
+      display: "flex",
+      justifyContent: "space-between",
+      alignItems: "center",
+      marginBottom: 6
+    }
+  }, React.createElement("div", {
+    style: {
+      fontSize: 13,
+      fontWeight: 600,
+      color: T.text
+    }
+  }, row.check), React.createElement(Tag, {
+    label: row.deduct,
+    color: row.deduct.startsWith("+") ? T.green : RISK_META[row.sev]?.color || T.red,
+    size: 9
+  })), React.createElement("div", {
+    style: {
+      fontSize: 12,
+      color: T.textMid,
+      lineHeight: 1.55
+    }
+  }, row.why))))), React.createElement("div", {
+    style: panel()
+  }, React.createElement("div", {
+    style: label
+  }, "LIGHTNING \xB7 8 HEURISTICS"), React.createElement("div", {
+    style: {
+      display: "flex",
+      flexDirection: "column",
+      gap: 8
+    }
+  }, LN_METHODOLOGY.map(c => React.createElement("div", {
+    key: c.n,
+    style: {
+      display: "flex",
+      gap: 14,
+      background: T.surface,
+      border: `1px solid ${T.borderLo}`,
+      borderRadius: 10,
+      padding: "12px 16px"
+    }
+  }, React.createElement("div", {
+    style: {
+      fontFamily: T.mono,
+      fontSize: 10,
+      color: T.ln,
+      minWidth: 24,
+      marginTop: 1
+    }
+  }, c.n), React.createElement("div", null, React.createElement("div", {
+    style: {
+      fontSize: 13,
+      fontWeight: 600,
+      color: T.text,
+      marginBottom: 3
+    }
+  }, c.label), React.createElement("div", {
+    style: {
+      fontSize: 12.5,
+      color: T.textMid,
+      lineHeight: 1.55
+    }
+  }, c.desc)))))), React.createElement("div", {
+    style: panel()
+  }, React.createElement("div", {
+    style: label
+  }, "DATA SOURCES"), React.createElement("div", {
+    style: {
+      display: "flex",
+      flexDirection: "column",
+      gap: 10
+    }
+  }, BTC_DATA_SOURCES.map((src, i) => React.createElement("div", {
+    key: i,
+    style: {
+      display: "flex",
+      gap: 12,
+      paddingBottom: 10,
+      borderBottom: i < BTC_DATA_SOURCES.length - 1 ? `1px solid ${T.borderLo}` : undefined
+    }
+  }, React.createElement("div", {
+    style: {
+      width: 4,
+      borderRadius: 2,
+      background: T.cyan,
+      flexShrink: 0,
+      alignSelf: "stretch"
+    }
+  }), React.createElement("div", null, React.createElement("div", {
+    style: {
+      fontSize: 13,
+      fontWeight: 600,
+      color: T.text,
+      marginBottom: 3
+    }
+  }, src.src), React.createElement("div", {
+    style: {
+      fontSize: 12,
+      color: T.textMid,
+      lineHeight: 1.55
+    }
+  }, src.desc)))))), React.createElement("div", {
+    style: {
+      background: T.cyanLo,
+      border: `1px solid ${T.cyanMid}`,
+      borderRadius: 14,
+      padding: "16px 20px",
+      fontSize: 13,
+      color: T.textMid,
+      lineHeight: 1.65
+    }
+  }, React.createElement("strong", {
+    style: {
+      color: T.cyan
+    }
+  }, "Open source:"), " all of the above is implemented in plain JavaScript in this tool's source \u2014 no black box, no server-side scoring. Audit every rule at ", React.createElement("a", {
+    href: "https://github.com/netasset/anonscore",
+    target: "_blank",
+    rel: "noopener noreferrer",
+    style: {
+      color: T.cyan
+    }
+  }, "github.com/netasset/anonscore"), ", then ", React.createElement("a", {
+    href: "/",
+    onClick: e => {
+      if (onNav && e.button === 0 && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey) {
+        e.preventDefault();
+        onNav("landing");
+      }
+    },
+    style: {
+      color: T.cyan
+    }
+  }, "run it against a wallet"), ".")));
+}
 function Dashboard({
   address,
   addrInfo,
@@ -15266,13 +15723,17 @@ function Dashboard({
   simpleMode: simpleModeFromApp,
   onSimpleModeChange,
   onCoach,
-  delta
+  delta,
+  onNav,
+  onOpenCase,
+  onOpenWalletReview
 }) {
   const [tab, setTab] = useState("Fix It");
   const [threat, setThreat] = useState(null);
   const clusterN = useMemo(() => computeCluster(txs, address).linked.length, [txs, address]);
   const poison = useMemo(() => computePoisoning(txs, address), [txs, address]);
-  const caseEntity = CASE_FILES.find(c => c.address === address)?.entity;
+  const caseHit = CASE_FILES.find(c => c.address === address);
+  const caseEntity = caseHit?.entity;
   const [simpleMode, setSimpleMode] = useState(simpleModeFromApp !== undefined ? simpleModeFromApp : defaultSimple || false);
   const setSimpleModeSync = val => {
     setSimpleMode(val);
@@ -15965,7 +16426,58 @@ function Dashboard({
       fontSize: 10,
       color: T.textDim
     }
-  }, "+", poison.lookalikes.length - 3, " more")))), React.createElement("div", {
+  }, "+", poison.lookalikes.length - 3, " more")))), caseHit && onOpenCase && React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: 12,
+      flexWrap: "wrap",
+      background: T.btc + "10",
+      border: `1px solid ${T.btc}44`,
+      borderRadius: 14,
+      padding: "12px 18px",
+      marginBottom: 14
+    }
+  }, React.createElement("span", {
+    "aria-hidden": "true",
+    style: {
+      fontSize: 16
+    }
+  }, "\uD83D\uDCC1"), React.createElement("div", {
+    style: {
+      flex: 1,
+      minWidth: 200,
+      fontSize: 13,
+      color: T.textMid,
+      lineHeight: 1.5
+    }
+  }, "This address is ", React.createElement("strong", {
+    style: {
+      color: T.text
+    }
+  }, "Case File #", caseHit.id, " \u2014 ", caseHit.title), ". You're auditing a wallet with a story; we've written it up."), React.createElement("button", {
+    onClick: () => onOpenCase(caseHit),
+    style: {
+      background: "transparent",
+      border: `1.5px solid ${T.btc}66`,
+      borderRadius: 8,
+      padding: "7px 14px",
+      color: T.btc,
+      fontFamily: T.mono,
+      fontSize: 11,
+      cursor: "pointer",
+      transition: "all .15s",
+      whiteSpace: "nowrap"
+    },
+    onMouseOver: e => {
+      e.currentTarget.style.background = T.btc;
+      e.currentTarget.style.color = T.bg;
+    },
+    onMouseOut: e => {
+      e.currentTarget.style.background = "transparent";
+      e.currentTarget.style.color = T.btc;
+    }
+  }, "Read the case \u2192")), React.createElement("div", {
     style: {
       display: "flex",
       alignItems: "center",
@@ -16322,53 +16834,11 @@ function Dashboard({
         style: {
           color: T.textMid
         }
-      }, "How:"), " ", r.detail), React.createElement("div", {
-        style: {
-          marginTop: 10,
-          display: "flex",
-          flexWrap: "wrap",
-          gap: 6,
-          alignItems: "center"
-        }
-      }, React.createElement("span", {
-        style: {
-          fontFamily: T.mono,
-          fontSize: 9,
-          color: T.textDim,
-          letterSpacing: 1
-        }
-      }, "OPTIONS:"), (r.tools || [{
-        name: r.tool,
-        note: ""
-      }]).map((t, ti) => {
-        const href = toolLink(t.name);
-        const aff = toolIsAffiliate(t.name);
-        const base = {
-          fontFamily: T.mono,
-          fontSize: 9,
-          padding: "3px 8px",
-          borderRadius: 4,
-          background: T.cyan + "18",
-          color: T.cyan,
-          border: `1px solid ${T.cyan}30`,
-          letterSpacing: 0.3,
-          textDecoration: "none",
-          cursor: href ? "pointer" : t.note ? "help" : "default"
-        };
-        const label = aff ? `${t.name} · affiliate` : t.name;
-        return href ? React.createElement("a", {
-          key: ti,
-          href: href,
-          target: "_blank",
-          rel: "noopener noreferrer nofollow",
-          title: aff ? `${t.note ? t.note + " · " : ""}AnonScore earns a referral when you sign up — see /how-we-get-paid` : t.note,
-          style: base
-        }, label) : React.createElement("span", {
-          key: ti,
-          title: t.note,
-          style: base
-        }, t.name);
-      })), !simpleMode && (r.tools || []).length > 0 && React.createElement("div", {
+      }, "How:"), " ", r.detail), React.createElement(FixToolChips, {
+        tools: r.tools,
+        tool: r.tool,
+        onReview: onOpenWalletReview
+      }), !simpleMode && (r.tools || []).length > 0 && React.createElement("div", {
         style: {
           marginTop: 6,
           fontSize: 11,
@@ -16391,11 +16861,23 @@ function Dashboard({
         }
       }, React.createElement("div", {
         style: {
+          textAlign: isMobile ? "left" : "right"
+        }
+      }, React.createElement("div", {
+        style: {
           fontFamily: T.serif,
           fontSize: 22,
           color: T.green
         }
-      }, "+", r.impact, "pts"), tm && !done && w === 3 && React.createElement(Tag, {
+      }, "+", r.impact, "pts"), scoreGrade(Math.min(score + r.impact, 97)) !== grade && React.createElement("div", {
+        title: "Your grade if you complete just this one fix",
+        style: {
+          fontFamily: T.mono,
+          fontSize: 9,
+          color: T.green,
+          marginTop: 1
+        }
+      }, "\u2192 grade ", scoreGrade(Math.min(score + r.impact, 97)))), tm && !done && w === 3 && React.createElement(Tag, {
         label: "front line",
         color: T.cyan,
         size: 9
@@ -16421,38 +16903,181 @@ function Dashboard({
           whiteSpace: "nowrap"
         }
       }, done ? "✓ Done" : "Mark done")));
-    }), React.createElement("div", {
+    }), (() => {
+      const proj = Math.min(score + recommendations.reduce((a, r) => a + r.impact, 0), 97);
+      return React.createElement("div", {
+        style: {
+          background: T.greenLo,
+          border: `1px solid ${T.green}33`,
+          borderRadius: 14,
+          padding: "18px 22px",
+          display: "flex",
+          gap: 14,
+          alignItems: "center"
+        }
+      }, React.createElement("div", {
+        style: {
+          fontSize: 24
+        }
+      }, "\uD83C\uDFAF"), React.createElement("div", null, React.createElement("div", {
+        style: {
+          fontFamily: T.serif,
+          fontSize: 17,
+          color: T.text,
+          fontWeight: 400
+        }
+      }, "After all fixes, projected score: ", React.createElement("span", {
+        style: {
+          color: T.green
+        }
+      }, proj, "/100 (grade ", scoreGrade(proj), ")")), React.createElement("div", {
+        style: {
+          fontSize: 13,
+          color: T.textMid,
+          marginTop: 4
+        }
+      }, "Estimated: 1\u20133 weeks, depending on CoinJoin wait times. The ceiling is 97, not 100 \u2014 what's already on-chain can't be erased, only diluted going forward.")));
+    })(), onNav && React.createElement("div", {
       style: {
-        background: T.greenLo,
-        border: `1px solid ${T.green}33`,
+        background: T.card,
+        border: `1px solid ${T.cyan}2e`,
         borderRadius: 14,
-        padding: "18px 22px",
-        display: "flex",
-        gap: 14,
-        alignItems: "center"
+        padding: "18px 22px"
       }
     }, React.createElement("div", {
       style: {
-        fontSize: 24
+        fontFamily: T.mono,
+        fontSize: 9,
+        color: T.cyan,
+        letterSpacing: 2,
+        marginBottom: 12
       }
-    }, "\uD83C\uDFAF"), React.createElement("div", null, React.createElement("div", {
+    }, "NEXT MOVES"), React.createElement("div", {
       style: {
-        fontFamily: T.serif,
-        fontSize: 17,
-        color: T.text,
-        fontWeight: 400
+        display: "flex",
+        flexDirection: "column",
+        gap: 12
       }
-    }, "After all fixes, projected score: ", React.createElement("span", {
+    }, React.createElement("div", {
       style: {
-        color: T.green
+        display: "flex",
+        gap: 12,
+        alignItems: "flex-start",
+        flexWrap: "wrap"
       }
-    }, Math.min(score + recommendations.reduce((a, r) => a + r.impact, 0), 97), "/100")), React.createElement("div", {
+    }, React.createElement("span", {
+      "aria-hidden": "true",
       style: {
+        fontSize: 18,
+        flexShrink: 0
+      }
+    }, "\uD83D\uDD2C"), React.createElement("div", {
+      style: {
+        flex: 1,
+        minWidth: 220,
         fontSize: 13,
         color: T.textMid,
-        marginTop: 4
+        lineHeight: 1.6
       }
-    }, "Estimated: 1\u20133 weeks, depending on CoinJoin wait times."))), React.createElement("div", {
+    }, React.createElement("strong", {
+      style: {
+        color: T.text
+      }
+    }, "Protect the next transaction."), " Before you broadcast your next spend, paste the unsigned transaction (PSBT) into the Inspector and see what it leaks \u2014 while you can still fix it. Then rescan here and watch your score move."), React.createElement("button", {
+      onClick: () => onNav("inspector"),
+      style: {
+        background: "transparent",
+        border: `1.5px solid ${T.cyan}55`,
+        borderRadius: 8,
+        padding: "7px 14px",
+        color: T.cyan,
+        fontFamily: T.mono,
+        fontSize: 11,
+        cursor: "pointer",
+        transition: "all .15s",
+        whiteSpace: "nowrap",
+        flexShrink: 0
+      },
+      onMouseOver: e => {
+        e.currentTarget.style.background = T.cyan;
+        e.currentTarget.style.color = T.bg;
+      },
+      onMouseOut: e => {
+        e.currentTarget.style.background = "transparent";
+        e.currentTarget.style.color = T.cyan;
+      }
+    }, "Open the Inspector \u2192")), React.createElement("div", {
+      style: {
+        display: "flex",
+        gap: 12,
+        alignItems: "flex-start",
+        flexWrap: "wrap",
+        borderTop: `1px solid ${T.borderLo}`,
+        paddingTop: 12
+      }
+    }, React.createElement("span", {
+      "aria-hidden": "true",
+      style: {
+        fontSize: 18,
+        flexShrink: 0
+      }
+    }, "\uD83D\uDD11"), React.createElement("div", {
+      style: {
+        flex: 1,
+        minWidth: 220,
+        fontSize: 13,
+        color: T.textMid,
+        lineHeight: 1.6
+      }
+    }, React.createElement("strong", {
+      style: {
+        color: T.text
+      }
+    }, "This score covers one address."), " ", clusterN > 0 ? React.createElement(React.Fragment, null, "The chain already links it to ", React.createElement("strong", {
+      style: {
+        color: T.red
+      }
+    }, clusterN, " other", clusterN > 1 ? "s" : ""), " \u2014 your real exposure is wallet-wide. The xpub scan derives every address in your browser and audits the whole perimeter.") : React.createElement(React.Fragment, null, "If it belongs to an HD wallet, the xpub scan audits every address the wallet derives \u2014 including the reuse and cross-address links no single-address scan can see.")), React.createElement("button", {
+      onClick: () => onNav("xpub"),
+      style: {
+        background: "transparent",
+        border: `1.5px solid ${T.cyan}55`,
+        borderRadius: 8,
+        padding: "7px 14px",
+        color: T.cyan,
+        fontFamily: T.mono,
+        fontSize: 11,
+        cursor: "pointer",
+        transition: "all .15s",
+        whiteSpace: "nowrap",
+        flexShrink: 0
+      },
+      onMouseOver: e => {
+        e.currentTarget.style.background = T.cyan;
+        e.currentTarget.style.color = T.bg;
+      },
+      onMouseOut: e => {
+        e.currentTarget.style.background = "transparent";
+        e.currentTarget.style.color = T.cyan;
+      }
+    }, "Scan the whole wallet \u2192")))), isMobile && onNav && React.createElement("div", {
+      style: {
+        textAlign: "center",
+        padding: "2px 0 0"
+      }
+    }, React.createElement("button", {
+      onClick: () => onNav("methodology"),
+      style: {
+        background: "none",
+        border: "none",
+        fontFamily: T.mono,
+        fontSize: 10,
+        color: T.textMid,
+        cursor: "pointer",
+        textDecoration: "underline dotted",
+        textUnderlineOffset: 3
+      }
+    }, "How scoring works \u2014 every heuristic, in the open \u2192")), React.createElement("div", {
       style: {
         background: T.surface,
         border: `1px solid ${T.border}`,
@@ -17047,62 +17672,7 @@ function Dashboard({
       gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr",
       gap: 10
     }
-  }, [{
-    check: "Address Reuse",
-    deduct: "–7 to –28",
-    why: "Permanent public link between all transactions on this address.",
-    sev: "critical"
-  }, {
-    check: "CoinJoin Usage",
-    deduct: "+4 to +12",
-    why: "Breaks transaction graph. Positive score if detected. Heavy penalty if absent.",
-    sev: "high"
-  }, {
-    check: "Dust Attack",
-    deduct: "–5 to –12",
-    why: "Tracking beacons planted by surveillance firms. Spending them links your cluster.",
-    sev: "high"
-  }, {
-    check: "Round Amounts",
-    deduct: "–5 to –10",
-    why: "0.1 BTC is a known KYC exchange withdrawal pattern flagged by Chainalysis.",
-    sev: "high"
-  }, {
-    check: "Unsafe Consolidation",
-    deduct: "–4 to –10",
-    why: "Merging inputs from different sources permanently links their histories.",
-    sev: "high"
-  }, {
-    check: "Fee Fingerprinting",
-    deduct: "–6",
-    why: "Identical fee rates across transactions identify your wallet software.",
-    sev: "medium"
-  }, {
-    check: "Change Address Reuse",
-    deduct: "–10",
-    why: "Returning change to an input address exposes your full balance.",
-    sev: "high"
-  }, {
-    check: "UTXO Count",
-    deduct: "–3 to –8",
-    why: "Too many = consolidation pressure. Too few = full balance exposed per spend.",
-    sev: "medium"
-  }, {
-    check: "Balance Concentration",
-    deduct: "–5",
-    why: "90%+ in a single UTXO reveals near-total holdings on every transaction.",
-    sev: "medium"
-  }, {
-    check: "Script Type Mix",
-    deduct: "–4",
-    why: "Using legacy + SegWit addresses creates cross-UTXO patterns analysts can exploit.",
-    sev: "low"
-  }, {
-    check: "Change Detection",
-    deduct: "–4 to –8",
-    why: "Two-output payments where only one output matches the input's script type reveal which output is your change.",
-    sev: "medium"
-  }].map((row, i) => React.createElement("div", {
+  }, BTC_METHODOLOGY.map((row, i) => React.createElement("div", {
     key: i,
     style: {
       background: T.surface,
@@ -17191,19 +17761,7 @@ function Dashboard({
       flexDirection: "column",
       gap: 10
     }
-  }, [{
-    src: "Blockstream / mempool.space Esplora API",
-    desc: "Public blockchain data — UTXOs, transactions, address stats. Read-only, your choice of explorer — by default fetched via our open-source no-log relay so the explorer can't see your IP."
-  }, {
-    src: "Bitcoin whitepaper §10 (Nakamoto, 2008)",
-    desc: "Nakamoto's own privacy guidance: use a new address for every payment. Reuse permanently links transactions — the heuristic behind our address-reuse check."
-  }, {
-    src: "Chainalysis (Series F, May 2022)",
-    desc: "$8.6B valuation, ~$190M 2023 revenue (Sacra) — the scale of the blockchain-surveillance industry that reads this same public data."
-  }, {
-    src: "Bitcoin Core relay policy",
-    desc: "The 546-sat dust threshold (GetDustThreshold) — outputs below it are used as tracking beacons."
-  }].map((s, i) => React.createElement("div", {
+  }, BTC_DATA_SOURCES.map((s, i) => React.createElement("div", {
     key: i,
     style: {
       display: "flex",
@@ -18511,39 +19069,7 @@ function LightningDashboard({
       letterSpacing: 2,
       marginBottom: 4
     }
-  }, "8 HEURISTICS \xB7 LIGHTNING NODE PRIVACY SCORING"), [{
-    n: "01",
-    label: "Public Node Announcement",
-    desc: "Whether your node is publicly gossiped on the Lightning network. Public nodes expose their IP or Tor address to every peer."
-  }, {
-    n: "02",
-    label: "KYC Exchange Peer Channels",
-    desc: "Channels to known KYC exchanges (Bitfinex, Kraken, Binance, OKX). These entities log routing metadata and can correlate payment flows through your node."
-  }, {
-    n: "03",
-    label: "Tor / Clearnet Exposure",
-    desc: "Whether your node listens on clearnet (IP-visible) or Tor-only (anonymous). Clearnet nodes expose their physical location."
-  }, {
-    n: "04",
-    label: "Channel Diversity",
-    desc: "Number of open channels. Low channel count limits routing path diversity, making payment flows easier to correlate."
-  }, {
-    n: "05",
-    label: "Channel Capacity Concentration",
-    desc: "Whether one channel dominates your capacity. Heavy concentration makes routing patterns predictable."
-  }, {
-    n: "06",
-    label: "Node Alias Privacy",
-    desc: "Whether your node alias looks like a real name. Aliases are publicly visible on the Lightning gossip network."
-  }, {
-    n: "07",
-    label: "Node Establishment",
-    desc: "How long your node has been active. New nodes have limited routing history, making their activity more trackable."
-  }, {
-    n: "08",
-    label: "On-Chain Channel Footprint",
-    desc: "Every channel open/close is an on-chain transaction. Funding channels from KYC exchange UTXOs permanently links your Lightning activity to your on-chain identity."
-  }].map(c => React.createElement("div", {
+  }, "8 HEURISTICS \xB7 LIGHTNING NODE PRIVACY SCORING"), LN_METHODOLOGY.map(c => React.createElement("div", {
     key: c.n,
     style: {
       display: "flex",
@@ -18756,6 +19282,8 @@ function App() {
   const [page, setPage] = useState("landing");
   const [activeCaseFile, setActiveCaseFile] = useState(null);
   const [pendingScan, setPendingScan] = useState(null);
+  const [toolPrefill, setToolPrefill] = useState(null);
+  const [walletPick, setWalletPick] = useState(null);
   const [scoreTint, setScoreTint] = useState(null);
   const [scoreDelta, setScoreDelta] = useState(null);
   useEffect(() => {
@@ -18802,15 +19330,18 @@ function App() {
         }
       }
       const pageParam = params.get("page");
-      if (pageParam === "coach") setPage("coach");else if (pageParam === "wallets") setPage("wallets");else if (pageParam === "inspector") setPage("inspector");else if (pageParam === "xpub") setPage("xpub");
+      if (pageParam === "coach") setPage("coach");else if (pageParam === "wallets") {
+        setPage("wallets");
+        setWalletPick(params.get("pick") || null);
+      } else if (pageParam === "inspector") setPage("inspector");else if (pageParam === "xpub") setPage("xpub");else if (pageParam === "cases") setPage("cases");else if (pageParam === "methodology") setPage("methodology");
     } catch {}
   }, []);
   const _skipPush = useRef(false);
   const _firstSync = useRef(true);
   const pageUrl = useCallback((pg, cf) => {
-    if (pg === "coach" || pg === "wallets" || pg === "inspector" || pg === "xpub") return "/?page=" + pg;
+    if (pg === "coach" || pg === "wallets" || pg === "inspector" || pg === "xpub" || pg === "cases" || pg === "methodology") return "/?page=" + pg;
     if (pg === "case_detail" && cf) return "/?case=" + (cf.slug || cf.id);
-    if (pg === "landing" || pg === "cases") return "/";
+    if (pg === "landing") return "/";
     return null;
   }, []);
   useEffect(() => {
@@ -18828,7 +19359,7 @@ function App() {
           }
         }
         const pg = params.get("page");
-        setPage(["coach", "wallets", "inspector", "xpub"].includes(pg) ? pg : "landing");
+        setPage(["coach", "wallets", "inspector", "xpub", "cases", "methodology"].includes(pg) ? pg : "landing");
       } catch {
         setPage("landing");
       }
@@ -19027,6 +19558,13 @@ function App() {
     onAnalyze: analyze,
     isMobile: isMobile,
     onNav: setPage,
+    onOpenTool: (pg, value) => {
+      setToolPrefill({
+        page: pg,
+        value
+      });
+      setPage(pg);
+    },
     onCases: c => {
       if (c) {
         setActiveCaseFile(c);
@@ -19041,12 +19579,14 @@ function App() {
       setPage("case_detail");
     },
     onBack: () => setPage("landing"),
-    isMobile: isMobile
+    isMobile: isMobile,
+    onNav: setPage
   }), page === "case_detail" && activeCaseFile && React.createElement(CaseDetail, {
     caseFile: activeCaseFile,
     onBack: () => setPage("cases"),
     onAnalyze: analyze,
-    isMobile: isMobile
+    isMobile: isMobile,
+    onNav: setPage
   }), page === "scanning" && React.createElement(Scanning, {
     address: address || lnNodeId,
     isLightning: isScanningLightning,
@@ -19066,7 +19606,16 @@ function App() {
     simpleMode: simpleMode,
     onSimpleModeChange: setSimpleMode,
     onCoach: () => setPage("coach"),
-    delta: scoreDelta
+    delta: scoreDelta,
+    onNav: setPage,
+    onOpenCase: c => {
+      setActiveCaseFile(c);
+      setPage("case_detail");
+    },
+    onOpenWalletReview: name => {
+      setWalletPick(wSlug(name));
+      setPage("wallets");
+    }
   }), page === "ln_dashboard" && React.createElement(LightningDashboard, {
     nodeId: lnNodeId,
     nodeData: lnNodeData,
@@ -19077,18 +19626,33 @@ function App() {
     toast: toast
   }), page === "coach" && React.createElement(CoachWaitlist, {
     onBack: () => setPage("landing"),
-    isMobile: isMobile
+    isMobile: isMobile,
+    onNav: setPage
   }), page === "wallets" && React.createElement(WalletDirectory, {
     onBack: () => setPage("landing"),
-    isMobile: isMobile
+    isMobile: isMobile,
+    onNav: setPage,
+    pick: walletPick
   }), page === "inspector" && React.createElement(TransactionInspector, {
     onBack: () => setPage("landing"),
     isMobile: isMobile,
-    onScan: analyze
+    onScan: analyze,
+    onNav: setPage,
+    prefill: toolPrefill?.page === "inspector" ? toolPrefill.value : null
   }), page === "xpub" && React.createElement(XpubScan, {
     onBack: () => setPage("landing"),
     isMobile: isMobile,
-    onScan: analyze
+    onScan: analyze,
+    onNav: setPage,
+    prefill: toolPrefill?.page === "xpub" ? toolPrefill.value : null,
+    onOpenWalletReview: name => {
+      setWalletPick(wSlug(name));
+      setPage("wallets");
+    }
+  }), page === "methodology" && React.createElement(MethodologyPage, {
+    onBack: () => setPage("landing"),
+    isMobile: isMobile,
+    onNav: setPage
   })));
 }
 window.__ANONSCORE_TEST__ = Object.freeze({
