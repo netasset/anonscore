@@ -4766,6 +4766,83 @@ const PROOF = {
     note: "a weak tell that can misfire"
   }
 };
+const wSlug = name => (name || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+function FixToolChips({
+  tools,
+  tool,
+  onReview
+}) {
+  const list = tools || (tool ? [{
+    name: tool,
+    note: ""
+  }] : []);
+  if (!list.length) return null;
+  return React.createElement("div", {
+    style: {
+      marginTop: 10,
+      display: "flex",
+      flexWrap: "wrap",
+      gap: 6,
+      alignItems: "center"
+    }
+  }, React.createElement("span", {
+    style: {
+      fontFamily: T.mono,
+      fontSize: 9,
+      color: T.textDim,
+      letterSpacing: 1
+    }
+  }, "OPTIONS:"), list.map((t, ti) => {
+    const href = toolLink(t.name);
+    const aff = toolIsAffiliate(t.name);
+    const base = {
+      fontFamily: T.mono,
+      fontSize: 9,
+      padding: "3px 8px",
+      borderRadius: 4,
+      background: T.cyan + "18",
+      color: T.cyan,
+      border: `1px solid ${T.cyan}30`,
+      letterSpacing: 0.3,
+      textDecoration: "none",
+      cursor: href ? "pointer" : t.note ? "help" : "default"
+    };
+    const label = aff ? `${t.name} · affiliate` : t.name;
+    const chip = href ? React.createElement("a", {
+      href: href,
+      target: "_blank",
+      rel: "noopener noreferrer nofollow",
+      title: aff ? `${t.note ? t.note + " · " : ""}AnonScore earns a referral when you sign up — see /how-we-get-paid` : t.note,
+      style: base
+    }, label) : React.createElement("span", {
+      title: t.note,
+      style: base
+    }, t.name);
+    const reviewed = onReview && WALLET_REVIEWS.some(w => w.name === t.name);
+    return React.createElement("span", {
+      key: ti,
+      style: {
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 4
+      }
+    }, chip, reviewed && React.createElement("button", {
+      onClick: () => onReview(t.name),
+      title: "Our independent review of " + t.name + " — strengths and honest watch-outs",
+      style: {
+        background: "none",
+        border: "none",
+        padding: 0,
+        fontFamily: T.mono,
+        fontSize: 9,
+        color: T.textMid,
+        cursor: "pointer",
+        textDecoration: "underline dotted",
+        textUnderlineOffset: 2
+      }
+    }, "review"));
+  }));
+}
 const EpistemicLegend = ({
   kinds = ["proven", "inferred"],
   color = T.textMid,
@@ -8993,7 +9070,8 @@ function Landing({
       onMouseOver: e => e.currentTarget.style.borderColor = col,
       onMouseOut: e => e.currentTarget.style.borderColor = T.border
     }, React.createElement("button", {
-      onClick: () => onAnalyze(h.addr, false, h.isLightning ? "ln_pubkey" : "btc"),
+      onClick: () => h.isXpub ? onNav && onNav("xpub") : onAnalyze(h.addr, false, h.isLightning ? "ln_pubkey" : "btc"),
+      title: h.isXpub ? "Wallet scans are keyed by fingerprint — the xpub itself is never stored. Re-paste it to rescan." : undefined,
       style: {
         display: "flex",
         alignItems: "center",
@@ -9023,7 +9101,7 @@ function Landing({
         textOverflow: "ellipsis",
         whiteSpace: "nowrap"
       }
-    }, h.isLightning ? "⚡ " : "₿ ", h.addr === "DEMO" || h.addr === "DEMO_A" || h.addr === "DEMO_LN" ? "Demo" : h.addr.slice(0, 14) + "…"), React.createElement("div", {
+    }, h.isXpub ? "🔑 " : h.isLightning ? "⚡ " : "₿ ", h.isXpub ? "Wallet " + h.addr.slice(7) : h.addr === "DEMO" || h.addr === "DEMO_A" || h.addr === "DEMO_LN" ? "Demo" : h.addr.slice(0, 14) + "…"), React.createElement("div", {
       style: {
         fontFamily: T.serif,
         fontSize: 14,
@@ -9044,7 +9122,7 @@ function Landing({
         color: T.textDim,
         flexShrink: 0
       }
-    }, "\u21BA")), React.createElement("button", {
+    }, h.isXpub ? "→" : "↺")), React.createElement("button", {
       onClick: () => deleteHistory(h.addr),
       style: {
         background: "none",
@@ -11828,7 +11906,8 @@ function XpubScan({
   isMobile,
   onScan,
   onNav,
-  prefill
+  prefill,
+  onOpenWalletReview
 }) {
   useLang();
   const [raw, setRaw] = useState(prefill || "");
@@ -11863,7 +11942,25 @@ function XpubScan({
           used: p.used
         })
       });
-      setResult(runWalletEngine(scan));
+      const rep = runWalletEngine(scan);
+      if (!rep.isEmpty) {
+        try {
+          const k = decodeXpub(raw.trim());
+          const fp = Array.from(_hash160(k.keyData).slice(0, 4)).map(b => b.toString(16).padStart(2, "0")).join("");
+          const key = "wallet:" + fp;
+          const prev = getHistory().find(e => e.addr === key);
+          rep.delta = prev ? rep.score - prev.score : null;
+          addToHistory({
+            addr: key,
+            score: rep.score,
+            grade: rep.grade,
+            label: rep.riskLabel,
+            scanAt: Date.now(),
+            isXpub: true
+          });
+        } catch {}
+      }
+      setResult(rep);
     } catch (e) {
       setError(e && e.message ? e.message : "Couldn't scan that key.");
     } finally {
@@ -11931,7 +12028,11 @@ function XpubScan({
         k: "BALANCE",
         v: sats(r.stats.balance),
         c: T.blue
-      }];
+      }, ...(r.delta != null && r.delta !== 0 ? [{
+        k: "SINCE LAST SCAN",
+        v: (r.delta > 0 ? "+" : "") + r.delta,
+        c: r.delta > 0 ? T.green : T.red
+      }] : [])];
       report = React.createElement("div", {
         style: {
           display: "flex",
@@ -12067,7 +12168,11 @@ function XpubScan({
           lineHeight: 1.55,
           marginTop: 3
         }
-      }, rec.plain)))))), React.createElement("div", {
+      }, rec.plain), React.createElement(FixToolChips, {
+        tools: rec.tools,
+        tool: rec.tool,
+        onReview: onOpenWalletReview
+      })))))), React.createElement("div", {
         style: panel()
       }, React.createElement("div", {
         style: label
@@ -12356,11 +12461,20 @@ function XpubScan({
 function WalletDirectory({
   onBack,
   isMobile,
-  onNav
+  onNav,
+  pick
 }) {
   useLang();
   const [cat, setCat] = useState("all");
   const [query, setQuery] = useState("");
+  useEffect(() => {
+    if (!pick) return;
+    const tm = setTimeout(() => document.getElementById("wd-" + pick)?.scrollIntoView({
+      behavior: "smooth",
+      block: "center"
+    }), 150);
+    return () => clearTimeout(tm);
+  }, [pick]);
   const anyAff = WALLET_REVIEWS.some(w => toolIsAffiliate(w.name));
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -12576,11 +12690,14 @@ function WalletDirectory({
     }, list.map(w => {
       const href = toolLink(w.name);
       const aff = toolIsAffiliate(w.name);
+      const picked = pick && wSlug(w.name) === pick;
       return React.createElement("article", {
         key: w.name,
+        id: "wd-" + wSlug(w.name),
         style: {
           background: T.card,
-          border: `1px solid ${T.border}`,
+          border: `1px solid ${picked ? T.cyan + "88" : T.border}`,
+          boxShadow: picked ? `0 0 28px -8px ${T.cyan}88` : "none",
           borderRadius: 14,
           padding: "18px 20px",
           display: "flex",
@@ -15175,13 +15292,17 @@ function Dashboard({
   simpleMode: simpleModeFromApp,
   onSimpleModeChange,
   onCoach,
-  delta
+  delta,
+  onNav,
+  onOpenCase,
+  onOpenWalletReview
 }) {
   const [tab, setTab] = useState("Fix It");
   const [threat, setThreat] = useState(null);
   const clusterN = useMemo(() => computeCluster(txs, address).linked.length, [txs, address]);
   const poison = useMemo(() => computePoisoning(txs, address), [txs, address]);
-  const caseEntity = CASE_FILES.find(c => c.address === address)?.entity;
+  const caseHit = CASE_FILES.find(c => c.address === address);
+  const caseEntity = caseHit?.entity;
   const [simpleMode, setSimpleMode] = useState(simpleModeFromApp !== undefined ? simpleModeFromApp : defaultSimple || false);
   const setSimpleModeSync = val => {
     setSimpleMode(val);
@@ -15874,7 +15995,58 @@ function Dashboard({
       fontSize: 10,
       color: T.textDim
     }
-  }, "+", poison.lookalikes.length - 3, " more")))), React.createElement("div", {
+  }, "+", poison.lookalikes.length - 3, " more")))), caseHit && onOpenCase && React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: 12,
+      flexWrap: "wrap",
+      background: T.btc + "10",
+      border: `1px solid ${T.btc}44`,
+      borderRadius: 14,
+      padding: "12px 18px",
+      marginBottom: 14
+    }
+  }, React.createElement("span", {
+    "aria-hidden": "true",
+    style: {
+      fontSize: 16
+    }
+  }, "\uD83D\uDCC1"), React.createElement("div", {
+    style: {
+      flex: 1,
+      minWidth: 200,
+      fontSize: 13,
+      color: T.textMid,
+      lineHeight: 1.5
+    }
+  }, "This address is ", React.createElement("strong", {
+    style: {
+      color: T.text
+    }
+  }, "Case File #", caseHit.id, " \u2014 ", caseHit.title), ". You're auditing a wallet with a story; we've written it up."), React.createElement("button", {
+    onClick: () => onOpenCase(caseHit),
+    style: {
+      background: "transparent",
+      border: `1.5px solid ${T.btc}66`,
+      borderRadius: 8,
+      padding: "7px 14px",
+      color: T.btc,
+      fontFamily: T.mono,
+      fontSize: 11,
+      cursor: "pointer",
+      transition: "all .15s",
+      whiteSpace: "nowrap"
+    },
+    onMouseOver: e => {
+      e.currentTarget.style.background = T.btc;
+      e.currentTarget.style.color = T.bg;
+    },
+    onMouseOut: e => {
+      e.currentTarget.style.background = "transparent";
+      e.currentTarget.style.color = T.btc;
+    }
+  }, "Read the case \u2192")), React.createElement("div", {
     style: {
       display: "flex",
       alignItems: "center",
@@ -16231,53 +16403,11 @@ function Dashboard({
         style: {
           color: T.textMid
         }
-      }, "How:"), " ", r.detail), React.createElement("div", {
-        style: {
-          marginTop: 10,
-          display: "flex",
-          flexWrap: "wrap",
-          gap: 6,
-          alignItems: "center"
-        }
-      }, React.createElement("span", {
-        style: {
-          fontFamily: T.mono,
-          fontSize: 9,
-          color: T.textDim,
-          letterSpacing: 1
-        }
-      }, "OPTIONS:"), (r.tools || [{
-        name: r.tool,
-        note: ""
-      }]).map((t, ti) => {
-        const href = toolLink(t.name);
-        const aff = toolIsAffiliate(t.name);
-        const base = {
-          fontFamily: T.mono,
-          fontSize: 9,
-          padding: "3px 8px",
-          borderRadius: 4,
-          background: T.cyan + "18",
-          color: T.cyan,
-          border: `1px solid ${T.cyan}30`,
-          letterSpacing: 0.3,
-          textDecoration: "none",
-          cursor: href ? "pointer" : t.note ? "help" : "default"
-        };
-        const label = aff ? `${t.name} · affiliate` : t.name;
-        return href ? React.createElement("a", {
-          key: ti,
-          href: href,
-          target: "_blank",
-          rel: "noopener noreferrer nofollow",
-          title: aff ? `${t.note ? t.note + " · " : ""}AnonScore earns a referral when you sign up — see /how-we-get-paid` : t.note,
-          style: base
-        }, label) : React.createElement("span", {
-          key: ti,
-          title: t.note,
-          style: base
-        }, t.name);
-      })), !simpleMode && (r.tools || []).length > 0 && React.createElement("div", {
+      }, "How:"), " ", r.detail), React.createElement(FixToolChips, {
+        tools: r.tools,
+        tool: r.tool,
+        onReview: onOpenWalletReview
+      }), !simpleMode && (r.tools || []).length > 0 && React.createElement("div", {
         style: {
           marginTop: 6,
           fontSize: 11,
@@ -16300,11 +16430,23 @@ function Dashboard({
         }
       }, React.createElement("div", {
         style: {
+          textAlign: isMobile ? "left" : "right"
+        }
+      }, React.createElement("div", {
+        style: {
           fontFamily: T.serif,
           fontSize: 22,
           color: T.green
         }
-      }, "+", r.impact, "pts"), tm && !done && w === 3 && React.createElement(Tag, {
+      }, "+", r.impact, "pts"), scoreGrade(Math.min(score + r.impact, 97)) !== grade && React.createElement("div", {
+        title: "Your grade if you complete just this one fix",
+        style: {
+          fontFamily: T.mono,
+          fontSize: 9,
+          color: T.green,
+          marginTop: 1
+        }
+      }, "\u2192 grade ", scoreGrade(Math.min(score + r.impact, 97)))), tm && !done && w === 3 && React.createElement(Tag, {
         label: "front line",
         color: T.cyan,
         size: 9
@@ -16330,38 +16472,164 @@ function Dashboard({
           whiteSpace: "nowrap"
         }
       }, done ? "✓ Done" : "Mark done")));
-    }), React.createElement("div", {
+    }), (() => {
+      const proj = Math.min(score + recommendations.reduce((a, r) => a + r.impact, 0), 97);
+      return React.createElement("div", {
+        style: {
+          background: T.greenLo,
+          border: `1px solid ${T.green}33`,
+          borderRadius: 14,
+          padding: "18px 22px",
+          display: "flex",
+          gap: 14,
+          alignItems: "center"
+        }
+      }, React.createElement("div", {
+        style: {
+          fontSize: 24
+        }
+      }, "\uD83C\uDFAF"), React.createElement("div", null, React.createElement("div", {
+        style: {
+          fontFamily: T.serif,
+          fontSize: 17,
+          color: T.text,
+          fontWeight: 400
+        }
+      }, "After all fixes, projected score: ", React.createElement("span", {
+        style: {
+          color: T.green
+        }
+      }, proj, "/100 (grade ", scoreGrade(proj), ")")), React.createElement("div", {
+        style: {
+          fontSize: 13,
+          color: T.textMid,
+          marginTop: 4
+        }
+      }, "Estimated: 1\u20133 weeks, depending on CoinJoin wait times. The ceiling is 97, not 100 \u2014 what's already on-chain can't be erased, only diluted going forward.")));
+    })(), onNav && React.createElement("div", {
       style: {
-        background: T.greenLo,
-        border: `1px solid ${T.green}33`,
+        background: T.card,
+        border: `1px solid ${T.cyan}2e`,
         borderRadius: 14,
-        padding: "18px 22px",
-        display: "flex",
-        gap: 14,
-        alignItems: "center"
+        padding: "18px 22px"
       }
     }, React.createElement("div", {
       style: {
-        fontSize: 24
+        fontFamily: T.mono,
+        fontSize: 9,
+        color: T.cyan,
+        letterSpacing: 2,
+        marginBottom: 12
       }
-    }, "\uD83C\uDFAF"), React.createElement("div", null, React.createElement("div", {
+    }, "NEXT MOVES"), React.createElement("div", {
       style: {
-        fontFamily: T.serif,
-        fontSize: 17,
-        color: T.text,
-        fontWeight: 400
+        display: "flex",
+        flexDirection: "column",
+        gap: 12
       }
-    }, "After all fixes, projected score: ", React.createElement("span", {
+    }, React.createElement("div", {
       style: {
-        color: T.green
+        display: "flex",
+        gap: 12,
+        alignItems: "flex-start",
+        flexWrap: "wrap"
       }
-    }, Math.min(score + recommendations.reduce((a, r) => a + r.impact, 0), 97), "/100")), React.createElement("div", {
+    }, React.createElement("span", {
+      "aria-hidden": "true",
       style: {
+        fontSize: 18,
+        flexShrink: 0
+      }
+    }, "\uD83D\uDD2C"), React.createElement("div", {
+      style: {
+        flex: 1,
+        minWidth: 220,
         fontSize: 13,
         color: T.textMid,
-        marginTop: 4
+        lineHeight: 1.6
       }
-    }, "Estimated: 1\u20133 weeks, depending on CoinJoin wait times."))), React.createElement("div", {
+    }, React.createElement("strong", {
+      style: {
+        color: T.text
+      }
+    }, "Protect the next transaction."), " Before you broadcast your next spend, paste the unsigned transaction (PSBT) into the Inspector and see what it leaks \u2014 while you can still fix it. Then rescan here and watch your score move."), React.createElement("button", {
+      onClick: () => onNav("inspector"),
+      style: {
+        background: "transparent",
+        border: `1.5px solid ${T.cyan}55`,
+        borderRadius: 8,
+        padding: "7px 14px",
+        color: T.cyan,
+        fontFamily: T.mono,
+        fontSize: 11,
+        cursor: "pointer",
+        transition: "all .15s",
+        whiteSpace: "nowrap",
+        flexShrink: 0
+      },
+      onMouseOver: e => {
+        e.currentTarget.style.background = T.cyan;
+        e.currentTarget.style.color = T.bg;
+      },
+      onMouseOut: e => {
+        e.currentTarget.style.background = "transparent";
+        e.currentTarget.style.color = T.cyan;
+      }
+    }, "Open the Inspector \u2192")), React.createElement("div", {
+      style: {
+        display: "flex",
+        gap: 12,
+        alignItems: "flex-start",
+        flexWrap: "wrap",
+        borderTop: `1px solid ${T.borderLo}`,
+        paddingTop: 12
+      }
+    }, React.createElement("span", {
+      "aria-hidden": "true",
+      style: {
+        fontSize: 18,
+        flexShrink: 0
+      }
+    }, "\uD83D\uDD11"), React.createElement("div", {
+      style: {
+        flex: 1,
+        minWidth: 220,
+        fontSize: 13,
+        color: T.textMid,
+        lineHeight: 1.6
+      }
+    }, React.createElement("strong", {
+      style: {
+        color: T.text
+      }
+    }, "This score covers one address."), " ", clusterN > 0 ? React.createElement(React.Fragment, null, "The chain already links it to ", React.createElement("strong", {
+      style: {
+        color: T.red
+      }
+    }, clusterN, " other", clusterN > 1 ? "s" : ""), " \u2014 your real exposure is wallet-wide. The xpub scan derives every address in your browser and audits the whole perimeter.") : React.createElement(React.Fragment, null, "If it belongs to an HD wallet, the xpub scan audits every address the wallet derives \u2014 including the reuse and cross-address links no single-address scan can see.")), React.createElement("button", {
+      onClick: () => onNav("xpub"),
+      style: {
+        background: "transparent",
+        border: `1.5px solid ${T.cyan}55`,
+        borderRadius: 8,
+        padding: "7px 14px",
+        color: T.cyan,
+        fontFamily: T.mono,
+        fontSize: 11,
+        cursor: "pointer",
+        transition: "all .15s",
+        whiteSpace: "nowrap",
+        flexShrink: 0
+      },
+      onMouseOver: e => {
+        e.currentTarget.style.background = T.cyan;
+        e.currentTarget.style.color = T.bg;
+      },
+      onMouseOut: e => {
+        e.currentTarget.style.background = "transparent";
+        e.currentTarget.style.color = T.cyan;
+      }
+    }, "Scan the whole wallet \u2192")))), React.createElement("div", {
       style: {
         background: T.surface,
         border: `1px solid ${T.border}`,
@@ -18666,6 +18934,7 @@ function App() {
   const [activeCaseFile, setActiveCaseFile] = useState(null);
   const [pendingScan, setPendingScan] = useState(null);
   const [toolPrefill, setToolPrefill] = useState(null);
+  const [walletPick, setWalletPick] = useState(null);
   const [scoreTint, setScoreTint] = useState(null);
   const [scoreDelta, setScoreDelta] = useState(null);
   useEffect(() => {
@@ -18712,7 +18981,10 @@ function App() {
         }
       }
       const pageParam = params.get("page");
-      if (pageParam === "coach") setPage("coach");else if (pageParam === "wallets") setPage("wallets");else if (pageParam === "inspector") setPage("inspector");else if (pageParam === "xpub") setPage("xpub");else if (pageParam === "cases") setPage("cases");
+      if (pageParam === "coach") setPage("coach");else if (pageParam === "wallets") {
+        setPage("wallets");
+        setWalletPick(params.get("pick") || null);
+      } else if (pageParam === "inspector") setPage("inspector");else if (pageParam === "xpub") setPage("xpub");else if (pageParam === "cases") setPage("cases");
     } catch {}
   }, []);
   const _skipPush = useRef(false);
@@ -18985,7 +19257,16 @@ function App() {
     simpleMode: simpleMode,
     onSimpleModeChange: setSimpleMode,
     onCoach: () => setPage("coach"),
-    delta: scoreDelta
+    delta: scoreDelta,
+    onNav: setPage,
+    onOpenCase: c => {
+      setActiveCaseFile(c);
+      setPage("case_detail");
+    },
+    onOpenWalletReview: name => {
+      setWalletPick(wSlug(name));
+      setPage("wallets");
+    }
   }), page === "ln_dashboard" && React.createElement(LightningDashboard, {
     nodeId: lnNodeId,
     nodeData: lnNodeData,
@@ -19001,7 +19282,8 @@ function App() {
   }), page === "wallets" && React.createElement(WalletDirectory, {
     onBack: () => setPage("landing"),
     isMobile: isMobile,
-    onNav: setPage
+    onNav: setPage,
+    pick: walletPick
   }), page === "inspector" && React.createElement(TransactionInspector, {
     onBack: () => setPage("landing"),
     isMobile: isMobile,
@@ -19013,7 +19295,11 @@ function App() {
     isMobile: isMobile,
     onScan: analyze,
     onNav: setPage,
-    prefill: toolPrefill?.page === "xpub" ? toolPrefill.value : null
+    prefill: toolPrefill?.page === "xpub" ? toolPrefill.value : null,
+    onOpenWalletReview: name => {
+      setWalletPick(wSlug(name));
+      setPage("wallets");
+    }
   })));
 }
 window.__ANONSCORE_TEST__ = Object.freeze({

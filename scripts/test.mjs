@@ -539,6 +539,47 @@ else {
   }
 }
 
+// Handoff mesh: after a scan, the Fix-It plan must close the loop into the
+// sibling tools (NEXT MOVES → Inspector / whole-wallet scan), each fix states
+// its grade consequence, and tool chips link our own directory reviews.
+{
+  const mp = await ctx.newPage();
+  try {
+    await mp.goto(`http://127.0.0.1:${PORT}/`, { waitUntil: "load" });
+    await mp.waitForFunction(() => document.getElementById("root")?.childElementCount > 0, { timeout: 20000 });
+    await mp.waitForTimeout(800);
+    await mp.getByText("Risky wallet").click();
+    await mp.waitForTimeout(3500);
+    const mesh = await mp.evaluate(() => ({
+      next: /NEXT MOVES/.test(document.body.innerText),
+      insp: [...document.querySelectorAll("button")].some(b => /Open the Inspector →/.test(b.textContent || "")),
+      xpub: [...document.querySelectorAll("button")].some(b => /Scan the whole wallet →/.test(b.textContent || "")),
+      review: [...document.querySelectorAll("button")].some(b => (b.textContent || "").trim() === "review"),
+      projGrade: /\(grade [A-F]\)/.test(document.body.innerText),
+    }));
+    if (!mesh.next || !mesh.insp || !mesh.xpub) fail(`mesh: NEXT MOVES card incomplete (${JSON.stringify(mesh)})`);
+    else pass("mesh: Fix-It closes the loop — NEXT MOVES → Inspector + whole-wallet scan");
+    if (!mesh.projGrade) fail("mesh: projection block doesn't state the projected grade");
+    else pass("mesh: projection states its grade consequence");
+    if (!mesh.review) fail("mesh: no 'review' link on tool chips despite WALLET_REVIEWS entries");
+    else {
+      // Click a review link → directory opens with that card highlighted
+      await mp.locator("button", { hasText: /^review$/ }).first().click();
+      await mp.waitForTimeout(700);
+      const dir = await mp.evaluate(() => ({
+        url: location.search,
+        picked: !![...document.querySelectorAll("article")].find(a => a.id.startsWith("wd-") && a.style.boxShadow && a.style.boxShadow !== "none"),
+      }));
+      if (!/page=wallets/.test(dir.url) || !dir.picked) fail(`mesh: review link didn't highlight the directory card (${JSON.stringify(dir)})`);
+      else pass("mesh: fix-plan 'review' link jumps to the highlighted directory card");
+    }
+  } catch (e) {
+    fail("mesh: " + e.message.slice(0, 140));
+  } finally {
+    await mp.close();
+  }
+}
+
 // Service worker should register and precache the static assets.
 await page.waitForFunction(
   () => navigator.serviceWorker?.controller || navigator.serviceWorker?.ready,

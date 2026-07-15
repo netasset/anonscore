@@ -2733,6 +2733,46 @@ const PROOF = {
   heuristic: { glyph: "?", dash: "1.5 3", verb: "consistent with", label: "Heuristic", note: "a weak tell that can misfire" },
 };
 // A compact legend that decodes the line styles beside any connection graph.
+/* Stable slug for a wallet-review deep link (?page=wallets&pick=sparrow-wallet). */
+const wSlug = name => (name || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+
+/* Shared "OPTIONS:" tool-chip row used by the Dashboard Fix-It plan and the
+   xpub Wallet-scan TOP FIXES. Renders each recommended tool as a chip (outbound
+   link + affiliate disclosure when applicable) and — when the tool has an entry
+   in our own WALLET_REVIEWS — a small "review" link that jumps to the directory
+   card, so the fix plan connects to the site's independent reviews instead of
+   bypassing them. */
+function FixToolChips({ tools, tool, onReview }) {
+  const list = tools || (tool ? [{ name: tool, note: "" }] : []);
+  if (!list.length) return null;
+  return (
+    <div style={{ marginTop: 10, display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
+      <span style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim, letterSpacing: 1 }}>OPTIONS:</span>
+      {list.map((t, ti) => {
+        const href = toolLink(t.name);
+        const aff = toolIsAffiliate(t.name);
+        const base = { fontFamily: T.mono, fontSize: 9, padding: "3px 8px", borderRadius: 4, background: T.cyan + "18", color: T.cyan, border: `1px solid ${T.cyan}30`, letterSpacing: 0.3, textDecoration: "none", cursor: href ? "pointer" : (t.note ? "help" : "default") };
+        const label = aff ? `${t.name} · affiliate` : t.name;
+        const chip = href
+          ? <a href={href} target="_blank" rel="noopener noreferrer nofollow" title={aff ? `${t.note ? t.note + " · " : ""}AnonScore earns a referral when you sign up — see /how-we-get-paid` : t.note} style={base}>{label}</a>
+          : <span title={t.note} style={base}>{t.name}</span>;
+        const reviewed = onReview && WALLET_REVIEWS.some(w => w.name === t.name);
+        return (
+          <span key={ti} style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+            {chip}
+            {reviewed && (
+              <button onClick={() => onReview(t.name)} title={"Our independent review of " + t.name + " — strengths and honest watch-outs"}
+                style={{ background: "none", border: "none", padding: 0, fontFamily: T.mono, fontSize: 9, color: T.textMid, cursor: "pointer", textDecoration: "underline dotted", textUnderlineOffset: 2 }}>
+                review
+              </button>
+            )}
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
 const EpistemicLegend = ({ kinds = ["proven", "inferred"], color = T.textMid, colors }) => {
   const cf = k => (colors && colors[k]) || color;
   return (
@@ -4392,15 +4432,16 @@ function Landing({ onAnalyze, isMobile, onCases, onNav, onOpenTool }) {
                     <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, background: T.surface, border: `1px solid ${T.border}`, borderRadius: 8, padding: "8px 12px", transition: "border-color .15s" }}
                       onMouseOver={e => e.currentTarget.style.borderColor = col}
                       onMouseOut={e => e.currentTarget.style.borderColor = T.border}>
-                      <button onClick={() => onAnalyze(h.addr, false, h.isLightning ? "ln_pubkey" : "btc")}
+                      <button onClick={() => h.isXpub ? (onNav && onNav("xpub")) : onAnalyze(h.addr, false, h.isLightning ? "ln_pubkey" : "btc")}
+                        title={h.isXpub ? "Wallet scans are keyed by fingerprint — the xpub itself is never stored. Re-paste it to rescan." : undefined}
                         style={{ display: "flex", alignItems: "center", gap: 10, flex: 1, background: "none", border: "none", cursor: "pointer", textAlign: "left", minWidth: 0 }}>
                         <div style={{ width: 6, height: 6, borderRadius: "50%", background: col, flexShrink: 0 }} />
                         <div style={{ fontFamily: T.mono, fontSize: 10, color: T.textDim, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                          {h.isLightning ? "⚡ " : "₿ "}{h.addr === "DEMO" || h.addr === "DEMO_A" || h.addr === "DEMO_LN" ? "Demo" : h.addr.slice(0, 14) + "…"}
+                          {h.isXpub ? "🔑 " : h.isLightning ? "⚡ " : "₿ "}{h.isXpub ? "Wallet " + h.addr.slice(7) : h.addr === "DEMO" || h.addr === "DEMO_A" || h.addr === "DEMO_LN" ? "Demo" : h.addr.slice(0, 14) + "…"}
                         </div>
                         <div style={{ fontFamily: T.serif, fontSize: 14, color: col, flexShrink: 0 }}>{h.grade}</div>
                         <div style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim, flexShrink: 0 }}>{h.score}/100</div>
-                        <div style={{ fontFamily: T.mono, fontSize: 8, color: T.textDim, flexShrink: 0 }}>↺</div>
+                        <div style={{ fontFamily: T.mono, fontSize: 8, color: T.textDim, flexShrink: 0 }}>{h.isXpub ? "→" : "↺"}</div>
                       </button>
                       <button onClick={() => deleteHistory(h.addr)}
                         style={{ background: "none", border: "none", color: T.textDim, fontSize: 12, cursor: "pointer", padding: "0 2px", flexShrink: 0, lineHeight: 1 }}
@@ -5538,7 +5579,7 @@ function TransactionInspector({ onBack, isMobile, onScan, onNav, prefill }) {
    XPUB WALLET SCAN — standalone tool at /?page=xpub. Paste an xpub/ypub/zpub,
    derive + gap-limit scan the whole wallet client-side, score it wallet-level.
 ───────────────────────────────────────────── */
-function XpubScan({ onBack, isMobile, onScan, onNav, prefill }) {
+function XpubScan({ onBack, isMobile, onScan, onNav, prefill, onOpenWalletReview }) {
   useLang();
   const [raw, setRaw] = useState(prefill || "");
   const [busy, setBusy] = useState(false);
@@ -5560,7 +5601,20 @@ function XpubScan({ onBack, isMobile, onScan, onNav, prefill }) {
     setError(""); setResult(null); setProgress({ derived: 0, used: 0 }); setBusy(true);
     try {
       const scan = await scanXpub(raw.trim(), { onProgress: p => setProgress({ derived: p.derived, used: p.used }) });
-      setResult(runWalletEngine(scan));
+      const rep = runWalletEngine(scan);
+      // History parity with address/LN scans — keyed on the BIP32 fingerprint
+      // (hash160 of the key)[0..4]; the xpub itself is NEVER stored.
+      if (!rep.isEmpty) {
+        try {
+          const k = decodeXpub(raw.trim());
+          const fp = Array.from(_hash160(k.keyData).slice(0, 4)).map(b => b.toString(16).padStart(2, "0")).join("");
+          const key = "wallet:" + fp;
+          const prev = getHistory().find(e => e.addr === key);
+          rep.delta = prev ? rep.score - prev.score : null;
+          addToHistory({ addr: key, score: rep.score, grade: rep.grade, label: rep.riskLabel, scanAt: Date.now(), isXpub: true });
+        } catch {}
+      }
+      setResult(rep);
     } catch (e) {
       setError(e && e.message ? e.message : "Couldn't scan that key.");
     } finally { setBusy(false); setProgress(null); }
@@ -5587,6 +5641,7 @@ function XpubScan({ onBack, isMobile, onScan, onNav, prefill }) {
         { k: "USED ADDRESSES", v: r.stats.used, c: T.cyan },
         { k: "REUSED", v: r.stats.reused, c: r.stats.reused ? T.red : T.green },
         { k: "BALANCE", v: sats(r.stats.balance), c: T.blue },
+        ...(r.delta != null && r.delta !== 0 ? [{ k: "SINCE LAST SCAN", v: (r.delta > 0 ? "+" : "") + r.delta, c: r.delta > 0 ? T.green : T.red }] : []),
       ];
       report = (
         <div style={{ display: "flex", flexDirection: "column", gap: 14, marginTop: 20, animation: "fadeUp .4s ease both" }}>
@@ -5618,7 +5673,8 @@ function XpubScan({ onBack, isMobile, onScan, onNav, prefill }) {
                   <div key={i} style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
                     <span style={{ fontSize: 18, flexShrink: 0 }}>{rec.icon}</span>
                     <div><div style={{ fontFamily: T.serif, fontSize: 16, color: T.text }}>{rec.action} <span style={{ fontFamily: T.serif, fontSize: 13, color: T.green }}>+{rec.impact}</span></div>
-                      <div style={{ fontSize: 12.5, color: T.textMid, lineHeight: 1.55, marginTop: 3 }}>{rec.plain}</div></div>
+                      <div style={{ fontSize: 12.5, color: T.textMid, lineHeight: 1.55, marginTop: 3 }}>{rec.plain}</div>
+                      <FixToolChips tools={rec.tools} tool={rec.tool} onReview={onOpenWalletReview} /></div>
                   </div>
                 ))}
               </div>
@@ -5715,10 +5771,16 @@ function XpubScan({ onBack, isMobile, onScan, onNav, prefill }) {
    Filterable by category, links out via toolLink() (so affiliate URLs
    slot in automatically when configured).
 ───────────────────────────────────────────── */
-function WalletDirectory({ onBack, isMobile, onNav }) {
+function WalletDirectory({ onBack, isMobile, onNav, pick }) {
   useLang();
   const [cat, setCat] = useState("all");
   const [query, setQuery] = useState("");
+  // Arrived via a "review" link in a fix plan — bring that card into view.
+  useEffect(() => {
+    if (!pick) return;
+    const tm = setTimeout(() => document.getElementById("wd-" + pick)?.scrollIntoView({ behavior: "smooth", block: "center" }), 150);
+    return () => clearTimeout(tm);
+  }, [pick]);
   const anyAff = WALLET_REVIEWS.some(w => toolIsAffiliate(w.name));
 
   const filtered = useMemo(() => {
@@ -5806,8 +5868,9 @@ function WalletDirectory({ onBack, isMobile, onNav }) {
                 {list.map(w => {
                   const href = toolLink(w.name);
                   const aff = toolIsAffiliate(w.name);
+                  const picked = pick && wSlug(w.name) === pick;
                   return (
-                    <article key={w.name} style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 14, padding: "18px 20px", display: "flex", flexDirection: "column", gap: 10, transition: "border-color .2s, box-shadow .25s, transform .25s cubic-bezier(.16,.84,.44,1)" }}
+                    <article key={w.name} id={"wd-" + wSlug(w.name)} style={{ background: T.card, border: `1px solid ${picked ? T.cyan + "88" : T.border}`, boxShadow: picked ? `0 0 28px -8px ${T.cyan}88` : "none", borderRadius: 14, padding: "18px 20px", display: "flex", flexDirection: "column", gap: 10, transition: "border-color .2s, box-shadow .25s, transform .25s cubic-bezier(.16,.84,.44,1)" }}
                       onMouseEnter={e => { e.currentTarget.style.borderColor = T.cyan + "44"; e.currentTarget.style.boxShadow = `0 12px 32px -18px ${T.cyan}77`; e.currentTarget.style.transform = "translateY(-3px)"; }}
                       onMouseLeave={e => { e.currentTarget.style.borderColor = T.border; e.currentTarget.style.boxShadow = "none"; e.currentTarget.style.transform = "none"; }}>
                       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
@@ -6937,12 +7000,13 @@ const THREAT_MODELS = [
     w: { conc: 3, reuse: 3, node: 3, cj: 2, lightning: 2, dust: 2, cons: 2, change: 1, changeid: 1, fee: 1, round: 1 } },
 ];
 
-function Dashboard({ address, addrInfo, utxos, txs, isMobile, onBack, onRescan, toast, autoShare, scanAt, defaultSimple, simpleMode: simpleModeFromApp, onSimpleModeChange, onCoach, delta }) {
+function Dashboard({ address, addrInfo, utxos, txs, isMobile, onBack, onRescan, toast, autoShare, scanAt, defaultSimple, simpleMode: simpleModeFromApp, onSimpleModeChange, onCoach, delta, onNav, onOpenCase, onOpenWalletReview }) {
   const [tab, setTab] = useState("Fix It");
   const [threat, setThreat] = useState(null); // null = ranked for everyone; session-only, never stored
   const clusterN = useMemo(() => computeCluster(txs, address).linked.length, [txs, address]);
   const poison = useMemo(() => computePoisoning(txs, address), [txs, address]);
-  const caseEntity = CASE_FILES.find(c => c.address === address)?.entity;
+  const caseHit = CASE_FILES.find(c => c.address === address);
+  const caseEntity = caseHit?.entity;
   const [simpleMode, setSimpleMode] = useState(simpleModeFromApp !== undefined ? simpleModeFromApp : (defaultSimple || false));
   const setSimpleModeSync = (val) => { setSimpleMode(val); onSimpleModeChange && onSimpleModeChange(val); };
   const [shareOpen, setShareOpen] = useState(false);
@@ -7211,6 +7275,22 @@ function Dashboard({ address, addrInfo, utxos, txs, isMobile, onBack, onRescan, 
           </div>
         )}
 
+        {/* This scanned address IS one of our forensic case files — link the story */}
+        {caseHit && onOpenCase && (
+          <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", background: T.btc + "10", border: `1px solid ${T.btc}44`, borderRadius: 14, padding: "12px 18px", marginBottom: 14 }}>
+            <span aria-hidden="true" style={{ fontSize: 16 }}>📁</span>
+            <div style={{ flex: 1, minWidth: 200, fontSize: 13, color: T.textMid, lineHeight: 1.5 }}>
+              This address is <strong style={{ color: T.text }}>Case File #{caseHit.id} — {caseHit.title}</strong>. You're auditing a wallet with a story; we've written it up.
+            </div>
+            <button onClick={() => onOpenCase(caseHit)}
+              style={{ background: "transparent", border: `1.5px solid ${T.btc}66`, borderRadius: 8, padding: "7px 14px", color: T.btc, fontFamily: T.mono, fontSize: 11, cursor: "pointer", transition: "all .15s", whiteSpace: "nowrap" }}
+              onMouseOver={e => { e.currentTarget.style.background = T.btc; e.currentTarget.style.color = T.bg; }}
+              onMouseOut={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = T.btc; }}>
+              Read the case →
+            </button>
+          </div>
+        )}
+
         {/* Tabs + Simple Mode toggle — desktop only; mobile uses bottom bar */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 14 }}>
           {!isMobile && (
@@ -7317,18 +7397,7 @@ function Dashboard({ address, addrInfo, utxos, txs, isMobile, onBack, onRescan, 
                   {!done && <>
                     <div style={{ fontSize: 14, color: T.textMid, lineHeight: 1.7, marginBottom: 10 }}>{displayPlain}</div>
                     {!simpleMode && <div style={{ fontSize: 12, color: T.textDim, lineHeight: 1.6, background: T.surface, borderRadius: 8, padding: "10px 14px" }}><strong style={{ color: T.textMid }}>How:</strong> {r.detail}</div>}
-                    <div style={{ marginTop: 10, display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
-                      <span style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim, letterSpacing: 1 }}>OPTIONS:</span>
-                      {(r.tools || [{ name: r.tool, note: "" }]).map((t, ti) => {
-                        const href = toolLink(t.name);
-                        const aff = toolIsAffiliate(t.name);
-                        const base = { fontFamily: T.mono, fontSize: 9, padding: "3px 8px", borderRadius: 4, background: T.cyan + "18", color: T.cyan, border: `1px solid ${T.cyan}30`, letterSpacing: 0.3, textDecoration: "none", cursor: href ? "pointer" : (t.note ? "help" : "default") };
-                        const label = aff ? `${t.name} · affiliate` : t.name;
-                        return href
-                          ? <a key={ti} href={href} target="_blank" rel="noopener noreferrer nofollow" title={aff ? `${t.note ? t.note + " · " : ""}AnonScore earns a referral when you sign up — see /how-we-get-paid` : t.note} style={base}>{label}</a>
-                          : <span key={ti} title={t.note} style={base}>{t.name}</span>;
-                      })}
-                    </div>
+                    <FixToolChips tools={r.tools} tool={r.tool} onReview={onOpenWalletReview} />
                     {!simpleMode && (r.tools || []).length > 0 && (
                       <div style={{ marginTop: 6, fontSize: 11, color: T.textDim, lineHeight: 1.55 }}>
                         {(r.tools || []).map((t, ti) => t.note ? <span key={ti}><span style={{ color: T.textMid }}>{t.name}</span> — {t.note}{ti < r.tools.length - 1 ? " · " : ""}</span> : null)}
@@ -7337,7 +7406,12 @@ function Dashboard({ address, addrInfo, utxos, txs, isMobile, onBack, onRescan, 
                   </>}
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 8, alignItems: isMobile ? "flex-start" : "flex-end", flexShrink: 0 }}>
-                  <div style={{ fontFamily: T.serif, fontSize: 22, color: T.green }}>+{r.impact}pts</div>
+                  <div style={{ textAlign: isMobile ? "left" : "right" }}>
+                    <div style={{ fontFamily: T.serif, fontSize: 22, color: T.green }}>+{r.impact}pts</div>
+                    {scoreGrade(Math.min(score + r.impact, 97)) !== grade && (
+                      <div title="Your grade if you complete just this one fix" style={{ fontFamily: T.mono, fontSize: 9, color: T.green, marginTop: 1 }}>→ grade {scoreGrade(Math.min(score + r.impact, 97))}</div>
+                    )}
+                  </div>
                   {tm && !done && w === 3 && <Tag label="front line" color={T.cyan} size={9} />}
                   {tm && !done && w === 0 && <Tag label="lower priority here" color={T.textDim} size={9} />}
                   <Tag label={r.effort} color={r.effort === "Easy" ? T.green : r.effort === "Medium" ? T.amber : T.textMid} size={9} />
@@ -7349,13 +7423,53 @@ function Dashboard({ address, addrInfo, utxos, txs, isMobile, onBack, onRescan, 
               );
             })}
             {/* Projection */}
+            {(() => { const proj = Math.min(score + recommendations.reduce((a, r) => a + r.impact, 0), 97); return (
             <div style={{ background: T.greenLo, border: `1px solid ${T.green}33`, borderRadius: 14, padding: "18px 22px", display: "flex", gap: 14, alignItems: "center" }}>
               <div style={{ fontSize: 24 }}>🎯</div>
               <div>
-                <div style={{ fontFamily: T.serif, fontSize: 17, color: T.text, fontWeight: 400 }}>After all fixes, projected score: <span style={{ color: T.green }}>{Math.min(score + recommendations.reduce((a, r) => a + r.impact, 0), 97)}/100</span></div>
-                <div style={{ fontSize: 13, color: T.textMid, marginTop: 4 }}>Estimated: 1–3 weeks, depending on CoinJoin wait times.</div>
+                <div style={{ fontFamily: T.serif, fontSize: 17, color: T.text, fontWeight: 400 }}>After all fixes, projected score: <span style={{ color: T.green }}>{proj}/100 (grade {scoreGrade(proj)})</span></div>
+                <div style={{ fontSize: 13, color: T.textMid, marginTop: 4 }}>Estimated: 1–3 weeks, depending on CoinJoin wait times. The ceiling is 97, not 100 — what's already on-chain can't be erased, only diluted going forward.</div>
               </div>
             </div>
+            ); })()}
+
+            {/* Next moves — close the loop into the sibling tools. Diagnosis is
+                only half the hub; these hand the user the tool that prevents the
+                NEXT leak (Inspector) and the one that sees the real perimeter
+                (whole-wallet xpub scan). */}
+            {onNav && (
+              <div style={{ background: T.card, border: `1px solid ${T.cyan}2e`, borderRadius: 14, padding: "18px 22px" }}>
+                <div style={{ fontFamily: T.mono, fontSize: 9, color: T.cyan, letterSpacing: 2, marginBottom: 12 }}>NEXT MOVES</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                  <div style={{ display: "flex", gap: 12, alignItems: "flex-start", flexWrap: "wrap" }}>
+                    <span aria-hidden="true" style={{ fontSize: 18, flexShrink: 0 }}>🔬</span>
+                    <div style={{ flex: 1, minWidth: 220, fontSize: 13, color: T.textMid, lineHeight: 1.6 }}>
+                      <strong style={{ color: T.text }}>Protect the next transaction.</strong> Before you broadcast your next spend, paste the unsigned transaction (PSBT) into the Inspector and see what it leaks — while you can still fix it. Then rescan here and watch your score move.
+                    </div>
+                    <button onClick={() => onNav("inspector")}
+                      style={{ background: "transparent", border: `1.5px solid ${T.cyan}55`, borderRadius: 8, padding: "7px 14px", color: T.cyan, fontFamily: T.mono, fontSize: 11, cursor: "pointer", transition: "all .15s", whiteSpace: "nowrap", flexShrink: 0 }}
+                      onMouseOver={e => { e.currentTarget.style.background = T.cyan; e.currentTarget.style.color = T.bg; }}
+                      onMouseOut={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = T.cyan; }}>
+                      Open the Inspector →
+                    </button>
+                  </div>
+                  <div style={{ display: "flex", gap: 12, alignItems: "flex-start", flexWrap: "wrap", borderTop: `1px solid ${T.borderLo}`, paddingTop: 12 }}>
+                    <span aria-hidden="true" style={{ fontSize: 18, flexShrink: 0 }}>🔑</span>
+                    <div style={{ flex: 1, minWidth: 220, fontSize: 13, color: T.textMid, lineHeight: 1.6 }}>
+                      <strong style={{ color: T.text }}>This score covers one address.</strong> {clusterN > 0
+                        ? <>The chain already links it to <strong style={{ color: T.red }}>{clusterN} other{clusterN > 1 ? "s" : ""}</strong> — your real exposure is wallet-wide. The xpub scan derives every address in your browser and audits the whole perimeter.</>
+                        : <>If it belongs to an HD wallet, the xpub scan audits every address the wallet derives — including the reuse and cross-address links no single-address scan can see.</>}
+                    </div>
+                    <button onClick={() => onNav("xpub")}
+                      style={{ background: "transparent", border: `1.5px solid ${T.cyan}55`, borderRadius: 8, padding: "7px 14px", color: T.cyan, fontFamily: T.mono, fontSize: 11, cursor: "pointer", transition: "all .15s", whiteSpace: "nowrap", flexShrink: 0 }}
+                      onMouseOver={e => { e.currentTarget.style.background = T.cyan; e.currentTarget.style.color = T.bg; }}
+                      onMouseOut={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = T.cyan; }}>
+                      Scan the whole wallet →
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
             <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: 14, padding: "18px 22px", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
               <div>
                 <div style={{ fontFamily: T.serif, fontSize: 17, color: T.text, fontWeight: 400 }}>Share your privacy score</div>
@@ -8168,6 +8282,7 @@ function App() {
   const [activeCaseFile, setActiveCaseFile] = useState(null);
   const [pendingScan, setPendingScan] = useState(null); // { addr, inputType } awaiting user confirmation
   const [toolPrefill, setToolPrefill] = useState(null); // { page, value } — landing handed an xpub/PSBT to its tool
+  const [walletPick, setWalletPick] = useState(null);   // slug of a directory review card to highlight (?page=wallets&pick=…)
   const [scoreTint, setScoreTint] = useState(null);     // grade color for the ambient backdrop while a dashboard shows
   const [scoreDelta, setScoreDelta] = useState(null);   // score change vs the user's previous scan of the same address
 
@@ -8206,7 +8321,7 @@ function App() {
       }
       const pageParam = params.get("page");
       if (pageParam === "coach") setPage("coach");
-      else if (pageParam === "wallets") setPage("wallets");
+      else if (pageParam === "wallets") { setPage("wallets"); setWalletPick(params.get("pick") || null); }
       else if (pageParam === "inspector") setPage("inspector");
       else if (pageParam === "xpub") setPage("xpub");
       else if (pageParam === "cases") setPage("cases");
@@ -8400,12 +8515,12 @@ function App() {
       {page === "cases"        && <CaseFiles onOpenCase={c => { setActiveCaseFile(c); setPage("case_detail"); }} onBack={() => setPage("landing")} isMobile={isMobile} onNav={setPage} />}
       {page === "case_detail"  && activeCaseFile && <CaseDetail caseFile={activeCaseFile} onBack={() => setPage("cases")} onAnalyze={analyze} isMobile={isMobile} onNav={setPage} />}
       {page === "scanning"     && <Scanning address={address || lnNodeId} isLightning={isScanningLightning} dataReady={scanDataReady} />}
-      {page === "dashboard"    && <Dashboard address={address} addrInfo={addrInfo} utxos={utxos} txs={txs} isMobile={isMobile} onBack={() => setPage("landing")} onRescan={analyze} toast={toast} autoShare={autoShare} scanAt={scanAt} defaultSimple={defaultSimple} simpleMode={simpleMode} onSimpleModeChange={setSimpleMode} onCoach={() => setPage("coach")} delta={scoreDelta} />}
+      {page === "dashboard"    && <Dashboard address={address} addrInfo={addrInfo} utxos={utxos} txs={txs} isMobile={isMobile} onBack={() => setPage("landing")} onRescan={analyze} toast={toast} autoShare={autoShare} scanAt={scanAt} defaultSimple={defaultSimple} simpleMode={simpleMode} onSimpleModeChange={setSimpleMode} onCoach={() => setPage("coach")} delta={scoreDelta} onNav={setPage} onOpenCase={c => { setActiveCaseFile(c); setPage("case_detail"); }} onOpenWalletReview={name => { setWalletPick(wSlug(name)); setPage("wallets"); }} />}
       {page === "ln_dashboard" && <LightningDashboard nodeId={lnNodeId} nodeData={lnNodeData} channels={lnChannels} isMobile={isMobile} onBack={() => setPage("landing")} onRescan={analyze} toast={toast} />}
       {page === "coach"        && <CoachWaitlist onBack={() => setPage("landing")} isMobile={isMobile} onNav={setPage} />}
-      {page === "wallets"      && <WalletDirectory onBack={() => setPage("landing")} isMobile={isMobile} onNav={setPage} />}
+      {page === "wallets"      && <WalletDirectory onBack={() => setPage("landing")} isMobile={isMobile} onNav={setPage} pick={walletPick} />}
       {page === "inspector"    && <TransactionInspector onBack={() => setPage("landing")} isMobile={isMobile} onScan={analyze} onNav={setPage} prefill={toolPrefill?.page === "inspector" ? toolPrefill.value : null} />}
-      {page === "xpub"         && <XpubScan onBack={() => setPage("landing")} isMobile={isMobile} onScan={analyze} onNav={setPage} prefill={toolPrefill?.page === "xpub" ? toolPrefill.value : null} />}
+      {page === "xpub"         && <XpubScan onBack={() => setPage("landing")} isMobile={isMobile} onScan={analyze} onNav={setPage} prefill={toolPrefill?.page === "xpub" ? toolPrefill.value : null} onOpenWalletReview={name => { setWalletPick(wSlug(name)); setPage("wallets"); }} />}
       </div>
     </>
   );
