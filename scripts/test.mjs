@@ -394,10 +394,114 @@ else {
     else if (!report.epistemicLegend) fail("inspector: proven/inferred epistemic legend did not render");
     else if (thirdParty.length) fail(`inspector: made third-party requests (must be fully offline): ${thirdParty.join(", ")}`);
     else pass("inspector renders at /?page=inspector; example PSBT parsed + full report (incl. entropy), 100% offline");
+
+    // Item 3 — the degraded raw-hex path must route users to the richer txid
+    // lookup ("ALREADY BROADCAST?"), and that hint must NOT appear on the full
+    // PSBT report (which has input values). The demo PSBT above showed no hint;
+    // now paste a signed raw hex (no prevouts) and confirm the hint appears.
+    const noHintOnPsbt = await insPage.evaluate(() => !/ALREADY BROADCAST\?/.test(document.body.innerText));
+    const RAWHEX = "0200000000010100000000000000000000000000000000000000000000000000000000000000000000000000fdffffff018038010000000000160014abababababababababababababababababababab02483045022100111111111111111111111111111111111111111111111111111111111111111102202222222222222222222222222222222222222222222222222222222222222222012103cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd00000000";
+    await insPage.locator("textarea#tx-input").fill(RAWHEX);
+    await insPage.getByText("Inspect →").click();
+    await insPage.waitForTimeout(400);
+    const hintOnRawhex = await insPage.evaluate(() => /ALREADY BROADCAST\?/.test(document.body.innerText));
+    if (!noHintOnPsbt) fail("inspector: 'paste the txid' hint wrongly rendered on the full PSBT report");
+    else if (!hintOnRawhex) fail("inspector: raw-hex report missing the 'paste the txid instead' upgrade hint");
+    else pass("inspector: raw-hex report routes to the txid path; full PSBT report shows no such hint");
   } catch (e) {
     fail("inspector: " + e.message.slice(0, 120));
   } finally {
     await insPage.close();
+  }
+}
+
+// Confirmed-transaction report: paste a txid → the Inspector fetches the tx
+// (+outspends) from the explorer and runs the full forensics on it. The explorer
+// call is intercepted with a local fixture (route.fulfill → zero egress), so this
+// stays offline while exercising fetchTx → normalizeEsploraTx → report end-to-end.
+{
+  const txPage = await ctx.newPage();
+  const TXID = "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789";
+  const SPENDER = "1111111111111111111111111111111111111111111111111111111111111111";
+  const hHighR = "3045022100" + "11".repeat(32) + "0220" + "22".repeat(32) + "01";
+  const txFixture = {
+    txid: TXID, version: 2, locktime: 799990, size: 222, weight: 561, fee: 1500,
+    status: { confirmed: true, block_height: 800000, block_time: 1700000000, block_hash: "00".repeat(32) },
+    vin: [
+      { txid: "22".repeat(32), vout: 0, sequence: 4294967293, is_coinbase: false, witness: [hHighR, "03" + "cd".repeat(32)],
+        prevout: { value: 1000000, scriptpubkey_type: "v0_p2wpkh", scriptpubkey_address: "bc1qinputaaa" } },
+      { txid: "33".repeat(32), vout: 1, sequence: 4294967293, is_coinbase: false, witness: [hHighR, "03" + "ab".repeat(32)],
+        prevout: { value: 500000, scriptpubkey_type: "v0_p2wpkh", scriptpubkey_address: "bc1qinputbbb" } },
+    ],
+    vout: [
+      { value: 1200000, scriptpubkey_type: "v0_p2wpkh", scriptpubkey_address: "bc1qpayeeccc" },
+      { value: 298500, scriptpubkey_type: "v0_p2wpkh", scriptpubkey_address: "bc1qchangeddd" },
+    ],
+  };
+  const outspendsFixture = [
+    { spent: true, txid: SPENDER, vin: 0, status: { confirmed: true, block_height: 800010, block_time: 1700600000 } },
+    { spent: false },
+  ];
+  await txPage.route("**/tx/**", route => {
+    const url = route.request().url();
+    const body = url.endsWith("/outspends") ? outspendsFixture : txFixture;
+    return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
+  });
+  try {
+    await txPage.goto(`http://127.0.0.1:${PORT}/?page=inspector`, { waitUntil: "load" });
+    await txPage.waitForFunction(() => document.getElementById("root")?.childElementCount > 0, { timeout: 15000 });
+    await txPage.waitForTimeout(400);
+    await txPage.locator("textarea#tx-input").fill(TXID);
+    await txPage.getByText("Inspect →").click();
+    await txPage.waitForTimeout(900);
+    const rep = await txPage.evaluate(() => {
+      const has = s => !![...document.querySelectorAll("*")].find(e => e.textContent === s);
+      return {
+        confirmedVerdict: has("FORENSIC VERDICT · CONFIRMED TX"),
+        context: has("CONFIRMED"),
+        aftermath: has("WHAT HAPPENED SINCE"),
+        entropy: has("INTERPRETATION ENTROPY"),
+        efficiency: /% efficiency/.test(document.body.innerText),
+        followBtn: [...document.querySelectorAll("button")].some(b => (b.textContent || "").trim() === "follow →"),
+        rulesCore: /not signed by Bitcoin Core/.test(document.body.innerText),
+      };
+    });
+    const miss = Object.entries(rep).filter(([, v]) => !v).map(([k]) => k);
+    if (miss.length) fail(`txid report: missing sections after fetch: ${miss.join(", ")}`);
+    else pass("txid report: paste a txid → confirmed-tx forensics (context, aftermath, entropy, efficiency, follow-the-coins)");
+  } catch (e) {
+    fail("txid report: " + e.message.slice(0, 140));
+  } finally {
+    await txPage.close();
+  }
+}
+
+// Item 5 — the Lightning dashboard is welded into the hub: its Fix-It plan uses
+// FixToolChips (affiliate disclosure + directory 'review' jumps) and a NEXT MOVES
+// card that reaches the Inspector and Methodology (the mobile methodology path).
+{
+  const lnPage = await ctx.newPage();
+  try {
+    await lnPage.goto(`http://127.0.0.1:${PORT}/`, { waitUntil: "load" });
+    await lnPage.waitForFunction(() => document.getElementById("root")?.childElementCount > 0, { timeout: 20000 });
+    await lnPage.waitForTimeout(600);
+    await lnPage.locator("button", { hasText: "Lightning node" }).first().click();
+    await lnPage.waitForTimeout(3200);   // DEMO_LN scan: ~1400 + 300 + render
+    const ln = await lnPage.evaluate(() => ({
+      dash: /Grade/.test(document.body.innerText),
+      nextMoves: !![...document.querySelectorAll("*")].find(e => e.textContent === "NEXT MOVES"),
+      inspector: [...document.querySelectorAll("button")].some(b => /Open the Inspector/.test(b.textContent || "")),
+      methodology: [...document.querySelectorAll("button")].some(b => /How scoring works/.test(b.textContent || "")),
+      review: [...document.querySelectorAll("button")].some(b => (b.textContent || "").trim() === "review"),
+    }));
+    if (!ln.dash) fail("ln: Lightning dashboard didn't render after demo scan");
+    else if (!ln.nextMoves || !ln.inspector || !ln.methodology) fail(`ln: NEXT MOVES weld incomplete (${JSON.stringify(ln)})`);
+    else if (!ln.review) fail("ln: Fix-It tool chips missing the directory 'review' jump (FixToolChips not wired)");
+    else pass("ln: Lightning dashboard welded into the hub — FixToolChips reviews + NEXT MOVES (Inspector + methodology)");
+  } catch (e) {
+    fail("ln: " + e.message.slice(0, 140));
+  } finally {
+    await lnPage.close();
   }
 }
 
@@ -797,6 +901,23 @@ const unit = await page.evaluate(() => {
     // raw hex carries no input values → honestly reports unavailable, never guesses
     const noVals = { vin: [{ prevout: null }], vout: [{ value: 1000, scriptpubkey_type: "v0_p2wpkh" }] };
     t("entropy: missing input values → unavailable (no guessing)", E.txLinkability(noVals).available === false && E.txLinkability(noVals).reason === "input-values-unknown");
+
+    // — KYCP-parity wallet efficiency: N / Nmax, where Nmax is the best-possible
+    //   (zero-fee, equal-value) transaction of the same shape —
+    const pin = (n, v, ty) => ({ prevout: { value: v, scriptpubkey_type: ty || "v0_p2wpkh" } });
+    const pout = (v, ty) => ({ value: v, scriptpubkey_type: ty || "v0_p2wpkh" });
+    // 2×2 equal-value CoinJoin: N=3, Nmax=3 → 100% efficient (a perfect mix)
+    const cjTx = { vin: [pin(0, 1000000), pin(0, 1000000)], vout: [pout(1000000), pout(1000000)] };
+    const cjL = E.txLinkability(cjTx);
+    t("efficiency: 2×2 equal CoinJoin → Nmax 3, efficiency 1.0", cjL.nmax === 3 && close(cjL.efficiency, 1));
+    // Whirlpool 5×5 equal: the canonical Nmax=1496 / entropy≈10.5459 vector, 100%
+    const wpTx = { vin: Array.from({ length: 5 }, () => pin(0, 5000000)), vout: Array.from({ length: 5 }, () => pout(5000000)) };
+    const wpL = E.txLinkability(wpTx);
+    t("efficiency: Whirlpool 5×5 → Nmax 1496, entropy ≈10.5459, efficiency 1.0", wpL.nmax === 1496 && close(wpL.entropy, Math.log2(1496)) && close(wpL.efficiency, 1));
+    // A plain 2-in/2-out payment (single interpretation) → 1/3 of the ideal shape
+    const payTx = { vin: [pin(0, 100000), pin(0, 50000)], vout: [pout(120000), pout(29000)] };
+    const payL = E.txLinkability(payTx);
+    t("efficiency: plain 2×2 payment N=1 → efficiency 1/3", payL.N === 1 && payL.nmax === 3 && close(payL.efficiency, 1 / 3));
   }
 
   // — CoinJoin classifier (cited structural thresholds) —
@@ -849,6 +970,68 @@ const unit = await page.evaluate(() => {
     t("fingerprint: parser captures the witness stack", Array.isArray(stx.vin[0].witness) && stx.vin[0].witness.length === 2);
     const sfp = E.fingerprintTx(stx);
     t("fingerprint: high-r signed tx decisively rules out Core", sfp.signals.some(s => s.key === "lowr" && s.distinctive) && /not signed by Bitcoin Core/.test(sfp.guess));
+
+    // Legacy scriptSig low-r: P2PKH/P2SH inputs carry sigs in the scriptSig, not
+    // the witness. _scriptPushes must surface them so the low-r check fires.
+    const hHighR = "3045022100" + "11".repeat(32) + "0220" + "22".repeat(32) + "01";  // 72-byte high-r DER sig + sighash
+    const pkPush = "21" + "03" + "cd".repeat(32);                                       // 33-byte compressed pubkey push
+    const ssHex = "48" + hHighR + pkPush;                                               // scriptSig: <0x48 72-byte sig><0x21 pubkey>
+    const pushes = E._scriptPushes(hx(ssHex));
+    t("scriptPushes: extracts the sig + pubkey pushes from a scriptSig", pushes.length === 2 && pushes[0].length === 72 && pushes[1].length === 33);
+    // A P2SH redeemScript push (starts with OP_2 = 0x52, not 0x30) must NOT be
+    // misread as a signature by the DER classifier.
+    t("scriptPushes: a redeemScript push is not misread as a DER signature", E._derSigInfo(hx("5221" + "03".padEnd(66, "a") + "51ae")) === null);
+  }
+
+  // — Esplora confirmed-tx pipeline: normalizeEsploraTx must feed the offline
+  //   analyzers correctly. This is the silent-failure seam the source warns of
+  //   (hex witnesses, dropped scriptSigs, coinbase prevout:null), pinned here. —
+  {
+    const hHighR = "3045022100" + "11".repeat(32) + "0220" + "22".repeat(32) + "01";
+    // (a) hex witness with a high-r sig → hex→bytes conversion must fire → rules Core out
+    const wTx = E.normalizeEsploraTx({
+      txid: "a".repeat(64), version: 2, locktime: 799995, size: 141, weight: 561, fee: 1000,
+      status: { confirmed: true, block_height: 800000, block_time: 1700000000 },
+      vin: [{ txid: "b".repeat(64), vout: 0, sequence: 0xfffffffd, is_coinbase: false,
+              prevout: { value: 500000, scriptpubkey_type: "v0_p2wpkh", scriptpubkey_address: "bc1qexample" },
+              witness: [hHighR, "03" + "cd".repeat(32)] }],
+      vout: [{ value: 499000, scriptpubkey_type: "v0_p2wpkh", scriptpubkey_address: "bc1qout" }],
+    });
+    t("esplora: confirmed flag + status flow through", wTx.confirmed === true && wTx.status.block_height === 800000 && wTx.partial === false);
+    t("esplora: exact fee rate from real weight (not estimated)", (() => { const fr = E.feeRate(wTx); return fr && fr.rate === +(1000 / Math.ceil(561 / 4)).toFixed(1) && fr.estimated === false; })());
+    t("esplora: hex witness converted → high-r sig rules Core out", /not signed by Bitcoin Core/.test(E.fingerprintTx(wTx).guess));
+    // verified anti-fee-sniping: locktime 799995 confirmed at 800000 → delta 5 ∈ [1,100]
+    t("esplora: locktime verified against inclusion height", E.fingerprintTx(wTx).signals.some(s => s.key === "locktime" && /verified anti-fee-sniping/.test(s.t)));
+
+    // (b) legacy P2PKH input carries its sig in scriptsig (hex) → still caught
+    const ssHex = "48" + hHighR + "21" + "03" + "cd".repeat(32);
+    const ssTx = E.normalizeEsploraTx({
+      txid: "c".repeat(64), version: 1, locktime: 0, size: 200, weight: 800, fee: 500,
+      status: { confirmed: true, block_height: 700100 },
+      vin: [{ txid: "d".repeat(64), vout: 1, sequence: 0xffffffff, is_coinbase: false, scriptsig: ssHex,
+              prevout: { value: 90000, scriptpubkey_type: "p2pkh", scriptpubkey_address: "1Example" } }],
+      vout: [{ value: 89500, scriptpubkey_type: "p2pkh", scriptpubkey_address: "1Out" }],
+    });
+    t("esplora: legacy scriptSig high-r sig rules Core out (the fix)", /not signed by Bitcoin Core/.test(E.fingerprintTx(ssTx).guess));
+
+    // (c) coinbase input (prevout: null) → partial, no crash on any analyzer
+    const cbTx = E.normalizeEsploraTx({
+      txid: "e".repeat(64), version: 2, locktime: 0, size: 300, weight: 1000, fee: 0,
+      status: { confirmed: true, block_height: 850000 },
+      vin: [{ is_coinbase: true, prevout: null, sequence: 0xffffffff }],
+      vout: [{ value: 312500000, scriptpubkey_type: "v0_p2wpkh", scriptpubkey_address: "bc1qminer" },
+             { value: 0, scriptpubkey_type: "op_return" }],
+    });
+    t("esplora: coinbase input → partial, no prevout crash", cbTx.partial === true && (() => { try { E.analyzeTx(cbTx); E.fingerprintTx(cbTx); E.guessChange(cbTx); E.txLinkability(cbTx); return true; } catch { return false; } })());
+
+    // (d) p2pk vout with no scriptpubkey_address → analyzers don't crash
+    const pkTx = E.normalizeEsploraTx({
+      txid: "f".repeat(64), version: 2, locktime: 0, fee: 200, weight: 400,
+      status: { confirmed: false },
+      vin: [{ txid: "0".repeat(64), vout: 0, sequence: 0xfffffffd, prevout: { value: 5000, scriptpubkey_type: "p2pk" } }],
+      vout: [{ value: 4800, scriptpubkey_type: "p2pk" }],   // no scriptpubkey_address
+    });
+    t("esplora: unconfirmed flag + address-less vout → no crash", pkTx.confirmed === false && (() => { try { E.analyzeTx(pkTx); E.guessChange(pkTx); return true; } catch { return false; } })());
   }
 
   // — Silent Payments (BIP352) decode/validate — validated against the spec's
@@ -986,6 +1169,25 @@ for (const tab of ["Fix It", "Overview", "Flow", "UTXOs", "Transactions", "Metho
 }
 pass("All 6 dashboard tabs rendered");
 
+// Item 4 — the Transactions tab hands each tx to the Inspector; the UTXOs tab's
+// funding-tx button is guarded to real 64-hex txids, so the demo's fake short
+// txids must render NO button (never a doomed fetch).
+{
+  await page.getByText("Transactions", { exact: true }).first().click();
+  await page.waitForTimeout(300);
+  const txInspect = await page.evaluate(() => [...document.querySelectorAll("button")].some(b => (b.textContent || "").trim() === "Inspect →"));
+  await page.getByText("UTXOs", { exact: true }).first().click();
+  await page.waitForTimeout(300);
+  // Expand the first UTXO row, then confirm no funding-tx button appears — the
+  // demo's fake 16-char txids fail the /^[0-9a-fA-F]{64}$/ guard.
+  await page.locator("text=/healthy range|Click any row/").first().click().catch(() => {});
+  await page.waitForTimeout(250);
+  const utxoFundingBtn = await page.evaluate(() => [...document.querySelectorAll("button")].some(b => /Inspect funding tx/.test(b.textContent || "")));
+  if (!txInspect) fail("dashboard: Transactions tab missing the per-tx 'Inspect →' handoff");
+  else if (utxoFundingBtn) fail("dashboard: UTXO funding-tx button rendered on demo data with fake (non-64-hex) txids");
+  else pass("dashboard: Transactions tab hands txs to the Inspector; UTXO funding-tx button correctly guarded off for demo txids");
+}
+
 // Wallet recommendations should be real outbound links (affiliate scaffolding).
 // Find Sparrow links and verify they point to a real URL.
 const fixIt = page.getByText("Fix It", { exact: true }).first();
@@ -1067,7 +1269,11 @@ await axeRun("Dashboard", page);
   try {
     await axeM.goto(`http://127.0.0.1:${PORT}/?page=methodology`, { waitUntil: "load" });
     await axeM.waitForFunction(() => document.getElementById("root")?.childElementCount > 0, { timeout: 15000 });
-    await axeM.waitForTimeout(500);
+    // Force a full layout/paint pass (scroll through, back to top) and settle
+    // before sampling — under full-suite CPU contention axe can otherwise race
+    // the initial paint and read borderline contrast against an unpainted layer.
+    await axeM.evaluate(async () => { window.scrollTo(0, document.body.scrollHeight); await new Promise(r => setTimeout(r, 150)); window.scrollTo(0, 0); });
+    await axeM.waitForTimeout(900);
     await axeRun("Methodology", axeM);
   } catch (e) { fail("methodology a11y: " + e.message.slice(0, 120)); }
   finally { await axeM.close(); }

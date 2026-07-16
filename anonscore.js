@@ -2479,13 +2479,14 @@ function parseRawTx(bytes) {
   for (let i = 0; i < nIn; i++) {
     const prevTxid = c.slice(32);
     const vout = c.u32();
-    c.varslice();
+    const ss = c.varslice();
     const sequence = c.u32();
     vin.push({
       txid: _bytesToHex(prevTxid.slice().reverse()),
       vout,
       prevout: null,
-      sequence
+      sequence,
+      scriptsigPushes: ss.length ? _scriptPushes(ss) : undefined
     });
   }
   const nOut = c.varint();
@@ -2727,13 +2728,80 @@ function estimateVsize(tx) {
 }
 function feeRate(tx) {
   if (tx.fee == null) return null;
-  const vs = estimateVsize(tx);
+  const vs = tx.weight ? Math.ceil(tx.weight / 4) : estimateVsize(tx);
   return {
     sat: tx.fee,
     vsize: vs,
     rate: +(tx.fee / vs).toFixed(1),
-    estimated: !tx.txid
+    estimated: !tx.weight && !tx.txid
   };
+}
+const _sinceDays = (t0, t1) => {
+  const d = Math.floor(((t1 || 0) - (t0 || 0)) / 86400);
+  return d < 1 ? "hours later" : d === 1 ? "1 day later" : d < 60 ? d + " days later" : Math.floor(d / 30) + " months later";
+};
+function normalizeEsploraTx(raw) {
+  if (!raw || !Array.isArray(raw.vin) || !Array.isArray(raw.vout)) throw new Error("Unexpected transaction format from the explorer");
+  let partial = false;
+  const vin = raw.vin.map(v => {
+    if (v.is_coinbase || !v.prevout) partial = true;
+    return {
+      txid: v.txid,
+      vout: v.vout,
+      sequence: v.sequence,
+      prevout: v.prevout ? {
+        value: v.prevout.value,
+        scriptpubkey_type: v.prevout.scriptpubkey_type,
+        scriptpubkey_address: v.prevout.scriptpubkey_address
+      } : null,
+      witness: Array.isArray(v.witness) ? v.witness.map(h => {
+        try {
+          return _hexToBytes(h);
+        } catch {
+          return new Uint8Array(0);
+        }
+      }) : undefined,
+      scriptsigPushes: v.scriptsig && !v.is_coinbase ? (() => {
+        try {
+          return _scriptPushes(_hexToBytes(v.scriptsig));
+        } catch {
+          return undefined;
+        }
+      })() : undefined,
+      coinbase: !!v.is_coinbase
+    };
+  });
+  const vout = raw.vout.map(o => ({
+    value: o.value,
+    scriptpubkey: o.scriptpubkey,
+    scriptpubkey_type: o.scriptpubkey_type,
+    scriptpubkey_address: o.scriptpubkey_address
+  }));
+  return {
+    txid: raw.txid,
+    vin,
+    vout,
+    fee: raw.fee != null ? raw.fee : null,
+    partial,
+    version: raw.version,
+    locktime: raw.locktime,
+    size: raw.size,
+    weight: raw.weight,
+    status: raw.status || null,
+    confirmed: !!(raw.status && raw.status.confirmed)
+  };
+}
+async function fetchTx(txid) {
+  const exp = explorer();
+  const base = relayOn() ? `${RELAY_URL}${exp.relayPath}` : exp.api;
+  const safe = encodeURIComponent(txid);
+  const [tx, outspends] = await Promise.all([fetch(`${base}/tx/${safe}`).then(r => {
+    if (!r.ok) throw new Error(r.status === 404 ? "Transaction not found — check the txid (or it may not be confirmed yet)" : "Explorer error " + r.status);
+    return r.json();
+  }), fetch(`${base}/tx/${safe}/outspends`).then(r => r.ok ? r.json() : null).catch(() => null)]);
+  const norm = normalizeEsploraTx(tx);
+  norm.outspends = Array.isArray(outspends) ? outspends : null;
+  return norm;
 }
 function txInterpretations(ins, outs, fee, opts) {
   opts = opts || {};
@@ -2871,6 +2939,7 @@ function txLinkability(tx) {
     n: vin.length,
     m: outs.length
   };
+  const eff = _txEfficiency(res.N, vin.length, outs.length);
   return {
     available: true,
     n: vin.length,
@@ -2880,7 +2949,22 @@ function txLinkability(tx) {
     dl: res.dl,
     lp: res.lp,
     outIdx: outs.map(o => o.idx),
-    fee
+    fee,
+    nmax: eff.nmax,
+    efficiency: eff.efficiency
+  };
+}
+const _nmaxCache = new Map();
+function _txEfficiency(N, n, m) {
+  const key = n + ":" + m;
+  if (!_nmaxCache.has(key)) {
+    const ideal = txInterpretations(Array(n).fill(m), Array(m).fill(n), 0);
+    _nmaxCache.set(key, ideal.error ? null : ideal.N);
+  }
+  const nmax = _nmaxCache.get(key);
+  return {
+    nmax,
+    efficiency: nmax ? N / nmax : null
   };
 }
 function fingerprintTx(tx) {
@@ -2902,7 +2986,19 @@ function fingerprintTx(tx) {
   const lt = tx.locktime;
   const antiSnipe = lt != null && lt > 0 && lt < 500000000;
   if (lt != null) {
-    if (antiSnipe) signals.push({
+    const incH = tx.status && tx.status.block_height;
+    if (antiSnipe && incH) {
+      const delta = incH - lt;
+      if (delta >= 1 && delta <= 100) signals.push({
+        key: "locktime",
+        distinctive: false,
+        t: `nLockTime = ${lt}, confirmed at height ${incH} (${delta} block${delta !== 1 ? "s" : ""} later) — verified anti-fee-sniping, the Bitcoin Core / Electrum / Sparrow default. Good: it's the herd behaviour.`
+      });else signals.push({
+        key: "locktime",
+        distinctive: false,
+        t: `nLockTime = ${lt}, well below the inclusion height (${incH}) — either a non-standard locktime, or the transaction waited a long time to confirm. Not a reliable tell on its own.`
+      });
+    } else if (antiSnipe) signals.push({
       key: "locktime",
       distinctive: false,
       t: `nLockTime = ${lt} (a recent block height) — anti-fee-sniping, the Bitcoin Core / Electrum default. Good: it's the herd behaviour.`
@@ -2947,7 +3043,7 @@ function fingerprintTx(tx) {
   });
   let sawSig = false,
     sawHighR = false;
-  for (const v of vin) for (const it of v.witness || []) {
+  for (const v of vin) for (const it of [...(v.witness || []), ...(v.scriptsigPushes || [])]) {
     const si = _derSigInfo(it);
     if (si) {
       sawSig = true;
@@ -2997,6 +3093,25 @@ function cmpOut(a, b) {
   const x = a.scriptpubkey || "",
     y = b.scriptpubkey || "";
   return x < y ? -1 : x > y ? 1 : 0;
+}
+function _scriptPushes(b) {
+  const out = [];
+  let p = 0;
+  while (p < b.length && out.length < 32) {
+    const op = b[p++];
+    let n = -1;
+    if (op >= 0x01 && op <= 0x4b) n = op;else if (op === 0x4c) {
+      n = b[p];
+      p += 1;
+    } else if (op === 0x4d) {
+      n = b[p] | b[p + 1] << 8;
+      p += 2;
+    } else break;
+    if (n < 0 || p + n > b.length) break;
+    out.push(b.slice(p, p + n));
+    p += n;
+  }
+  return out;
 }
 function _derSigInfo(b) {
   if (!b || b.length < 9 || b[0] !== 0x30) return null;
@@ -7816,6 +7931,14 @@ function Landing({
         return;
       }
       const txk = detectTxInput(v);
+      if (txk === "txid") {
+        setError("");
+        setToolHint({
+          kind: "txid",
+          value: v
+        });
+        return;
+      }
       if (txk === "psbt" || txk === "rawhex") {
         try {
           parseTransactionInput(v);
@@ -8905,7 +9028,7 @@ function Landing({
       letterSpacing: 1.5,
       marginBottom: 8
     }
-  }, toolHint.kind === "xpub" ? "EXTENDED PUBLIC KEY · WHOLE-WALLET SCAN" : "TRANSACTION · PRE-BROADCAST INSPECTOR"), React.createElement("div", {
+  }, toolHint.kind === "xpub" ? "EXTENDED PUBLIC KEY · WHOLE-WALLET SCAN" : toolHint.kind === "txid" ? "TRANSACTION ID · CONFIRMED-TX FORENSICS" : "TRANSACTION · PRE-BROADCAST INSPECTOR"), React.createElement("div", {
     style: {
       fontSize: 13.5,
       color: T.textMid,
@@ -8920,7 +9043,11 @@ function Landing({
     style: {
       color: T.text
     }
-  }, "in your browser"), ", gap-limit scans them, and scores the whole wallet \u2014 including the reuse and cross-address links no single-address scan can see.") : React.createElement(React.Fragment, null, "That's a ", React.createElement("strong", {
+  }, "in your browser"), ", gap-limit scans them, and scores the whole wallet \u2014 including the reuse and cross-address links no single-address scan can see.") : toolHint.kind === "txid" ? React.createElement(React.Fragment, null, "That's a ", React.createElement("strong", {
+    style: {
+      color: T.text
+    }
+  }, "transaction id"), ". The Inspector fetches the confirmed transaction from your chosen explorer", RELAY_URL ? " (via the no-log relay)" : "", " and runs the full forensics on it \u2014 interpretation entropy, deterministic links, wallet fingerprint, change detection, and what has happened to its outputs since.") : React.createElement(React.Fragment, null, "That's a ", React.createElement("strong", {
     style: {
       color: T.text
     }
@@ -8941,7 +9068,7 @@ function Landing({
       fontSize: 13,
       cursor: "pointer"
     }
-  }, toolHint.kind === "xpub" ? "Audit the whole wallet →" : "Inspect before you broadcast →"))), React.createElement("div", {
+  }, toolHint.kind === "xpub" ? "Audit the whole wallet →" : toolHint.kind === "txid" ? "Run the forensics →" : "Inspect before you broadcast →"))), React.createElement("div", {
     style: {
       display: "flex",
       alignItems: "center",
@@ -9743,7 +9870,20 @@ function Landing({
     },
     onMouseOver: e => e.currentTarget.style.color = T.cyan,
     onMouseOut: e => e.currentTarget.style.color = T.textMid
-  }, "Methodology")), React.createElement("div", {
+  }, "Methodology"), React.createElement("a", {
+    href: "/?page=cases",
+    onClick: navLink("cases"),
+    style: {
+      fontFamily: T.mono,
+      fontSize: 10,
+      color: T.textMid,
+      textDecoration: "underline dotted",
+      textUnderlineOffset: 3,
+      transition: "color .15s"
+    },
+    onMouseOver: e => e.currentTarget.style.color = T.btc,
+    onMouseOut: e => e.currentTarget.style.color = T.textMid
+  }, "Case files")), React.createElement("div", {
     style: {
       display: "flex",
       alignItems: "center",
@@ -11179,10 +11319,12 @@ function TransactionInspector({
   isMobile,
   onScan,
   onNav,
-  prefill
+  prefill,
+  prefillTx
 }) {
   useLang();
   const [raw, setRaw] = useState(prefill || "");
+  const [busy, setBusy] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
   const detected = detectTxInput(raw);
@@ -11211,19 +11353,32 @@ function TransactionInspector({
       if (desc && prevDesc) desc.setAttribute("content", prevDesc);
     };
   }, []);
-  const inspect = text => {
+  const inspect = async text => {
     const input = text != null ? text : raw;
     setError("");
     setResult(null);
+    let parsed;
     try {
-      const parsed = parseTransactionInput(input);
-      if (parsed.kind === "txid") {
-        setError("Pasting a txid looks up a confirmed transaction — that path is coming soon. For now paste a PSBT (base64) or raw transaction hex, which are analyzed fully offline.");
-        return;
-      }
-      setResult(parsed);
+      parsed = parseTransactionInput(input);
     } catch (e) {
       setError(e && e.message ? e.message : "Couldn't parse that input.");
+      return;
+    }
+    if (parsed.kind !== "txid") {
+      setResult(parsed);
+      return;
+    }
+    setBusy(true);
+    try {
+      const tx = await fetchTx(input.trim());
+      setResult({
+        kind: "txid",
+        tx
+      });
+    } catch (e) {
+      setError((e && e.message ? e.message : "Couldn't fetch that transaction.") + (relayOn() ? " (Fetched via the privacy relay — try again, or switch the relay off in the landing page's privacy panel to query the explorer directly.)" : ""));
+    } finally {
+      setBusy(false);
     }
   };
   const loadDemo = () => {
@@ -11231,6 +11386,15 @@ function TransactionInspector({
     inspect(DEMO_PSBT);
   };
   useEffect(() => {
+    if (prefillTx) {
+      try {
+        setResult({
+          kind: "txobj",
+          tx: normalizeEsploraTx(prefillTx)
+        });
+      } catch {}
+      return;
+    }
     if (prefill) inspect(prefill);
   }, []);
   const sats = v => v == null ? "—" : v >= 1e8 ? "₿" + (v / 1e8).toFixed(4) : v.toLocaleString() + " sats";
@@ -11317,7 +11481,7 @@ function TransactionInspector({
         ...label,
         color: a.leaky ? T.red : T.green
       }
-    }, "PRE-BROADCAST VERDICT"), React.createElement("div", {
+    }, tx.confirmed ? "FORENSIC VERDICT · CONFIRMED TX" : "PRE-BROADCAST VERDICT"), React.createElement("div", {
       style: {
         fontFamily: T.serif,
         fontSize: isMobile ? 18 : 21,
@@ -11325,7 +11489,7 @@ function TransactionInspector({
         fontWeight: 400,
         marginBottom: a.findings.length ? 12 : 0
       }
-    }, a.leaky ? "This transaction leaks — you can still fix it before broadcasting." : "Clean — nothing in this transaction obviously links or identifies you."), a.findings.length > 0 && React.createElement("ul", {
+    }, tx.confirmed ? a.leaky ? "This transaction leaked — what follows is what every analyst already reads from it." : "Clean — this transaction gives an analyst little to work with." : a.leaky ? "This transaction leaks — you can still fix it before broadcasting." : "Clean — nothing in this transaction obviously links or identifies you."), a.findings.length > 0 && React.createElement("ul", {
       style: {
         listStyle: "none",
         display: "flex",
@@ -11351,7 +11515,187 @@ function TransactionInspector({
         marginTop: 1,
         fontFamily: T.mono
       }
-    }, f.ok ? "✓" : "→"), f.t)))), link.available && React.createElement("div", {
+    }, f.ok ? "✓" : "→"), f.t)))), result.kind === "rawhex" && (tx.partial || link && !link.available && link.reason === "input-values-unknown") && React.createElement("div", {
+      style: {
+        background: T.surface,
+        border: `1px solid ${T.borderLo}`,
+        borderRadius: 12,
+        padding: "12px 16px"
+      }
+    }, React.createElement("div", {
+      style: {
+        fontFamily: T.mono,
+        fontSize: 9,
+        color: T.cyan,
+        letterSpacing: 1.5,
+        marginBottom: 6
+      }
+    }, "ALREADY BROADCAST?"), React.createElement("div", {
+      style: {
+        fontSize: 12.5,
+        color: T.textMid,
+        lineHeight: 1.6
+      }
+    }, "Paste this transaction's 64-character ", React.createElement("strong", {
+      style: {
+        color: T.text
+      }
+    }, "txid"), " instead \u2014 the explorer supplies the input amounts, so interpretation entropy, deterministic links, the exact fee rate, and the what-happened-since timeline all light up.")), tx.confirmed && tx.status && React.createElement("div", {
+      style: {
+        display: "flex",
+        flexWrap: "wrap",
+        gap: 8,
+        alignItems: "center",
+        background: T.surface,
+        border: `1px solid ${T.borderLo}`,
+        borderRadius: 12,
+        padding: "10px 16px"
+      }
+    }, React.createElement("span", {
+      style: {
+        fontFamily: T.mono,
+        fontSize: 9,
+        color: T.textDim,
+        letterSpacing: 1.5
+      }
+    }, "CONFIRMED"), tx.status.block_height != null && React.createElement(Tag, {
+      label: "block " + tx.status.block_height.toLocaleString(),
+      color: T.textMid,
+      size: 9
+    }), tx.status.block_time != null && React.createElement(Tag, {
+      label: fmt.age(tx.status.block_time),
+      color: T.textMid,
+      size: 9
+    }), fr && React.createElement(Tag, {
+      label: fr.rate + " sat/vB" + (fr.estimated ? " (est)" : ""),
+      color: T.textMid,
+      size: 9
+    }), React.createElement("span", {
+      style: {
+        fontFamily: T.mono,
+        fontSize: 9,
+        color: T.textDim,
+        marginLeft: "auto"
+      }
+    }, "on-chain forever \u2014 every reading below is public")), tx.outspends && tx.outspends.length === (tx.vout || []).length && (() => {
+      const spentIn = {};
+      tx.outspends.forEach((o, i) => {
+        if (o && o.spent && o.txid) (spentIn[o.txid] = spentIn[o.txid] || []).push(i);
+      });
+      const remerged = Object.entries(spentIn).filter(([, idxs]) => idxs.length >= 2);
+      const spentN = tx.outspends.filter(o => o && o.spent).length;
+      const changeSpent = change && tx.outspends[change.index] && tx.outspends[change.index].spent;
+      return React.createElement("div", {
+        style: panel({
+          borderColor: (remerged.length ? T.red : T.border) + (remerged.length ? "55" : "")
+        })
+      }, React.createElement("div", {
+        style: {
+          ...label,
+          color: remerged.length ? T.red : T.textDim
+        }
+      }, "WHAT HAPPENED SINCE"), React.createElement("div", {
+        style: {
+          fontSize: 13,
+          color: T.textMid,
+          lineHeight: 1.6,
+          marginBottom: 10
+        }
+      }, spentN === 0 ? "None of this transaction's outputs have been spent yet — the trail pauses here, but every output is being watched from the moment it moves." : React.createElement(React.Fragment, null, spentN, " of ", tx.outspends.length, " output", tx.outspends.length !== 1 ? "s" : "", " ha", spentN === 1 ? "s" : "ve", " been spent since confirmation", changeSpent ? " — including the likely change, so the owner's trail continued and an analyst kept following it" : "", ".")), remerged.length > 0 && React.createElement("div", {
+        style: {
+          background: T.red + "10",
+          border: `1px solid ${T.red}33`,
+          borderRadius: 10,
+          padding: "9px 12px",
+          fontSize: 12.5,
+          color: T.textMid,
+          lineHeight: 1.6,
+          marginBottom: 10
+        }
+      }, React.createElement("strong", {
+        style: {
+          color: T.red
+        }
+      }, "Outputs re-merged."), " ", remerged.map(([, idxs]) => "#" + idxs.map(i => i + 1).join(" + #")).join(", "), " were later spent ", React.createElement("em", null, "together in one transaction"), " \u2014 on-chain proof they belonged to one owner. Whatever ambiguity this transaction created, that spend undid it."), React.createElement("div", {
+        style: {
+          display: "flex",
+          flexDirection: "column",
+          gap: 5
+        }
+      }, tx.outspends.map((o, i) => {
+        const out = (tx.vout || [])[i] || {};
+        const spent = o && o.spent;
+        return React.createElement("div", {
+          key: i,
+          style: {
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+            background: T.surface,
+            border: `1px solid ${T.borderLo}`,
+            borderRadius: 8,
+            padding: "7px 11px",
+            fontFamily: T.mono,
+            fontSize: 10.5
+          }
+        }, React.createElement("span", {
+          style: {
+            color: T.textDim,
+            flexShrink: 0
+          }
+        }, "#", i + 1), React.createElement("span", {
+          style: {
+            color: T.textMid,
+            flexShrink: 0
+          }
+        }, sats(out.value)), React.createElement("span", {
+          style: {
+            width: 7,
+            height: 7,
+            borderRadius: "50%",
+            background: spent ? T.red : T.green,
+            flexShrink: 0
+          },
+          "aria-hidden": "true"
+        }), React.createElement("span", {
+          style: {
+            color: spent ? T.textMid : T.green,
+            minWidth: 0,
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+            flex: 1
+          }
+        }, spent ? React.createElement(React.Fragment, null, "spent", o.status && o.status.block_time && tx.status && tx.status.block_time ? " " + _sinceDays(tx.status.block_time, o.status.block_time) : "", " in ", o.txid ? o.txid.slice(0, 10) + "…" : "?") : "unspent — still watchable"), spent && o.txid && React.createElement("button", {
+          onClick: () => {
+            setRaw(o.txid);
+            inspect(o.txid);
+          },
+          "aria-label": "Follow the coins: inspect spending transaction " + o.txid,
+          title: "Follow the coins \u2014 run the same forensics on the transaction that spent this output",
+          style: {
+            background: "transparent",
+            border: `1px solid ${T.cyan}44`,
+            borderRadius: 5,
+            padding: "2px 7px",
+            color: T.cyan,
+            fontFamily: T.mono,
+            fontSize: 9,
+            cursor: "pointer",
+            flexShrink: 0,
+            transition: "all .15s"
+          },
+          onMouseOver: e => {
+            e.currentTarget.style.background = T.cyan;
+            e.currentTarget.style.color = T.bg;
+          },
+          onMouseOut: e => {
+            e.currentTarget.style.background = "transparent";
+            e.currentTarget.style.color = T.cyan;
+          }
+        }, "follow \u2192"));
+      })));
+    })(), link.available && React.createElement("div", {
       style: panel({
         borderColor: ent.c + "33"
       })
@@ -11395,7 +11739,21 @@ function TransactionInspector({
         color: T.textDim,
         marginLeft: "auto"
       }
-    }, link.N.toLocaleString(), " interpretation", link.N !== 1 ? "s" : "")), React.createElement("div", {
+    }, link.N.toLocaleString(), " interpretation", link.N !== 1 ? "s" : ""), link.efficiency != null ? React.createElement("span", {
+      title: "This transaction's interpretations as a share of the best-possible transaction with the same input/output count (Nmax = " + link.nmax.toLocaleString() + ") — the wallet-efficiency metric LaurentMT's Boltzmann and KYCP.org printed. Entropy density: " + (link.entropy / (link.n + link.m)).toFixed(2) + " bits per input/output.",
+      style: {
+        fontFamily: T.mono,
+        fontSize: 10,
+        color: ent.c
+      }
+    }, Math.round(link.efficiency * 100), "% efficiency") : React.createElement("span", {
+      title: "The ideal same-shape transaction exceeds the exact-count cap, so efficiency can't be computed at this size.",
+      style: {
+        fontFamily: T.mono,
+        fontSize: 10,
+        color: T.textDim
+      }
+    }, "efficiency n/a at this size")), React.createElement("div", {
       style: {
         fontSize: 13,
         color: T.textMid,
@@ -11660,7 +12018,7 @@ function TransactionInspector({
         marginBottom: 12,
         lineHeight: 1.5
       }
-    }, result.kind === "rawhex" ? "Raw hex carries no input data — paste the PSBT for full input-side analysis (cluster + fee)." : "Partial PSBT — some inputs lack UTXO data, so the fee and input analysis cover only the known inputs."), link.available && (tx.vin || []).length >= 1 && React.createElement("div", {
+    }, result.kind === "rawhex" ? "Raw hex carries no input data — paste the PSBT for full input-side analysis (cluster + fee)." : result.kind === "txid" || result.kind === "txobj" ? (tx.vin || []).some(v => v.coinbase) ? "This transaction has a coinbase (newly-mined) input, so input-side analysis covers only the regular inputs." : "Some inputs lack source data, so the fee and input-side analysis cover only the known inputs." : "Partial PSBT — some inputs lack UTXO data, so the fee and input analysis cover only the known inputs."), link.available && (tx.vin || []).length >= 1 && React.createElement("div", {
       style: {
         fontSize: 11,
         color: T.textDim,
@@ -11837,7 +12195,11 @@ function TransactionInspector({
     style: {
       color: T.text
     }
-  }, "PSBT"), " or raw transaction your wallet is about to sign. Every scan runs entirely in your browser \u2014 the transaction is never sent anywhere.")), React.createElement("div", {
+  }, "PSBT"), " or raw transaction your wallet is about to sign \u2014 analyzed entirely in your browser, never sent anywhere. Or paste a ", React.createElement("strong", {
+    style: {
+      color: T.text
+    }
+  }, "txid"), " to run the same forensics on any confirmed transaction (fetched from your chosen explorer", RELAY_URL ? ", via the no-log relay" : "", ").")), React.createElement("div", {
     style: {
       background: T.card,
       border: `1.5px solid ${detected ? T.cyan + "55" : T.border}`,
@@ -11900,21 +12262,21 @@ function TransactionInspector({
     }
   }, React.createElement("button", {
     onClick: () => inspect(),
-    disabled: !raw.trim(),
+    disabled: !raw.trim() || busy,
     className: "sheen",
     style: {
-      background: raw.trim() ? T.cyan : T.surface,
+      background: raw.trim() && !busy ? T.cyan : T.surface,
       border: "none",
       borderRadius: 10,
       padding: "12px 22px",
-      color: raw.trim() ? T.bg : T.textDim,
+      color: raw.trim() && !busy ? T.bg : T.textDim,
       fontFamily: T.sans,
       fontWeight: 700,
       fontSize: 14,
-      cursor: raw.trim() ? "pointer" : "default",
+      cursor: raw.trim() && !busy ? "pointer" : "default",
       transition: "all .15s"
     }
-  }, "Inspect \u2192"), React.createElement("button", {
+  }, busy ? "Fetching…" : "Inspect →"), React.createElement("button", {
     onClick: loadDemo,
     style: {
       background: "transparent",
@@ -11934,7 +12296,7 @@ function TransactionInspector({
       fontSize: 10,
       color: T.cyan
     }
-  }, detected === "psbt" ? "✓ PSBT detected" : detected === "rawhex" ? "✓ raw tx hex" : "txid — fetch coming soon"))), error && React.createElement("div", {
+  }, detected === "psbt" ? "✓ PSBT detected" : detected === "rawhex" ? "✓ raw tx hex" : "✓ txid — looks up the confirmed transaction"))), error && React.createElement("div", {
     role: "alert",
     style: {
       marginTop: 14,
@@ -15763,7 +16125,9 @@ function Dashboard({
   delta,
   onNav,
   onOpenCase,
-  onOpenWalletReview
+  onOpenWalletReview,
+  onInspectTx,
+  onInspectTxid
 }) {
   const [tab, setTab] = useState("Fix It");
   const [threat, setThreat] = useState(null);
@@ -17498,7 +17862,8 @@ function Dashboard({
         borderTop: `1px solid ${T.borderLo}`,
         display: "flex",
         flexWrap: "wrap",
-        gap: 20
+        gap: 20,
+        alignItems: "flex-end"
       }
     }, React.createElement("div", null, React.createElement("div", {
       style: {
@@ -17553,7 +17918,37 @@ function Dashboard({
         fontSize: 11,
         color: T.textMid
       }
-    }, u.scriptpubkey_type))));
+    }, u.scriptpubkey_type)), onInspectTx && /^[0-9a-fA-F]{64}$/.test(u.txid) && React.createElement("button", {
+      onClick: e => {
+        e.stopPropagation();
+        const full = txs.find(t => t.txid === u.txid);
+        if (full) onInspectTx(full);else if (onInspectTxid) onInspectTxid(u.txid);
+      },
+      "aria-label": "Deep-inspect the transaction that created this UTXO: " + u.txid,
+      title: "Full forensics on the transaction that created this coin \u2014 entropy, deterministic links, fingerprint (uses already-loaded data when available)",
+      style: {
+        background: "transparent",
+        border: `1px solid ${T.cyan}44`,
+        borderRadius: 6,
+        padding: "4px 8px",
+        color: T.cyan,
+        fontFamily: T.mono,
+        fontSize: 9,
+        cursor: "pointer",
+        letterSpacing: 0.5,
+        whiteSpace: "nowrap",
+        marginLeft: "auto",
+        transition: "all .15s"
+      },
+      onMouseOver: e => {
+        e.currentTarget.style.background = T.cyan;
+        e.currentTarget.style.color = T.bg;
+      },
+      onMouseOut: e => {
+        e.currentTarget.style.background = "transparent";
+        e.currentTarget.style.color = T.cyan;
+      }
+    }, "Inspect funding tx \u2192")));
   })), tab === "Transactions" && React.createElement("div", null, React.createElement("div", {
     style: {
       fontSize: 13,
@@ -17574,12 +17969,12 @@ function Dashboard({
   }, React.createElement("div", {
     style: {
       display: "grid",
-      gridTemplateColumns: "130px 90px 60px 60px 1fr 110px",
+      gridTemplateColumns: onInspectTx ? "130px 90px 50px 50px 1fr 100px 76px" : "130px 90px 60px 60px 1fr 110px",
       padding: "10px 20px",
       borderBottom: `1px solid ${T.borderLo}`
     }
-  }, ["TXID", "DATE", "IN", "OUT", "FLAGS", "FEE"].map(h => React.createElement("div", {
-    key: h,
+  }, (onInspectTx ? ["TXID", "DATE", "IN", "OUT", "FLAGS", "FEE", ""] : ["TXID", "DATE", "IN", "OUT", "FLAGS", "FEE"]).map((h, hi) => React.createElement("div", {
+    key: hi,
     style: {
       fontFamily: T.mono,
       fontSize: 9,
@@ -17608,7 +18003,7 @@ function Dashboard({
       key: tx.txid,
       style: {
         display: "grid",
-        gridTemplateColumns: "130px 90px 60px 60px 1fr 110px",
+        gridTemplateColumns: onInspectTx ? "130px 90px 50px 50px 1fr 100px 76px" : "130px 90px 60px 60px 1fr 110px",
         padding: "10px 20px",
         borderBottom: `1px solid ${T.borderLo}`,
         alignItems: "center",
@@ -17659,7 +18054,33 @@ function Dashboard({
         fontSize: 11,
         color: T.textDim
       }
-    }, tx.fee ? `${tx.fee.toLocaleString()} sats` : "—"));
+    }, tx.fee ? `${tx.fee.toLocaleString()} sats` : "—"), onInspectTx && React.createElement("button", {
+      onClick: () => onInspectTx(tx),
+      "aria-label": "Deep-inspect transaction " + tx.txid,
+      title: "Full forensics on this transaction \u2014 entropy, deterministic links, fingerprint (no refetch: uses the data already loaded)",
+      style: {
+        background: "transparent",
+        border: `1px solid ${T.cyan}44`,
+        borderRadius: 6,
+        padding: "4px 8px",
+        color: T.cyan,
+        fontFamily: T.mono,
+        fontSize: 9,
+        cursor: "pointer",
+        letterSpacing: 0.5,
+        whiteSpace: "nowrap",
+        justifySelf: "end",
+        transition: "all .15s"
+      },
+      onMouseOver: e => {
+        e.currentTarget.style.background = T.cyan;
+        e.currentTarget.style.color = T.bg;
+      },
+      onMouseOut: e => {
+        e.currentTarget.style.background = "transparent";
+        e.currentTarget.style.color = T.cyan;
+      }
+    }, "Inspect \u2192"));
   }))), tab === "Flow" && React.createElement(ExposureFlow, {
     txs: txs,
     isMobile: isMobile,
@@ -18151,7 +18572,9 @@ function LightningDashboard({
   isMobile,
   onBack,
   onRescan,
-  toast
+  toast,
+  onNav,
+  onOpenWalletReview
 }) {
   const [tab, setTab] = useState("Fix It");
   const {
@@ -18808,46 +19231,10 @@ function LightningDashboard({
         lineHeight: 1.6,
         marginBottom: r.tools?.length ? 12 : 0
       }
-    }, r.detail), r.tools?.length > 0 && React.createElement("div", {
-      style: {
-        display: "flex",
-        flexWrap: "wrap",
-        gap: 6
-      }
-    }, r.tools.map(t => {
-      const href = toolLink(t.name);
-      const aff = toolIsAffiliate(t.name);
-      const inner = React.createElement(React.Fragment, null, React.createElement("div", {
-        style: {
-          fontSize: 11,
-          fontWeight: 600,
-          color: T.text
-        }
-      }, t.name, aff ? " · affiliate" : ""), React.createElement("div", {
-        style: {
-          fontSize: 10,
-          color: T.textDim
-        }
-      }, t.note));
-      const base = {
-        background: T.surface,
-        border: `1px solid ${T.border}`,
-        borderRadius: 8,
-        padding: "5px 10px",
-        textDecoration: "none",
-        display: "block"
-      };
-      return href ? React.createElement("a", {
-        key: t.name,
-        href: href,
-        target: "_blank",
-        rel: "noopener noreferrer nofollow",
-        style: base
-      }, inner) : React.createElement("div", {
-        key: t.name,
-        style: base
-      }, inner);
-    }))), React.createElement("button", {
+    }, r.detail), React.createElement(FixToolChips, {
+      tools: r.tools,
+      onReview: onOpenWalletReview
+    })), React.createElement("button", {
       onClick: () => toggleDone(r.key),
       style: {
         background: done ? T.green : "transparent",
@@ -18861,7 +19248,106 @@ function LightningDashboard({
         whiteSpace: "nowrap"
       }
     }, done ? "✓ Done" : "Mark done")));
-  }), React.createElement("div", {
+  }), onNav && React.createElement("div", {
+    style: {
+      background: T.card,
+      border: `1px solid ${T.ln}2e`,
+      borderRadius: 14,
+      padding: "18px 22px"
+    }
+  }, React.createElement("div", {
+    style: {
+      fontFamily: T.mono,
+      fontSize: 9,
+      color: T.ln,
+      letterSpacing: 2,
+      marginBottom: 12
+    }
+  }, "NEXT MOVES"), React.createElement("div", {
+    style: {
+      display: "flex",
+      flexDirection: "column",
+      gap: 12
+    }
+  }, React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 12,
+      alignItems: "flex-start",
+      flexWrap: "wrap"
+    }
+  }, React.createElement("span", {
+    "aria-hidden": "true",
+    style: {
+      fontSize: 18,
+      flexShrink: 0
+    }
+  }, "\uD83D\uDD2C"), React.createElement("div", {
+    style: {
+      flex: 1,
+      minWidth: 220,
+      fontSize: 13,
+      color: T.textMid,
+      lineHeight: 1.6
+    }
+  }, React.createElement("strong", {
+    style: {
+      color: T.text
+    }
+  }, "Your channels have on-chain feet."), " Every channel open and close is an ordinary Bitcoin transaction \u2014 paste a funding txid into the Inspector to see exactly what it reveals about your node's wallet."), React.createElement("button", {
+    onClick: () => onNav("inspector"),
+    style: {
+      background: "transparent",
+      border: `1.5px solid ${T.ln}55`,
+      borderRadius: 8,
+      padding: "7px 14px",
+      color: T.ln,
+      fontFamily: T.mono,
+      fontSize: 11,
+      cursor: "pointer",
+      transition: "all .15s",
+      whiteSpace: "nowrap",
+      flexShrink: 0
+    },
+    onMouseOver: e => {
+      e.currentTarget.style.background = T.ln;
+      e.currentTarget.style.color = T.bg;
+    },
+    onMouseOut: e => {
+      e.currentTarget.style.background = "transparent";
+      e.currentTarget.style.color = T.ln;
+    }
+  }, "Open the Inspector \u2192")), React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 12,
+      alignItems: "center",
+      flexWrap: "wrap",
+      borderTop: `1px solid ${T.borderLo}`,
+      paddingTop: 12
+    }
+  }, React.createElement("span", {
+    style: {
+      flex: 1,
+      minWidth: 220,
+      fontSize: 12.5,
+      color: T.textMid,
+      lineHeight: 1.5
+    }
+  }, "All 8 Lightning heuristics \u2014 deductions, sources, threat models \u2014 are published."), React.createElement("button", {
+    onClick: () => onNav("methodology"),
+    style: {
+      background: "none",
+      border: "none",
+      padding: 0,
+      fontFamily: T.mono,
+      fontSize: 10,
+      color: T.textMid,
+      cursor: "pointer",
+      textDecoration: "underline dotted",
+      textUnderlineOffset: 3
+    }
+  }, "How scoring works \u2192")))), React.createElement("div", {
     style: {
       background: T.surface,
       border: `1px solid ${T.border}`,
@@ -19652,6 +20138,20 @@ function App() {
     onOpenWalletReview: name => {
       setWalletPick(wSlug(name));
       setPage("wallets");
+    },
+    onInspectTx: tx => {
+      setToolPrefill({
+        page: "inspector",
+        txObj: tx
+      });
+      setPage("inspector");
+    },
+    onInspectTxid: txid => {
+      setToolPrefill({
+        page: "inspector",
+        value: txid
+      });
+      setPage("inspector");
     }
   }), page === "ln_dashboard" && React.createElement(LightningDashboard, {
     nodeId: lnNodeId,
@@ -19660,7 +20160,12 @@ function App() {
     isMobile: isMobile,
     onBack: () => setPage("landing"),
     onRescan: analyze,
-    toast: toast
+    toast: toast,
+    onNav: setPage,
+    onOpenWalletReview: name => {
+      setWalletPick(wSlug(name));
+      setPage("wallets");
+    }
   }), page === "coach" && React.createElement(CoachWaitlist, {
     onBack: () => setPage("landing"),
     isMobile: isMobile,
@@ -19675,7 +20180,8 @@ function App() {
     isMobile: isMobile,
     onScan: analyze,
     onNav: setPage,
-    prefill: toolPrefill?.page === "inspector" ? toolPrefill.value : null
+    prefill: toolPrefill?.page === "inspector" ? toolPrefill.value : null,
+    prefillTx: toolPrefill?.page === "inspector" ? toolPrefill.txObj : null
   }), page === "xpub" && React.createElement(XpubScan, {
     onBack: () => setPage("landing"),
     isMobile: isMobile,
@@ -19712,6 +20218,7 @@ window.__ANONSCORE_TEST__ = Object.freeze({
   classifyScript,
   parseTransactionInput,
   detectTxInput,
+  normalizeEsploraTx,
   analyzeTx,
   guessChange,
   clusterUnification,
@@ -19723,6 +20230,7 @@ window.__ANONSCORE_TEST__ = Object.freeze({
   classifyCoinjoin,
   fingerprintTx,
   _derSigInfo,
+  _scriptPushes,
   _bech32Decode,
   decodeSilentPayment,
   detectSilentPayment,
