@@ -280,6 +280,7 @@ const STRINGS = {
     "umbrella.label": "TOOLKIT",
     "umbrella.privacy": "Privacy Audit",
     "umbrella.dca": "DCA Butler",
+    "umbrella.intel": "OPN Intel",
     "umbrella.hub": "Hub",
     "hero.eyebrow": "FREE BITCOIN & LIGHTNING PRIVACY AUDIT",
     "hero.h1.line1": "Is your Bitcoin",
@@ -341,6 +342,7 @@ const STRINGS = {
     "umbrella.label": "KIT",
     "umbrella.privacy": "Auditoría de privacidad",
     "umbrella.dca": "DCA Butler",
+    "umbrella.intel": "OPN Intel",
     "umbrella.hub": "Hub",
     "hero.eyebrow": "AUDITORÍA GRATUITA DE PRIVACIDAD BITCOIN Y LIGHTNING",
     "hero.h1.line1": "¿Tu stack de Bitcoin",
@@ -7937,6 +7939,24 @@ function Landing({
       color: T.borderLo
     }
   }, "\xB7"), React.createElement("a", {
+    href: "https://intel.opnorange.com/?from=anonscore",
+    target: "_blank",
+    rel: "noopener noreferrer",
+    style: {
+      fontFamily: T.mono,
+      fontSize: 10,
+      color: T.textMid,
+      textDecoration: "none",
+      letterSpacing: 0.5,
+      transition: "color .15s"
+    },
+    onMouseOver: e => e.currentTarget.style.color = T.opn,
+    onMouseOut: e => e.currentTarget.style.color = T.textMid
+  }, t("umbrella.intel"), " \u2197"), React.createElement("span", {
+    style: {
+      color: T.borderLo
+    }
+  }, "\xB7"), React.createElement("a", {
     href: "https://opnorange.com",
     target: "_blank",
     rel: "noopener noreferrer",
@@ -9806,6 +9826,23 @@ function Landing({
     onMouseOver: e => e.currentTarget.style.color = T.opn,
     onMouseOut: e => e.currentTarget.style.color = T.textDim
   }, t("umbrella.dca"), " \u2197"), React.createElement("span", {
+    style: {
+      color: T.borderLo
+    }
+  }, "\xB7"), React.createElement("a", {
+    href: "https://intel.opnorange.com/?from=anonscore",
+    target: "_blank",
+    rel: "noopener noreferrer",
+    style: {
+      fontFamily: T.mono,
+      fontSize: 10,
+      color: T.textDim,
+      textDecoration: "none",
+      transition: "color .15s"
+    },
+    onMouseOver: e => e.currentTarget.style.color = T.opn,
+    onMouseOut: e => e.currentTarget.style.color = T.textDim
+  }, t("umbrella.intel"), " \u2197"), React.createElement("span", {
     style: {
       color: T.borderLo
     }
