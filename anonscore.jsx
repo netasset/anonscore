@@ -1454,9 +1454,9 @@ function parseRawTx(bytes) {
   for (let i = 0; i < nIn; i++) {
     const prevTxid = c.slice(32);
     const vout = c.u32();
-    c.varslice();               // scriptSig
+    const ss = c.varslice();     // scriptSig — legacy inputs carry their signatures here
     const sequence = c.u32();    // nSequence — kept for RBF / anti-fee-sniping fingerprinting
-    vin.push({ txid: _bytesToHex(prevTxid.slice().reverse()), vout, prevout: null, sequence });
+    vin.push({ txid: _bytesToHex(prevTxid.slice().reverse()), vout, prevout: null, sequence, scriptsigPushes: ss.length ? _scriptPushes(ss) : undefined });
   }
   const nOut = c.varint();
   if (nOut > 5000) throw new Error("too many outputs");
@@ -1588,7 +1588,63 @@ function estimateVsize(tx) {
   for (const v of vin) { const t = v.prevout && v.prevout.scriptpubkey_type; vb += (t === "v0_p2wpkh" || t === "v1_p2tr") ? 68 : t === "p2sh" ? 91 : 148; }
   return Math.max(1, Math.round(vb));
 }
-function feeRate(tx) { if (tx.fee == null) return null; const vs = estimateVsize(tx); return { sat: tx.fee, vsize: vs, rate: +(tx.fee / vs).toFixed(1), estimated: !tx.txid }; }
+function feeRate(tx) {
+  if (tx.fee == null) return null;
+  // A fetched confirmed tx carries its real weight → exact vsize, exact rate.
+  const vs = tx.weight ? Math.ceil(tx.weight / 4) : estimateVsize(tx);
+  return { sat: tx.fee, vsize: vs, rate: +(tx.fee / vs).toFixed(1), estimated: !tx.weight && !tx.txid };
+}
+
+/* Normalize an Esplora /tx/:txid response into the Inspector's internal tx
+   shape. The fields are already near-identical by design (fetchAddress txs flow
+   through the same analyzers); the two real differences: Esplora witness items
+   are HEX STRINGS (the low-r fingerprint reads bytes — convert, or the check
+   silently never fires), and a coinbase input has no prevout (mark partial). */
+// "3 days later" phrasing for the outspends timeline (confirm time → spend time).
+const _sinceDays = (t0, t1) => { const d = Math.floor(((t1 || 0) - (t0 || 0)) / 86400); return d < 1 ? "hours later" : d === 1 ? "1 day later" : d < 60 ? d + " days later" : Math.floor(d / 30) + " months later"; };
+
+function normalizeEsploraTx(raw) {
+  if (!raw || !Array.isArray(raw.vin) || !Array.isArray(raw.vout)) throw new Error("Unexpected transaction format from the explorer");
+  let partial = false;
+  const vin = raw.vin.map(v => {
+    if (v.is_coinbase || !v.prevout) partial = true;
+    return {
+      txid: v.txid, vout: v.vout, sequence: v.sequence,
+      prevout: v.prevout ? { value: v.prevout.value, scriptpubkey_type: v.prevout.scriptpubkey_type, scriptpubkey_address: v.prevout.scriptpubkey_address } : null,
+      witness: Array.isArray(v.witness) ? v.witness.map(h => { try { return _hexToBytes(h); } catch { return new Uint8Array(0); } }) : undefined,
+      scriptsigPushes: (v.scriptsig && !v.is_coinbase) ? (() => { try { return _scriptPushes(_hexToBytes(v.scriptsig)); } catch { return undefined; } })() : undefined,
+      coinbase: !!v.is_coinbase,
+    };
+  });
+  const vout = raw.vout.map(o => ({ value: o.value, scriptpubkey: o.scriptpubkey, scriptpubkey_type: o.scriptpubkey_type, scriptpubkey_address: o.scriptpubkey_address }));
+  return {
+    txid: raw.txid, vin, vout,
+    fee: raw.fee != null ? raw.fee : null,
+    partial,
+    version: raw.version, locktime: raw.locktime,
+    size: raw.size, weight: raw.weight,
+    status: raw.status || null,
+    confirmed: !!(raw.status && raw.status.confirmed),
+  };
+}
+
+/* Fetch one confirmed transaction (+ what happened to its outputs since) from
+   the user-selected explorer, via the no-log relay when enabled — the same
+   honest-failure rule as fetchAddress: never silently fall back to a direct
+   query when the relay is on. The outspends call is the confirmed-only intel:
+   which outputs have been spent since, and by which transaction. */
+async function fetchTx(txid) {
+  const exp = explorer();
+  const base = relayOn() ? `${RELAY_URL}${exp.relayPath}` : exp.api;
+  const safe = encodeURIComponent(txid);
+  const [tx, outspends] = await Promise.all([
+    fetch(`${base}/tx/${safe}`).then(r => { if (!r.ok) throw new Error(r.status === 404 ? "Transaction not found — check the txid (or it may not be confirmed yet)" : "Explorer error " + r.status); return r.json(); }),
+    fetch(`${base}/tx/${safe}/outspends`).then(r => r.ok ? r.json() : null).catch(() => null),
+  ]);
+  const norm = normalizeEsploraTx(tx);
+  norm.outspends = Array.isArray(outspends) ? outspends : null;
+  return norm;
+}
 
 /* ─────────────────────────────────────────────
    TRANSACTION ENTROPY & LINKABILITY (Boltzmann / KYCP methodology, in pure JS)
@@ -1696,7 +1752,26 @@ function txLinkability(tx) {
   if (vin.length > 12 || outs.length > 12) return { available: false, reason: "too-many", n: vin.length, m: outs.length };
   const res = txInterpretations(inVals, outVals, fee);
   if (res.error) return { available: false, reason: res.error, n: vin.length, m: outs.length };
-  return { available: true, n: vin.length, m: outs.length, N: res.N, entropy: res.entropy, dl: res.dl, lp: res.lp, outIdx: outs.map(o => o.idx), fee };
+  const eff = _txEfficiency(res.N, vin.length, outs.length);
+  return { available: true, n: vin.length, m: outs.length, N: res.N, entropy: res.entropy, dl: res.dl, lp: res.lp, outIdx: outs.map(o => o.idx), fee,
+           nmax: eff.nmax, efficiency: eff.efficiency };
+}
+
+/* KYCP/Boltzmann "wallet efficiency": this transaction's interpretation count
+   as a share of the BEST-POSSIBLE transaction with the same shape — the
+   canonical zero-fee, equal-value n×m tx (2×2 → Nmax 3; Whirlpool 5×5 →
+   Nmax 1496). Value-independent, so memoized per shape (≤144 keys under the
+   12×12 cap). Returns { nmax: null } when even the ideal shape exceeds the
+   iteration cap — the caller labels that honestly rather than omitting it. */
+const _nmaxCache = new Map();
+function _txEfficiency(N, n, m) {
+  const key = n + ":" + m;
+  if (!_nmaxCache.has(key)) {
+    const ideal = txInterpretations(Array(n).fill(m), Array(m).fill(n), 0);
+    _nmaxCache.set(key, ideal.error ? null : ideal.N);
+  }
+  const nmax = _nmaxCache.get(key);
+  return { nmax, efficiency: nmax ? N / nmax : null };
 }
 
 /* ─────────────────────────────────────────────
@@ -1724,7 +1799,17 @@ function fingerprintTx(tx) {
   const lt = tx.locktime;
   const antiSnipe = lt != null && lt > 0 && lt < 500000000;
   if (lt != null) {
-    if (antiSnipe) signals.push({ key: "locktime", distinctive: false, t: `nLockTime = ${lt} (a recent block height) — anti-fee-sniping, the Bitcoin Core / Electrum default. Good: it's the herd behaviour.` });
+    // On a CONFIRMED tx the inclusion height lets us VERIFY the anti-fee-sniping
+    // claim instead of assuming it: Core/Electrum set nLockTime to the current
+    // tip, so it confirms within ~a few blocks of the locktime (delta >= 1
+    // always — consensus requires inclusion height > a height locktime).
+    const incH = tx.status && tx.status.block_height;
+    if (antiSnipe && incH) {
+      const delta = incH - lt;
+      if (delta >= 1 && delta <= 100) signals.push({ key: "locktime", distinctive: false, t: `nLockTime = ${lt}, confirmed at height ${incH} (${delta} block${delta !== 1 ? "s" : ""} later) — verified anti-fee-sniping, the Bitcoin Core / Electrum / Sparrow default. Good: it's the herd behaviour.` });
+      else signals.push({ key: "locktime", distinctive: false, t: `nLockTime = ${lt}, well below the inclusion height (${incH}) — either a non-standard locktime, or the transaction waited a long time to confirm. Not a reliable tell on its own.` });
+    }
+    else if (antiSnipe) signals.push({ key: "locktime", distinctive: false, t: `nLockTime = ${lt} (a recent block height) — anti-fee-sniping, the Bitcoin Core / Electrum default. Good: it's the herd behaviour.` });
     else if (lt === 0) signals.push({ key: "locktime", distinctive: true, t: "nLockTime = 0 — no anti-fee-sniping. Rules out current Bitcoin Core / Electrum defaults; common in many mobile and hardware wallets." });
   }
 
@@ -1755,7 +1840,7 @@ function fingerprintTx(tx) {
   // Low-r signature grinding — the strongest deterministic tell, but only visible
   // on a SIGNED tx (raw hex with witnesses); PSBTs are unsigned so it's skipped.
   let sawSig = false, sawHighR = false;
-  for (const v of vin) for (const it of (v.witness || [])) { const si = _derSigInfo(it); if (si) { sawSig = true; if (si.highR) sawHighR = true; } }
+  for (const v of vin) for (const it of [...(v.witness || []), ...(v.scriptsigPushes || [])]) { const si = _derSigInfo(it); if (si) { sawSig = true; if (si.highR) sawHighR = true; } }
   if (sawSig) {
     if (sawHighR) signals.push({ key: "lowr", distinctive: true, t: "A high-r ECDSA signature (72 bytes) is present — Bitcoin Core grinds every signature to low-r since v0.17 (2018), so this rules Core out as the signer." });
     else signals.push({ key: "lowr", distinctive: false, t: "All signatures are low-r (≤71 bytes) — consistent with Bitcoin Core and other modern wallets that grind signatures. Good: the common case." });
@@ -1780,6 +1865,27 @@ function cmpOut(a, b) { if ((a.value || 0) !== (b.value || 0)) return (a.value |
 // grinds every signature to low-r, so r fits in 32 bytes (rlen=0x20) and the sig
 // is ≤71 bytes; a high-r sig (rlen=0x21, 33 bytes, total 72) is one Core would
 // never produce — a deterministic "not Core" tell. Returns null for non-sigs.
+// Extract the data pushes from a scriptSig (legacy P2PKH/P2SH spends carry
+// their signatures here, not in the witness). Walks push opcodes only —
+// 0x01-0x4b direct, 0x4c PUSHDATA1, 0x4d PUSHDATA2 — and stops at anything
+// else. Capped so a malformed script can't build a huge array.
+function _scriptPushes(b) {
+  const out = [];
+  let p = 0;
+  while (p < b.length && out.length < 32) {
+    const op = b[p++];
+    let n = -1;
+    if (op >= 0x01 && op <= 0x4b) n = op;
+    else if (op === 0x4c) { n = b[p]; p += 1; }
+    else if (op === 0x4d) { n = b[p] | (b[p + 1] << 8); p += 2; }
+    else break;                                  // non-push opcode — done
+    if (n < 0 || p + n > b.length) break;        // truncated — stop cleanly
+    out.push(b.slice(p, p + n));
+    p += n;
+  }
+  return out;
+}
+
 function _derSigInfo(b) {
   if (!b || b.length < 9 || b[0] !== 0x30) return null;
   if (b[1] !== b.length - 3) return null;                 // DER length (excl. 2 header + 1 sighash)
@@ -4023,6 +4129,7 @@ function Landing({ onAnalyze, isMobile, onCases, onNav, onOpenTool }) {
       // Inputs that belong to a sibling tool: hand off instead of erroring.
       if (detectXpub(v)) { setError(""); setToolHint({ kind: "xpub", value: v }); return; }   // whole-wallet key → Wallet scan
       const txk = detectTxInput(v);
+      if (txk === "txid") { setError(""); setToolHint({ kind: "txid", value: v }); return; }  // confirmed tx → Inspector lookup
       if (txk === "psbt" || txk === "rawhex") {
         // Only offer the handoff when it genuinely parses (pure local check).
         try { parseTransactionInput(v); setError(""); setToolHint({ kind: "tx", value: v }); return; } catch {}
@@ -4384,16 +4491,18 @@ function Landing({ onAnalyze, isMobile, onCases, onNav, onOpenTool }) {
               {toolHint && (
                 <div style={{ marginTop: 12, textAlign: "left", background: T.cyan + "0e", border: `1px solid ${T.cyan}40`, borderRadius: 14, padding: "14px 16px", animation: "slideDown .25s ease" }}>
                   <div style={{ fontFamily: T.mono, fontSize: 9, color: T.cyan, letterSpacing: 1.5, marginBottom: 8 }}>
-                    {toolHint.kind === "xpub" ? "EXTENDED PUBLIC KEY · WHOLE-WALLET SCAN" : "TRANSACTION · PRE-BROADCAST INSPECTOR"}
+                    {toolHint.kind === "xpub" ? "EXTENDED PUBLIC KEY · WHOLE-WALLET SCAN" : toolHint.kind === "txid" ? "TRANSACTION ID · CONFIRMED-TX FORENSICS" : "TRANSACTION · PRE-BROADCAST INSPECTOR"}
                   </div>
                   <div style={{ fontSize: 13.5, color: T.textMid, lineHeight: 1.65, marginBottom: 12 }}>
                     {toolHint.kind === "xpub"
                       ? <>That's an <strong style={{ color: T.text }}>extended public key</strong> — the map of an entire wallet, not one address. The Wallet scan derives every address from it <strong style={{ color: T.text }}>in your browser</strong>, gap-limit scans them, and scores the whole wallet — including the reuse and cross-address links no single-address scan can see.</>
+                      : toolHint.kind === "txid"
+                      ? <>That's a <strong style={{ color: T.text }}>transaction id</strong>. The Inspector fetches the confirmed transaction from your chosen explorer{RELAY_URL ? " (via the no-log relay)" : ""} and runs the full forensics on it — interpretation entropy, deterministic links, wallet fingerprint, change detection, and what has happened to its outputs since.</>
                       : <>That's a <strong style={{ color: T.text }}>transaction</strong>, not an address. The Inspector shows what it leaks — change detection, wallet fingerprint, input→output linkability — <strong style={{ color: T.text }}>before you broadcast</strong>, so you can still fix it. Fully offline; it never leaves the page.</>}
                   </div>
                   <button onClick={() => onOpenTool && onOpenTool(toolHint.kind === "xpub" ? "xpub" : "inspector", toolHint.value)}
                     style={{ background: T.cyan, border: "none", borderRadius: 10, padding: "10px 18px", color: T.bg, fontFamily: T.sans, fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
-                    {toolHint.kind === "xpub" ? "Audit the whole wallet →" : "Inspect before you broadcast →"}
+                    {toolHint.kind === "xpub" ? "Audit the whole wallet →" : toolHint.kind === "txid" ? "Run the forensics →" : "Inspect before you broadcast →"}
                   </button>
                 </div>
               )}
@@ -4647,6 +4756,12 @@ function Landing({ onAnalyze, isMobile, onCases, onNav, onOpenTool }) {
             onMouseOver={e => e.currentTarget.style.color = T.cyan}
             onMouseOut={e => e.currentTarget.style.color = T.textMid}>
             Methodology
+          </a>
+          <a href="/?page=cases" onClick={navLink("cases")}
+            style={{ fontFamily: T.mono, fontSize: 10, color: T.textMid, textDecoration: "underline dotted", textUnderlineOffset: 3, transition: "color .15s" }}
+            onMouseOver={e => e.currentTarget.style.color = T.btc}
+            onMouseOut={e => e.currentTarget.style.color = T.textMid}>
+            Case files
           </a>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
@@ -5293,9 +5408,10 @@ function FlowGraph({ inputs, outputs, lp, outIdx, isMobile, onAudit }) {
    raw tx your wallet is about to sign and see what it leaks BEFORE you broadcast.
    PSBT/raw-hex are parsed and analyzed entirely in the browser (zero network).
 ───────────────────────────────────────────── */
-function TransactionInspector({ onBack, isMobile, onScan, onNav, prefill }) {
+function TransactionInspector({ onBack, isMobile, onScan, onNav, prefill, prefillTx }) {
   useLang();
   const [raw, setRaw] = useState(prefill || "");
+  const [busy, setBusy] = useState(false);   // fetching a confirmed tx by txid
   const [result, setResult] = useState(null);   // { kind, tx }
   const [error, setError] = useState("");
   const detected = detectTxInput(raw);
@@ -5318,21 +5434,35 @@ function TransactionInspector({ onBack, isMobile, onScan, onNav, prefill }) {
     return () => { document.title = prev; if (desc && prevDesc) desc.setAttribute("content", prevDesc); };
   }, []);
 
-  const inspect = (text) => {
+  const inspect = async (text) => {
     const input = text != null ? text : raw;
     setError(""); setResult(null);
+    let parsed;
     try {
-      const parsed = parseTransactionInput(input);
-      if (parsed.kind === "txid") { setError("Pasting a txid looks up a confirmed transaction — that path is coming soon. For now paste a PSBT (base64) or raw transaction hex, which are analyzed fully offline."); return; }
-      setResult(parsed);
-    } catch (e) { setError(e && e.message ? e.message : "Couldn't parse that input."); }
+      parsed = parseTransactionInput(input);
+    } catch (e) { setError(e && e.message ? e.message : "Couldn't parse that input."); return; }
+    if (parsed.kind !== "txid") { setResult(parsed); return; }
+    // Confirmed-tx lookup — the one networked path in the Inspector. It runs on
+    // the user's Inspect click (or the landing handoff click), via the relay
+    // when enabled, and fails honestly — never a silent direct fallback.
+    setBusy(true);
+    try {
+      const tx = await fetchTx(input.trim());
+      setResult({ kind: "txid", tx });
+    } catch (e) {
+      setError((e && e.message ? e.message : "Couldn't fetch that transaction.") + (relayOn() ? " (Fetched via the privacy relay — try again, or switch the relay off in the landing page's privacy panel to query the explorer directly.)" : ""));
+    } finally { setBusy(false); }
   };
   const loadDemo = () => { setRaw(DEMO_PSBT); inspect(DEMO_PSBT); };
 
   // Landing handed us a transaction the user already asked to analyze — parse it
-  // on arrival. Pure local decoding (zero network), same as the landing's own
-  // inline decoders, so the no-auto-fire rule (about scans/popups) isn't in play.
-  useEffect(() => { if (prefill) inspect(prefill); }, []);  // eslint-disable-line react-hooks/exhaustive-deps
+  // on arrival (for a txid this runs the fetch the user's click requested).
+  // The Dashboard can also hand an ALREADY-FETCHED tx object (prefillTx):
+  // zero network, straight to the report.
+  useEffect(() => {
+    if (prefillTx) { try { setResult({ kind: "txobj", tx: normalizeEsploraTx(prefillTx) }); } catch {} return; }
+    if (prefill) inspect(prefill);
+  }, []);  // eslint-disable-line react-hooks/exhaustive-deps
 
   const sats = v => v == null ? "—" : v >= 1e8 ? "₿" + (v / 1e8).toFixed(4) : v.toLocaleString() + " sats";
   const trunc = a => !a ? "—" : a.startsWith("script:") ? "unrecognized script" : a.length > 26 ? a.slice(0, 13) + "…" + a.slice(-6) : a;
@@ -5360,9 +5490,11 @@ function TransactionInspector({ onBack, isMobile, onScan, onNav, prefill }) {
       <div style={{ display: "flex", flexDirection: "column", gap: 14, marginTop: 20, animation: "fadeUp .4s ease both" }}>
         {/* verdict */}
         <div style={{ background: a.leaky ? T.red + "10" : T.green + "12", border: `1px solid ${a.leaky ? T.red + "40" : T.green + "45"}`, borderRadius: 16, padding: isMobile ? "16px 18px" : "18px 22px" }}>
-          <div style={{ ...label, color: a.leaky ? T.red : T.green }}>PRE-BROADCAST VERDICT</div>
+          <div style={{ ...label, color: a.leaky ? T.red : T.green }}>{tx.confirmed ? "FORENSIC VERDICT · CONFIRMED TX" : "PRE-BROADCAST VERDICT"}</div>
           <div style={{ fontFamily: T.serif, fontSize: isMobile ? 18 : 21, color: T.text, fontWeight: 400, marginBottom: a.findings.length ? 12 : 0 }}>
-            {a.leaky ? "This transaction leaks — you can still fix it before broadcasting." : "Clean — nothing in this transaction obviously links or identifies you."}
+            {tx.confirmed
+              ? (a.leaky ? "This transaction leaked — what follows is what every analyst already reads from it." : "Clean — this transaction gives an analyst little to work with.")
+              : (a.leaky ? "This transaction leaks — you can still fix it before broadcasting." : "Clean — nothing in this transaction obviously links or identifies you.")}
           </div>
           {a.findings.length > 0 && (
             <ul style={{ listStyle: "none", display: "flex", flexDirection: "column", gap: 7, padding: 0, margin: 0 }}>
@@ -5375,6 +5507,79 @@ function TransactionInspector({ onBack, isMobile, onScan, onNav, prefill }) {
           )}
         </div>
 
+        {/* Raw hex is the degraded path (no input values) — route to the full-power
+            confirmed-tx lookup, which is one paste away. */}
+        {result.kind === "rawhex" && (tx.partial || (link && !link.available && link.reason === "input-values-unknown")) && (
+          <div style={{ background: T.surface, border: `1px solid ${T.borderLo}`, borderRadius: 12, padding: "12px 16px" }}>
+            <div style={{ fontFamily: T.mono, fontSize: 9, color: T.cyan, letterSpacing: 1.5, marginBottom: 6 }}>ALREADY BROADCAST?</div>
+            <div style={{ fontSize: 12.5, color: T.textMid, lineHeight: 1.6 }}>
+              Paste this transaction's 64-character <strong style={{ color: T.text }}>txid</strong> instead — the explorer supplies the input amounts, so interpretation entropy, deterministic links, the exact fee rate, and the what-happened-since timeline all light up.
+            </div>
+          </div>
+        )}
+
+        {/* Confirmation context — this analysis is permanent, not preventable */}
+        {tx.confirmed && tx.status && (
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", background: T.surface, border: `1px solid ${T.borderLo}`, borderRadius: 12, padding: "10px 16px" }}>
+            <span style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim, letterSpacing: 1.5 }}>CONFIRMED</span>
+            {tx.status.block_height != null && <Tag label={"block " + tx.status.block_height.toLocaleString()} color={T.textMid} size={9} />}
+            {tx.status.block_time != null && <Tag label={fmt.age(tx.status.block_time)} color={T.textMid} size={9} />}
+            {fr && <Tag label={fr.rate + " sat/vB" + (fr.estimated ? " (est)" : "")} color={T.textMid} size={9} />}
+            <span style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim, marginLeft: "auto" }}>on-chain forever — every reading below is public</span>
+          </div>
+        )}
+
+        {/* What happened since — the confirmed-only intel a pre-broadcast check
+            can never see: which outputs were spent, and whether any were later
+            RE-MERGED in one spend (proving common ownership after the fact). */}
+        {tx.outspends && tx.outspends.length === (tx.vout || []).length && (() => {
+          const spentIn = {};
+          tx.outspends.forEach((o, i) => { if (o && o.spent && o.txid) (spentIn[o.txid] = spentIn[o.txid] || []).push(i); });
+          const remerged = Object.entries(spentIn).filter(([, idxs]) => idxs.length >= 2);
+          const spentN = tx.outspends.filter(o => o && o.spent).length;
+          const changeSpent = change && tx.outspends[change.index] && tx.outspends[change.index].spent;
+          return (
+            <div style={panel({ borderColor: (remerged.length ? T.red : T.border) + (remerged.length ? "55" : "") })}>
+              <div style={{ ...label, color: remerged.length ? T.red : T.textDim }}>WHAT HAPPENED SINCE</div>
+              <div style={{ fontSize: 13, color: T.textMid, lineHeight: 1.6, marginBottom: 10 }}>
+                {spentN === 0
+                  ? "None of this transaction's outputs have been spent yet — the trail pauses here, but every output is being watched from the moment it moves."
+                  : <>{spentN} of {tx.outspends.length} output{tx.outspends.length !== 1 ? "s" : ""} ha{spentN === 1 ? "s" : "ve"} been spent since confirmation{changeSpent ? " — including the likely change, so the owner's trail continued and an analyst kept following it" : ""}.</>}
+              </div>
+              {remerged.length > 0 && (
+                <div style={{ background: T.red + "10", border: `1px solid ${T.red}33`, borderRadius: 10, padding: "9px 12px", fontSize: 12.5, color: T.textMid, lineHeight: 1.6, marginBottom: 10 }}>
+                  <strong style={{ color: T.red }}>Outputs re-merged.</strong> {remerged.map(([, idxs]) => "#" + idxs.map(i => i + 1).join(" + #")).join(", ")} were later spent <em>together in one transaction</em> — on-chain proof they belonged to one owner. Whatever ambiguity this transaction created, that spend undid it.
+                </div>
+              )}
+              <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+                {tx.outspends.map((o, i) => {
+                  const out = (tx.vout || [])[i] || {};
+                  const spent = o && o.spent;
+                  return (
+                    <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, background: T.surface, border: `1px solid ${T.borderLo}`, borderRadius: 8, padding: "7px 11px", fontFamily: T.mono, fontSize: 10.5 }}>
+                      <span style={{ color: T.textDim, flexShrink: 0 }}>#{i + 1}</span>
+                      <span style={{ color: T.textMid, flexShrink: 0 }}>{sats(out.value)}</span>
+                      <span style={{ width: 7, height: 7, borderRadius: "50%", background: spent ? T.red : T.green, flexShrink: 0 }} aria-hidden="true" />
+                      <span style={{ color: spent ? T.textMid : T.green, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>
+                        {spent ? <>spent{o.status && o.status.block_time && tx.status && tx.status.block_time ? " " + _sinceDays(tx.status.block_time, o.status.block_time) : ""} in {o.txid ? o.txid.slice(0, 10) + "…" : "?"}</> : "unspent — still watchable"}
+                      </span>
+                      {spent && o.txid && (
+                        <button onClick={() => { setRaw(o.txid); inspect(o.txid); }} aria-label={"Follow the coins: inspect spending transaction " + o.txid}
+                          title="Follow the coins — run the same forensics on the transaction that spent this output"
+                          style={{ background: "transparent", border: `1px solid ${T.cyan}44`, borderRadius: 5, padding: "2px 7px", color: T.cyan, fontFamily: T.mono, fontSize: 9, cursor: "pointer", flexShrink: 0, transition: "all .15s" }}
+                          onMouseOver={e => { e.currentTarget.style.background = T.cyan; e.currentTarget.style.color = T.bg; }}
+                          onMouseOut={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = T.cyan; }}>
+                          follow →
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })()}
+
         {/* interpretation entropy / linkability (Boltzmann) */}
         {link.available && (
           <div style={panel({ borderColor: ent.c + "33" })}>
@@ -5383,6 +5588,10 @@ function TransactionInspector({ onBack, isMobile, onScan, onNav, prefill }) {
               <span style={{ fontFamily: T.serif, fontSize: isMobile ? 26 : 32, color: ent.c, fontWeight: 400 }}>{link.entropy.toFixed(2)}<span style={{ fontSize: 13, color: T.textDim, marginLeft: 4 }}>bits</span></span>
               <span style={{ fontFamily: T.sans, fontSize: 14, color: T.text, fontWeight: 600 }}>{ent.t}</span>
               <span style={{ fontFamily: T.mono, fontSize: 10, color: T.textDim, marginLeft: "auto" }}>{link.N.toLocaleString()} interpretation{link.N !== 1 ? "s" : ""}</span>
+              {link.efficiency != null
+                ? <span title={"This transaction's interpretations as a share of the best-possible transaction with the same input/output count (Nmax = " + link.nmax.toLocaleString() + ") — the wallet-efficiency metric LaurentMT's Boltzmann and KYCP.org printed. Entropy density: " + (link.entropy / (link.n + link.m)).toFixed(2) + " bits per input/output."}
+                    style={{ fontFamily: T.mono, fontSize: 10, color: ent.c }}>{Math.round(link.efficiency * 100)}% efficiency</span>
+                : <span title="The ideal same-shape transaction exceeds the exact-count cap, so efficiency can't be computed at this size." style={{ fontFamily: T.mono, fontSize: 10, color: T.textDim }}>efficiency n/a at this size</span>}
             </div>
             <div style={{ fontSize: 13, color: T.textMid, lineHeight: 1.6, marginBottom: link.dl > 0 ? 12 : 0 }}>
               {link.N === 1
@@ -5486,7 +5695,7 @@ function TransactionInspector({ onBack, isMobile, onScan, onNav, prefill }) {
           <div style={label}>INPUTS → OUTPUTS</div>
           {tx.partial && (
             <div style={{ fontSize: 12, color: T.amber, background: T.amber + "12", border: `1px solid ${T.amber}33`, borderRadius: 8, padding: "8px 12px", marginBottom: 12, lineHeight: 1.5 }}>
-              {result.kind === "rawhex" ? "Raw hex carries no input data — paste the PSBT for full input-side analysis (cluster + fee)." : "Partial PSBT — some inputs lack UTXO data, so the fee and input analysis cover only the known inputs."}
+              {result.kind === "rawhex" ? "Raw hex carries no input data — paste the PSBT for full input-side analysis (cluster + fee)." : (result.kind === "txid" || result.kind === "txobj") ? ((tx.vin || []).some(v => v.coinbase) ? "This transaction has a coinbase (newly-mined) input, so input-side analysis covers only the regular inputs." : "Some inputs lack source data, so the fee and input-side analysis cover only the known inputs.") : "Partial PSBT — some inputs lack UTXO data, so the fee and input analysis cover only the known inputs."}
             </div>
           )}
           {link.available && (tx.vin || []).length >= 1 && (
@@ -5555,7 +5764,7 @@ function TransactionInspector({ onBack, isMobile, onScan, onNav, prefill }) {
             See what your transaction<br /><em style={{ color: T.cyan }}>leaks — before it's permanent.</em>
           </h2>
           <p style={{ fontSize: isMobile ? 14 : 16, color: T.textMid, lineHeight: 1.7, maxWidth: 560, margin: "0 auto", fontWeight: 300 }}>
-            Paste a <strong style={{ color: T.text }}>PSBT</strong> or raw transaction your wallet is about to sign. Every scan runs entirely in your browser — the transaction is never sent anywhere.
+            Paste a <strong style={{ color: T.text }}>PSBT</strong> or raw transaction your wallet is about to sign — analyzed entirely in your browser, never sent anywhere. Or paste a <strong style={{ color: T.text }}>txid</strong> to run the same forensics on any confirmed transaction (fetched from your chosen explorer{RELAY_URL ? ", via the no-log relay" : ""}).
           </p>
         </div>
 
@@ -5569,13 +5778,13 @@ function TransactionInspector({ onBack, isMobile, onScan, onNav, prefill }) {
             onBlur={e => { e.target.style.borderColor = T.border; e.target.style.boxShadow = "none"; }}
             style={{ width: "100%", boxSizing: "border-box", minHeight: 120, resize: "vertical", background: "#070910", border: `1px solid ${T.border}`, borderRadius: 10, padding: "12px 14px", color: T.text, fontFamily: T.mono, fontSize: 12.5, lineHeight: 1.5, outline: "none", transition: "border .15s, box-shadow .2s" }} />
           <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 12, flexWrap: "wrap" }}>
-            <button onClick={() => inspect()} disabled={!raw.trim()} className="sheen"
-              style={{ background: raw.trim() ? T.cyan : T.surface, border: "none", borderRadius: 10, padding: "12px 22px", color: raw.trim() ? T.bg : T.textDim, fontFamily: T.sans, fontWeight: 700, fontSize: 14, cursor: raw.trim() ? "pointer" : "default", transition: "all .15s" }}>
-              Inspect →
+            <button onClick={() => inspect()} disabled={!raw.trim() || busy} className="sheen"
+              style={{ background: raw.trim() && !busy ? T.cyan : T.surface, border: "none", borderRadius: 10, padding: "12px 22px", color: raw.trim() && !busy ? T.bg : T.textDim, fontFamily: T.sans, fontWeight: 700, fontSize: 14, cursor: raw.trim() && !busy ? "pointer" : "default", transition: "all .15s" }}>
+              {busy ? "Fetching…" : "Inspect →"}
             </button>
             <button onClick={loadDemo} style={{ background: "transparent", border: `1px solid ${T.border}`, borderRadius: 10, padding: "12px 16px", color: T.textMid, fontFamily: T.sans, fontSize: 13, cursor: "pointer" }}
               onMouseOver={e => e.currentTarget.style.borderColor = T.cyan} onMouseOut={e => e.currentTarget.style.borderColor = T.border}>Load example PSBT</button>
-            {detected && <span style={{ fontFamily: T.mono, fontSize: 10, color: T.cyan }}>{detected === "psbt" ? "✓ PSBT detected" : detected === "rawhex" ? "✓ raw tx hex" : "txid — fetch coming soon"}</span>}
+            {detected && <span style={{ fontFamily: T.mono, fontSize: 10, color: T.cyan }}>{detected === "psbt" ? "✓ PSBT detected" : detected === "rawhex" ? "✓ raw tx hex" : "✓ txid — looks up the confirmed transaction"}</span>}
           </div>
         </div>
 
@@ -7169,7 +7378,7 @@ function MethodologyPage({ onBack, isMobile, onNav }) {
   );
 }
 
-function Dashboard({ address, addrInfo, utxos, txs, isMobile, onBack, onRescan, toast, autoShare, scanAt, defaultSimple, simpleMode: simpleModeFromApp, onSimpleModeChange, onCoach, delta, onNav, onOpenCase, onOpenWalletReview }) {
+function Dashboard({ address, addrInfo, utxos, txs, isMobile, onBack, onRescan, toast, autoShare, scanAt, defaultSimple, simpleMode: simpleModeFromApp, onSimpleModeChange, onCoach, delta, onNav, onOpenCase, onOpenWalletReview, onInspectTx, onInspectTxid }) {
   const [tab, setTab] = useState("Fix It");
   const [threat, setThreat] = useState(null); // null = ranked for everyone; session-only, never stored
   const clusterN = useMemo(() => computeCluster(txs, address).linked.length, [txs, address]);
@@ -7772,11 +7981,21 @@ function Dashboard({ address, addrInfo, utxos, txs, isMobile, onBack, onRescan, 
                     </div>
                   </div>
                   {open && (
-                    <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${T.borderLo}`, display: "flex", flexWrap: "wrap", gap: 20 }}>
+                    <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${T.borderLo}`, display: "flex", flexWrap: "wrap", gap: 20, alignItems: "flex-end" }}>
                       <div><div style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim, marginBottom: 4 }}>TXID</div><div style={{ fontFamily: T.mono, fontSize: 11, color: T.textMid, wordBreak: "break-all" }}>{u.txid}</div></div>
                       <div><div style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim, marginBottom: 4 }}>SATOSHIS</div><div style={{ fontFamily: T.mono, fontSize: 11, color: T.textMid }}>{u.value.toLocaleString()}</div></div>
                       <div><div style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim, marginBottom: 4 }}>CONFIRMED</div><div style={{ fontFamily: T.mono, fontSize: 11, color: u.status?.confirmed ? T.green : T.btc }}>{u.status?.confirmed ? "Yes" : "Pending"}</div></div>
                       {u.scriptpubkey_type && <div><div style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim, marginBottom: 4 }}>SCRIPT TYPE</div><div style={{ fontFamily: T.mono, fontSize: 11, color: T.textMid }}>{u.scriptpubkey_type}</div></div>}
+                      {onInspectTx && /^[0-9a-fA-F]{64}$/.test(u.txid) && (
+                        <button onClick={e => { e.stopPropagation(); const full = txs.find(t => t.txid === u.txid); if (full) onInspectTx(full); else if (onInspectTxid) onInspectTxid(u.txid); }}
+                          aria-label={"Deep-inspect the transaction that created this UTXO: " + u.txid}
+                          title="Full forensics on the transaction that created this coin — entropy, deterministic links, fingerprint (uses already-loaded data when available)"
+                          style={{ background: "transparent", border: `1px solid ${T.cyan}44`, borderRadius: 6, padding: "4px 8px", color: T.cyan, fontFamily: T.mono, fontSize: 9, cursor: "pointer", letterSpacing: 0.5, whiteSpace: "nowrap", marginLeft: "auto", transition: "all .15s" }}
+                          onMouseOver={e => { e.currentTarget.style.background = T.cyan; e.currentTarget.style.color = T.bg; }}
+                          onMouseOut={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = T.cyan; }}>
+                          Inspect funding tx →
+                        </button>
+                      )}
                     </div>
                   )}
                 </div>
@@ -7792,9 +8011,9 @@ function Dashboard({ address, addrInfo, utxos, txs, isMobile, onBack, onRescan, 
               <strong style={{ color: T.text }}>{txs.length}</strong> transactions. We flag CoinJoins, unsafe consolidations, and round amounts.
             </div>
             <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 16, overflow: "hidden" }}>
-              <div style={{ display: "grid", gridTemplateColumns: "130px 90px 60px 60px 1fr 110px", padding: "10px 20px", borderBottom: `1px solid ${T.borderLo}` }}>
-                {["TXID","DATE","IN","OUT","FLAGS","FEE"].map(h => (
-                  <div key={h} style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim, letterSpacing: 1.5 }}>{h}</div>
+              <div style={{ display: "grid", gridTemplateColumns: onInspectTx ? "130px 90px 50px 50px 1fr 100px 76px" : "130px 90px 60px 60px 1fr 110px", padding: "10px 20px", borderBottom: `1px solid ${T.borderLo}` }}>
+                {(onInspectTx ? ["TXID","DATE","IN","OUT","FLAGS","FEE",""] : ["TXID","DATE","IN","OUT","FLAGS","FEE"]).map((h, hi) => (
+                  <div key={hi} style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim, letterSpacing: 1.5 }}>{h}</div>
                 ))}
               </div>
               {txs.slice(0, 20).map((tx, i) => {
@@ -7804,7 +8023,7 @@ function Dashboard({ address, addrInfo, utxos, txs, isMobile, onBack, onRescan, 
                 if ((tx.vout || []).some(o => isRoundSat(o.value))) flags.push({ l: "Round amount", c: T.amber });
                 if (!flags.length) flags.push({ l: "Standard", c: T.textDim });
                 return (
-                  <div key={tx.txid} style={{ display: "grid", gridTemplateColumns: "130px 90px 60px 60px 1fr 110px", padding: "10px 20px", borderBottom: `1px solid ${T.borderLo}`, alignItems: "center", animation: `fadeUp .3s ease ${i * .03}s both`, opacity: 0, transition: "background .12s" }}
+                  <div key={tx.txid} style={{ display: "grid", gridTemplateColumns: onInspectTx ? "130px 90px 50px 50px 1fr 100px 76px" : "130px 90px 60px 60px 1fr 110px", padding: "10px 20px", borderBottom: `1px solid ${T.borderLo}`, alignItems: "center", animation: `fadeUp .3s ease ${i * .03}s both`, opacity: 0, transition: "background .12s" }}
                     onMouseEnter={e => e.currentTarget.style.background = T.surface}
                     onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
                     <span style={{ fontFamily: T.mono, fontSize: 11, color: T.textMid }}>{fmt.txid(tx.txid)}</span>
@@ -7814,6 +8033,15 @@ function Dashboard({ address, addrInfo, utxos, txs, isMobile, onBack, onRescan, 
                     <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>{flags.map((f, fi) => <Tag key={fi} label={f.l} color={f.c} size={9} />)}</div>
                     {/* FIX: sats not s */}
                     <span style={{ fontFamily: T.mono, fontSize: 11, color: T.textDim }}>{tx.fee ? `${tx.fee.toLocaleString()} sats` : "—"}</span>
+                    {onInspectTx && (
+                      <button onClick={() => onInspectTx(tx)} aria-label={"Deep-inspect transaction " + tx.txid}
+                        title="Full forensics on this transaction — entropy, deterministic links, fingerprint (no refetch: uses the data already loaded)"
+                        style={{ background: "transparent", border: `1px solid ${T.cyan}44`, borderRadius: 6, padding: "4px 8px", color: T.cyan, fontFamily: T.mono, fontSize: 9, cursor: "pointer", letterSpacing: 0.5, whiteSpace: "nowrap", justifySelf: "end", transition: "all .15s" }}
+                        onMouseOver={e => { e.currentTarget.style.background = T.cyan; e.currentTarget.style.color = T.bg; }}
+                        onMouseOut={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = T.cyan; }}>
+                        Inspect →
+                      </button>
+                    )}
                   </div>
                 );
               })}
@@ -8008,7 +8236,7 @@ function Dashboard({ address, addrInfo, utxos, txs, isMobile, onBack, onRescan, 
 /* ─────────────────────────────────────────────
    LIGHTNING DASHBOARD
 ───────────────────────────────────────────── */
-function LightningDashboard({ nodeId, nodeData, channels, isMobile, onBack, onRescan, toast }) {
+function LightningDashboard({ nodeId, nodeData, channels, isMobile, onBack, onRescan, toast, onNav, onOpenWalletReview }) {
   const [tab, setTab] = useState("Fix It");
   const { score, grade, checks, recommendations } = useMemo(
     () => runLightningEngine(nodeData, channels), [nodeData, channels]
@@ -8219,24 +8447,7 @@ function LightningDashboard({ nodeId, nodeData, channels, isMobile, onBack, onRe
                         <Tag label={r.effort} color={r.effort === "Easy" ? T.green : r.effort === "Medium" ? T.amber : T.red} size={9} />
                       </div>
                       <div style={{ fontSize: 13, color: T.textMid, lineHeight: 1.6, marginBottom: r.tools?.length ? 12 : 0 }}>{r.detail}</div>
-                      {r.tools?.length > 0 && (
-                        <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                          {r.tools.map(t => {
-                            const href = toolLink(t.name);
-                            const aff = toolIsAffiliate(t.name);
-                            const inner = (
-                              <>
-                                <div style={{ fontSize: 11, fontWeight: 600, color: T.text }}>{t.name}{aff ? " · affiliate" : ""}</div>
-                                <div style={{ fontSize: 10, color: T.textDim }}>{t.note}</div>
-                              </>
-                            );
-                            const base = { background: T.surface, border: `1px solid ${T.border}`, borderRadius: 8, padding: "5px 10px", textDecoration: "none", display: "block" };
-                            return href
-                              ? <a key={t.name} href={href} target="_blank" rel="noopener noreferrer nofollow" style={base}>{inner}</a>
-                              : <div key={t.name} style={base}>{inner}</div>;
-                          })}
-                        </div>
-                      )}
+                      <FixToolChips tools={r.tools} onReview={onOpenWalletReview} />
                     </div>
                     <button onClick={() => toggleDone(r.key)}
                       style={{ background: done ? T.green : "transparent", border: `1.5px solid ${done ? T.green : T.border}`, borderRadius: 8,
@@ -8247,6 +8458,34 @@ function LightningDashboard({ nodeId, nodeData, channels, isMobile, onBack, onRe
                 </div>
               );
             })}
+            {/* Next moves — Lightning's on-chain feet + the open methodology.
+                Also the mobile path to Methodology (the tab is desktop-only). */}
+            {onNav && (
+              <div style={{ background: T.card, border: `1px solid ${T.ln}2e`, borderRadius: 14, padding: "18px 22px" }}>
+                <div style={{ fontFamily: T.mono, fontSize: 9, color: T.ln, letterSpacing: 2, marginBottom: 12 }}>NEXT MOVES</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                  <div style={{ display: "flex", gap: 12, alignItems: "flex-start", flexWrap: "wrap" }}>
+                    <span aria-hidden="true" style={{ fontSize: 18, flexShrink: 0 }}>&#x1F52C;</span>
+                    <div style={{ flex: 1, minWidth: 220, fontSize: 13, color: T.textMid, lineHeight: 1.6 }}>
+                      <strong style={{ color: T.text }}>Your channels have on-chain feet.</strong> Every channel open and close is an ordinary Bitcoin transaction — paste a funding txid into the Inspector to see exactly what it reveals about your node's wallet.
+                    </div>
+                    <button onClick={() => onNav("inspector")}
+                      style={{ background: "transparent", border: `1.5px solid ${T.ln}55`, borderRadius: 8, padding: "7px 14px", color: T.ln, fontFamily: T.mono, fontSize: 11, cursor: "pointer", transition: "all .15s", whiteSpace: "nowrap", flexShrink: 0 }}
+                      onMouseOver={e => { e.currentTarget.style.background = T.ln; e.currentTarget.style.color = T.bg; }}
+                      onMouseOut={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = T.ln; }}>
+                      Open the Inspector &#x2192;
+                    </button>
+                  </div>
+                  <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap", borderTop: `1px solid ${T.borderLo}`, paddingTop: 12 }}>
+                    <span style={{ flex: 1, minWidth: 220, fontSize: 12.5, color: T.textMid, lineHeight: 1.5 }}>All 8 Lightning heuristics — deductions, sources, threat models — are published.</span>
+                    <button onClick={() => onNav("methodology")}
+                      style={{ background: "none", border: "none", padding: 0, fontFamily: T.mono, fontSize: 10, color: T.textMid, cursor: "pointer", textDecoration: "underline dotted", textUnderlineOffset: 3 }}>
+                      How scoring works &#x2192;
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
             {/* Share card */}
             <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: 14, padding: "18px 22px", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
               <div>
@@ -8667,11 +8906,11 @@ function App() {
       {page === "cases"        && <CaseFiles onOpenCase={c => { setActiveCaseFile(c); setPage("case_detail"); }} onBack={() => setPage("landing")} isMobile={isMobile} onNav={setPage} />}
       {page === "case_detail"  && activeCaseFile && <CaseDetail caseFile={activeCaseFile} onBack={() => setPage("cases")} onAnalyze={analyze} isMobile={isMobile} onNav={setPage} />}
       {page === "scanning"     && <Scanning address={address || lnNodeId} isLightning={isScanningLightning} dataReady={scanDataReady} />}
-      {page === "dashboard"    && <Dashboard address={address} addrInfo={addrInfo} utxos={utxos} txs={txs} isMobile={isMobile} onBack={() => setPage("landing")} onRescan={analyze} toast={toast} autoShare={autoShare} scanAt={scanAt} defaultSimple={defaultSimple} simpleMode={simpleMode} onSimpleModeChange={setSimpleMode} onCoach={() => setPage("coach")} delta={scoreDelta} onNav={setPage} onOpenCase={c => { setActiveCaseFile(c); setPage("case_detail"); }} onOpenWalletReview={name => { setWalletPick(wSlug(name)); setPage("wallets"); }} />}
-      {page === "ln_dashboard" && <LightningDashboard nodeId={lnNodeId} nodeData={lnNodeData} channels={lnChannels} isMobile={isMobile} onBack={() => setPage("landing")} onRescan={analyze} toast={toast} />}
+      {page === "dashboard"    && <Dashboard address={address} addrInfo={addrInfo} utxos={utxos} txs={txs} isMobile={isMobile} onBack={() => setPage("landing")} onRescan={analyze} toast={toast} autoShare={autoShare} scanAt={scanAt} defaultSimple={defaultSimple} simpleMode={simpleMode} onSimpleModeChange={setSimpleMode} onCoach={() => setPage("coach")} delta={scoreDelta} onNav={setPage} onOpenCase={c => { setActiveCaseFile(c); setPage("case_detail"); }} onOpenWalletReview={name => { setWalletPick(wSlug(name)); setPage("wallets"); }} onInspectTx={tx => { setToolPrefill({ page: "inspector", txObj: tx }); setPage("inspector"); }} onInspectTxid={txid => { setToolPrefill({ page: "inspector", value: txid }); setPage("inspector"); }} />}
+      {page === "ln_dashboard" && <LightningDashboard nodeId={lnNodeId} nodeData={lnNodeData} channels={lnChannels} isMobile={isMobile} onBack={() => setPage("landing")} onRescan={analyze} toast={toast} onNav={setPage} onOpenWalletReview={name => { setWalletPick(wSlug(name)); setPage("wallets"); }} />}
       {page === "coach"        && <CoachWaitlist onBack={() => setPage("landing")} isMobile={isMobile} onNav={setPage} />}
       {page === "wallets"      && <WalletDirectory onBack={() => setPage("landing")} isMobile={isMobile} onNav={setPage} pick={walletPick} />}
-      {page === "inspector"    && <TransactionInspector onBack={() => setPage("landing")} isMobile={isMobile} onScan={analyze} onNav={setPage} prefill={toolPrefill?.page === "inspector" ? toolPrefill.value : null} />}
+      {page === "inspector"    && <TransactionInspector onBack={() => setPage("landing")} isMobile={isMobile} onScan={analyze} onNav={setPage} prefill={toolPrefill?.page === "inspector" ? toolPrefill.value : null} prefillTx={toolPrefill?.page === "inspector" ? toolPrefill.txObj : null} />}
       {page === "xpub"         && <XpubScan onBack={() => setPage("landing")} isMobile={isMobile} onScan={analyze} onNav={setPage} prefill={toolPrefill?.page === "xpub" ? toolPrefill.value : null} onOpenWalletReview={name => { setWalletPick(wSlug(name)); setPage("wallets"); }} />}
       {page === "methodology"  && <MethodologyPage onBack={() => setPage("landing")} isMobile={isMobile} onNav={setPage} />}
       </div>
@@ -8687,12 +8926,12 @@ window.__ANONSCORE_TEST__ = Object.freeze({
   computeCluster, computeCounterparties, computePoisoning, isLookalikeAddress, computeActivityClock,
   isValidBitcoinAddress, isValidLightningPubkey, detectInputType,
   // Transaction Inspector — parser + analysis (validated against BIP174/173/350)
-  parsePsbt, parseRawTx, classifyScript, parseTransactionInput, detectTxInput,
+  parsePsbt, parseRawTx, classifyScript, parseTransactionInput, detectTxInput, normalizeEsploraTx,
   analyzeTx, guessChange, clusterUnification, feeRate, DEMO_PSBT,
   // transaction entropy / linkability (Boltzmann · validated vs LaurentMT vectors)
   txInterpretations, txLinkability, isCoinJoinShape, classifyCoinjoin,
   // wallet fingerprint (structural tells: version/locktime/RBF/BIP69/script-mix/low-r)
-  fingerprintTx, _derSigInfo,
+  fingerprintTx, _derSigInfo, _scriptPushes,
   // Silent Payments (BIP352) decode/validate — validated vs the spec test vector
   _bech32Decode, decodeSilentPayment, detectSilentPayment,
   // BOLT11 Lightning invoice decode/lint — validated vs the BOLT11 spec vector
