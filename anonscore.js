@@ -270,6 +270,7 @@ const COACH = {
     desc: "Tracked plan across all your wallets, with progress markers."
   }]
 };
+const BTCHUB_URL = "https://hubbtc.pages.dev";
 const STRINGS = {
   en: {
     "nav.free": "Free",
@@ -280,7 +281,7 @@ const STRINGS = {
     "umbrella.label": "TOOLKIT",
     "umbrella.privacy": "Privacy Audit",
     "umbrella.dca": "DCA Butler",
-    "umbrella.intel": "OPN Intel",
+    "umbrella.intel": "BTChub",
     "umbrella.hub": "Hub",
     "hero.eyebrow": "FREE BITCOIN & LIGHTNING PRIVACY AUDIT",
     "hero.h1.line1": "Is your Bitcoin",
@@ -342,7 +343,7 @@ const STRINGS = {
     "umbrella.label": "KIT",
     "umbrella.privacy": "Auditoría de privacidad",
     "umbrella.dca": "DCA Butler",
-    "umbrella.intel": "OPN Intel",
+    "umbrella.intel": "BTChub",
     "umbrella.hub": "Hub",
     "hero.eyebrow": "AUDITORÍA GRATUITA DE PRIVACIDAD BITCOIN Y LIGHTNING",
     "hero.h1.line1": "¿Tu stack de Bitcoin",
@@ -8062,7 +8063,7 @@ function Landing({
       color: T.borderLo
     }
   }, "\xB7"), React.createElement("a", {
-    href: "https://intel.opnorange.com/?from=anonscore",
+    href: `${BTCHUB_URL}/?from=anonscore`,
     target: "_blank",
     rel: "noopener noreferrer",
     style: {
@@ -9970,7 +9971,7 @@ function Landing({
       color: T.borderLo
     }
   }, "\xB7"), React.createElement("a", {
-    href: "https://intel.opnorange.com/?from=anonscore",
+    href: `${BTCHUB_URL}/?from=anonscore`,
     target: "_blank",
     rel: "noopener noreferrer",
     style: {

@@ -203,6 +203,12 @@ const COACH = {
   ],
 };
 
+// BTChub — OPNorange's Bitcoin desk (bitcoin, energy & macro dispatches beside
+// computable indicators), linked from the toolkit strip and the footer. It
+// lives on its Pages host until btchub.opnorange.com is attached; flip this
+// one line when it is.
+const BTCHUB_URL = "https://hubbtc.pages.dev";
+
 /* ─────────────────────────────────────────────
    i18n — minimal, dependency-free.
    English is the default and the fallback for every key, so partial
@@ -223,7 +229,7 @@ const STRINGS = {
     "umbrella.label": "TOOLKIT",
     "umbrella.privacy": "Privacy Audit",
     "umbrella.dca": "DCA Butler",
-    "umbrella.intel": "OPN Intel",
+    "umbrella.intel": "BTChub",
     "umbrella.hub": "Hub",
     "hero.eyebrow": "FREE BITCOIN & LIGHTNING PRIVACY AUDIT",
     "hero.h1.line1": "Is your Bitcoin",
@@ -286,7 +292,7 @@ const STRINGS = {
     "umbrella.label": "KIT",
     "umbrella.privacy": "Auditoría de privacidad",
     "umbrella.dca": "DCA Butler",
-    "umbrella.intel": "OPN Intel",
+    "umbrella.intel": "BTChub",
     "umbrella.hub": "Hub",
     "hero.eyebrow": "AUDITORÍA GRATUITA DE PRIVACIDAD BITCOIN Y LIGHTNING",
     "hero.h1.line1": "¿Tu stack de Bitcoin",
@@ -4173,7 +4179,7 @@ function Landing({ onAnalyze, isMobile, onCases, onNav, onOpenTool }) {
               {t("umbrella.dca")} ↗
             </a>
             <span style={{ color: T.borderLo }}>·</span>
-            <a href="https://intel.opnorange.com/?from=anonscore" target="_blank" rel="noopener noreferrer"
+            <a href={`${BTCHUB_URL}/?from=anonscore`} target="_blank" rel="noopener noreferrer"
               style={{ fontFamily: T.mono, fontSize: 10, color: T.textMid, textDecoration: "none", letterSpacing: 0.5, transition: "color .15s" }}
               onMouseOver={e => e.currentTarget.style.color = T.opn}
               onMouseOut={e => e.currentTarget.style.color = T.textMid}>
@@ -4793,7 +4799,7 @@ function Landing({ onAnalyze, isMobile, onCases, onNav, onOpenTool }) {
               onMouseOver={e => e.currentTarget.style.color = T.opn}
               onMouseOut={e => e.currentTarget.style.color = T.textDim}>{t("umbrella.dca")} ↗</a>
             <span style={{ color: T.borderLo }}>·</span>
-            <a href="https://intel.opnorange.com/?from=anonscore" target="_blank" rel="noopener noreferrer"
+            <a href={`${BTCHUB_URL}/?from=anonscore`} target="_blank" rel="noopener noreferrer"
               style={{ fontFamily: T.mono, fontSize: 10, color: T.textDim, textDecoration: "none", transition: "color .15s" }}
               onMouseOver={e => e.currentTarget.style.color = T.opn}
               onMouseOut={e => e.currentTarget.style.color = T.textDim}>{t("umbrella.intel")} ↗</a>
