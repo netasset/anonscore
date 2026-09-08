@@ -204,10 +204,8 @@ const COACH = {
 };
 
 // BTChub — OPNorange's Bitcoin desk (bitcoin, energy & macro dispatches beside
-// computable indicators), linked from the toolkit strip and the footer. It
-// lives on its Pages host until btchub.opnorange.com is attached; flip this
-// one line when it is.
-const BTCHUB_URL = "https://hubbtc.pages.dev";
+// computable indicators), linked from the toolkit strip and the footer.
+const BTCHUB_URL = "https://btchub.opnorange.com";
 
 /* ─────────────────────────────────────────────
    i18n — minimal, dependency-free.
