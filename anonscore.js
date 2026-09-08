@@ -270,7 +270,7 @@ const COACH = {
     desc: "Tracked plan across all your wallets, with progress markers."
   }]
 };
-const BTCHUB_URL = "https://hubbtc.pages.dev";
+const BTCHUB_URL = "https://btchub.opnorange.com";
 const STRINGS = {
   en: {
     "nav.free": "Free",
