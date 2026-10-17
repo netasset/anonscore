@@ -5,7 +5,7 @@ Deployed on Cloudflare Pages (static hosting; see `_headers`).
 
 ## Architecture
 
-- **`anonscore.jsx`** — the source of truth. The entire app (~6,000 lines, React,
+- **`anonscore.jsx`** — the source of truth. The entire app (~9,000 lines, React,
   inline-styled). Edit this.
 - **`anonscore.js`** — AUTO-GENERATED from `anonscore.jsx`. Do not edit by hand.
   This is what the browser actually loads. Plain JS (classic React runtime), so
@@ -40,10 +40,11 @@ sync with `anonscore.jsx`. Run the full suite with `npm test` (build invariants
 
 - **Never push to `main`** — it's branch-protected (direct push → 403). Work on a
   `claude/*` branch, open a PR.
-- **Auto-merge**: `.github/workflows/auto-merge.yml` merges any `claude/*` PR once
-  the **`test`** check passes (that's the only required check — `build` only runs
-  when `anonscore.jsx` changes), then deletes the branch. Cloudflare Pages deploys
-  from `main`. So: push branch → open PR → it merges + deploys itself, hands-free.
+- **Auto-merge**: `.github/workflows/auto-merge.yml` merges a `claude/*` PR only
+ after the **`test`** check passes (that's the only required check — `build` only
+ runs when `anonscore.jsx` changes) **and** a human who is not the PR author has
+ approved it. PRs that touch the test suite, the build, or CI never auto-merge.
+ Cloudflare Pages deploys from `main`, so a green check alone must not ship.
 - Don't hand-edit `anonscore.js`; CI rebuilds it. Commit the rebuilt `anonscore.js`
   so the diff is correct. (`sw.js` is no longer touched by the build — it uses
   stale-while-revalidate, so there's no per-build cache hash to stamp or conflict on.)

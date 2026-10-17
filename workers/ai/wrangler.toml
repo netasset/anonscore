@@ -2,16 +2,24 @@ name = "anonscore-ai"
 main = "worker.js"
 compatibility_date = "2026-01-01"
 
-# Rate-limit counter store. Holds ONLY an integer per (hashed-IP, day) key,
-# each with a 24h TTL — no addresses, no message content, no raw IPs. See
-# hashIp() and the rate-limit block in worker.js. Fill in your namespace id.
+# REQUIRED. Rate-limit counter store. Holds ONLY an integer per (hashed-IP, day)
+# key, each with a 24h TTL — no addresses, no message content, no raw IPs. See
+# hashIp() in worker.js. The id below is a placeholder: `wrangler deploy` will
+# not bind a real namespace until you replace it, and the worker refuses every
+# request when the KV binding is missing (rate limiting fails closed).
+#
+#   wrangler kv namespace create KV
+#   # paste the printed id over the placeholder below, then deploy
 [[kv_namespaces]]
 binding = "KV"
 id = "<your-kv-namespace-id>"
 
-# The Anthropic API key is a SECRET, never committed here. Set it out-of-band:
+# SECRETS, never committed. The worker reads them at runtime and never logs them.
+# IP_HASH_SALT is required — a missing or too-short salt makes the worker refuse
+# every request rather than skip the rate limit. Use a long random string
+# (at least 16 characters). It is the HMAC key for the daily IP counter.
 #   wrangler secret put ANTHROPIC_API_KEY
-# It is read as env.ANTHROPIC_API_KEY at runtime and never logged.
+#   wrangler secret put IP_HASH_SALT
 
 # Observability OFF: the worker never logs message content or addresses (only
 # error metadata via console.error — status codes and Anthropic error text),

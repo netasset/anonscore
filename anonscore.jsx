@@ -465,7 +465,6 @@ const TOOL_URL = {
   "Phoenix Wallet":  "https://phoenix.acinq.co",
   "Breez":           "https://breez.technology",
   "Zeus":            "https://zeusln.app",
-  "Mutiny Wallet":   "https://mutinywallet.com",
   "Blixt Wallet":    "https://blixtwallet.github.io",
   "Alby":            "https://getalby.com",
   // Non-KYC exchanges / P2P
@@ -557,9 +556,6 @@ const WALLET_REVIEWS = [
   { name: "Zeus", category: "lightning", os: "iOS · Android", pitch: "Connect your own LND, CLN, or Eclair node from your phone. Power-user remote control.",
     strengths: ["You run the node — zero LSP / operator trust", "Supports LND, Core Lightning (CLN), Eclair, Embedded LND", "Per-channel routing controls"],
     watchOuts:  ["Requires you to already have a Lightning node — not a beginner starting point", "Mobile connection back to your node needs careful Tor / VPN setup"] },
-  { name: "Mutiny Wallet", category: "lightning", os: "Web (PWA) · Android", pitch: "Self-custodial Lightning + on-chain wallet that runs in your browser. No app store.",
-    strengths: ["PWA — no app store to deplatform you", "Self-custodial Lightning via LDK", "Built-in Nostr Wallet Connect (NWC) for zaps"],
-    watchOuts:  ["Browser environment means cookies/storage hygiene matters", "Younger codebase than Phoenix or Breez; treat as 'spending money', not 'cold storage'"] },
   { name: "Blixt Wallet", category: "lightning", os: "Android · macOS · Windows · Linux", pitch: "Runs a full LND node directly on your phone — no LSP, no custodian, no compromises.",
     strengths: ["Embedded LND node — you ARE the Lightning node", "Full feature set: keysend, AMP, MPP, splicing, BOLT-12", "Open source, no telemetry"],
     watchOuts:  ["You must manage channels and liquidity yourself", "Battery drain higher than auto-channel wallets — needs to stay online to route"] },
@@ -2063,7 +2059,11 @@ async function scanXpub(xpub, opts = {}) {
       const cs = info.chain_stats || {};
       if ((cs.tx_count || 0) > 0) {
         gap = 0;
-        const full = await fetchAddress(address);
+        // First page only. A gap-limit scan already does one summary plus one
+        // full fetch per used address; paging each of those to 250 txs would
+        // fan out into hundreds of explorer calls. Reuse is judged from
+        // chain_stats on the summary, which is complete without the pages.
+        const full = await fetchAddress(address, { pageCap: 1, txCap: 30 });
         (full.utxos || []).forEach(u => { u.address = address; });
         addresses.push({ address, branch, index: i, chain_stats: cs, utxos: full.utxos || [], txs: full.txs || [] });
       } else gap++;
@@ -2313,7 +2313,6 @@ function runEngine(utxos = [], txs = [], txCount = 0, receiveCount = null) {
     { name:"Phoenix Wallet", note:"Self-custodial, mobile, simple UX, automatic channels" },
     { name:"Breez",          note:"Self-custodial, mobile, point-of-sale + podcasting" },
     { name:"Zeus",           note:"Connect to your own LND/CLN node, advanced" },
-    { name:"Mutiny Wallet",  note:"Self-custodial, web + mobile, open source" },
     { name:"Blixt Wallet",   note:"Self-custodial, full LND node on mobile" },
     { name:"Alby",           note:"Browser extension, great for web payments" },
   ], key:"lightning" });
@@ -2397,24 +2396,83 @@ function runEngine(utxos = [], txs = [], txCount = 0, receiveCount = null) {
 /* ─────────────────────────────────────────────
    API + DEMO DATA
 ───────────────────────────────────────────── */
-async function fetchAddress(addr) {
+// Esplora serves about 25 confirmed transactions per page (the first /txs
+// response also includes mempool txs). Follow /txs/chain/:last_seen_txid so a
+// busy address isn't scored on only the newest screen, and stop at a cap so
+// one scan can't turn into an unbounded crawl.
+const TX_PAGE_SIZE = 25;
+const TX_PAGE_CAP = 10;
+const TX_HISTORY_CAP = 250;
+
+function confirmedOnPage(list) {
+  const out = [];
+  for (const tx of list || []) if (tx && tx.status && tx.status.confirmed && tx.txid) out.push(tx.txid);
+  return out;
+}
+
+async function fetchAddress(addr, opts = {}) {
   // Uses the user-selected explorer (blockstream / mempool — same esplora API),
   // directly or via the relay's mirror path for it. If the relay is on but
   // unreachable, the fetch below rejects and analyze() fails honestly — we
   // never silently fall back to a direct query, which would leak the very IP
   // the user has the relay on to hide.
+  const pageCap = opts.pageCap || TX_PAGE_CAP;
+  const txCap = opts.txCap || TX_HISTORY_CAP;
   const exp = explorer();
   const base = relayOn() ? `${RELAY_URL}${exp.relayPath}` : exp.api;
   const safe = encodeURIComponent(addr);
-  const [info, utxos, txs] = await Promise.all([
+  const [info, utxos, firstPage] = await Promise.all([
     fetch(`${base}/address/${safe}`).then(r => { if (!r.ok) throw new Error("Not found"); return r.json(); }),
     fetch(`${base}/address/${safe}/utxo`).then(r => r.json()),
     fetch(`${base}/address/${safe}/txs`).then(r => r.json()),
   ]);
   if (!info || typeof info !== "object") throw new Error("Invalid API response");
   if (!Array.isArray(utxos)) throw new Error("Invalid UTXO response");
-  if (!Array.isArray(txs)) throw new Error("Invalid TX response");
-  return { addrInfo: info, utxos: utxos.slice(0, 30), txs: txs.slice(0, 30) };
+  if (!Array.isArray(firstPage)) throw new Error("Invalid TX response");
+
+  const txs = [];
+  const seen = new Set();
+  const pushPage = (page) => {
+    let added = 0;
+    for (const tx of page) {
+      if (!tx || !tx.txid || seen.has(tx.txid)) continue;
+      if (txs.length >= txCap) break;
+      seen.add(tx.txid);
+      txs.push(tx);
+      added++;
+    }
+    return added;
+  };
+  pushPage(firstPage);
+
+  const chainCount = info.chain_stats && Number.isFinite(info.chain_stats.tx_count) ? info.chain_stats.tx_count : null;
+  let pages = 1;
+  let cursor = confirmedOnPage(firstPage).slice(-1)[0] || null;
+  let more = confirmedOnPage(firstPage).length >= TX_PAGE_SIZE;
+  while (more && cursor && pages < pageCap && txs.length < txCap && (chainCount == null || confirmedOnPage(txs).length < chainCount)) {
+    const page = await fetch(`${base}/address/${safe}/txs/chain/${encodeURIComponent(cursor)}`).then(r => {
+      if (!r.ok) throw new Error("Invalid TX response");
+      return r.json();
+    });
+    if (!Array.isArray(page)) throw new Error("Invalid TX response");
+    const added = pushPage(page);
+    pages++;
+    if (added === 0 || page.length === 0) break;
+    const next = confirmedOnPage(page).slice(-1)[0] || null;
+    if (!next || next === cursor) break;
+    cursor = next;
+    more = page.length >= TX_PAGE_SIZE;
+  }
+
+  const confirmedFetched = confirmedOnPage(txs).length;
+  const hitCap = pages >= pageCap || txs.length >= txCap;
+  const capped = chainCount != null && confirmedFetched < chainCount && hitCap;
+  return {
+    addrInfo: info,
+    utxos: utxos.slice(0, 30),
+    txs,
+    txSample: { fetched: txs.length, total: chainCount, capped },
+  };
 }
 
 const now = () => Math.floor(Date.now() / 1000);
@@ -4158,7 +4216,7 @@ function Landing({ onAnalyze, isMobile, onCases, onNav, onOpenTool }) {
       {/* ── OPNORANGE TOOLKIT STRIP (umbrella cross-links — its own nav landmark, rendered before <main> so cross-site nav isn't nested in main content) ── */}
       <nav aria-label="OPNorange toolkit" style={{ background: T.bg, borderBottom: `1px solid ${T.borderLo}`, display: "flex", alignItems: "center", gap: 12, padding: isMobile ? "7px 20px" : "7px 48px" }}>
         {/* One tidy family cluster on the left — mark, then the three tools */}
-        <a href="https://opnorange.com" target="_blank" rel="noopener noreferrer" aria-label="OPNorange — the toolkit hub"
+        <a href="https://opnorange.com" target="_blank" rel="noopener noreferrer"
           style={{ display: "flex", alignItems: "center", gap: 7, textDecoration: "none", flexShrink: 0 }}>
           <span style={{ width: 7, height: 7, borderRadius: "50%", background: T.opn, boxShadow: `0 0 7px ${T.opn}`, flexShrink: 0 }} />
           <span style={{ fontFamily: T.mono, fontSize: 10, color: T.textMid, letterSpacing: 1.5, fontWeight: 700 }}>OPN<span style={{ color: T.opn }}>ORANGE</span></span>
@@ -6398,80 +6456,96 @@ function renderMd(text) {
   return <>{out}</>;
 }
 
+// Structured analysis the worker turns into its own system prompt. The browser
+// never sends a system prompt — the worker rejects one. This object is exactly
+// what the consent gate shows and what gets POSTed as `context`.
 function buildAiContext(checks, recommendations, score, grade, walletMeta) {
-  const issues = checks.filter(c => c.status !== "pass");
-  const isPublic = walletMeta?.isPublic;
-  const entity   = walletMeta?.entity || "";
+  const issues = checks.filter(c => c.status !== "pass").slice(0, 20).map(c => ({
+    name: String(c.name || ""),
+    status: String(c.status || ""),
+    plain: String(c.plain || ""),
+  }));
+  const recs = recommendations.slice(0, 5).map(r => ({
+    action: String(r.action || ""),
+    impact: r.impact || 0,
+    tools: (r.tools || (r.tool ? [{ name: r.tool }] : [])).map(t => t.name).filter(Boolean),
+  }));
+  const isPublic = !!walletMeta?.isPublic;
+  const entity = walletMeta?.entity || "";
+  const context = { score, grade, isPublic, entity, issues, recommendations: recs };
 
-  // Build transaction summary for public wallets — all public blockchain data
-  let txSection = "";
   if (isPublic && walletMeta?.txs?.length) {
-    const txs   = walletMeta.txs.slice(0, 20);
-    const utxos = (walletMeta.utxos || []).slice(0, 20);
-    const now   = Math.floor(Date.now() / 1000);
-    const age   = (ts) => {
+    const txs = walletMeta.txs.slice(0, 20);
+    const utxos = (walletMeta.utxos || []).slice(0, 10);
+    const now = Math.floor(Date.now() / 1000);
+    const age = (ts) => {
       if (!ts) return "unknown date";
       const d = Math.floor((now - ts) / 86400);
       return d === 0 ? "today" : d === 1 ? "1 day ago" : `${d} days ago`;
     };
-    const satsBtc = (s) => s >= 1e8 ? `₿${(s/1e8).toFixed(4)}` : `${s.toLocaleString()} sats`;
-
-    const txLines = txs.map((tx, i) => {
-      const inCount  = tx.vin?.length  || 0;
-      const outCount = tx.vout?.length || 0;
-      const fee      = tx.fee ? `${tx.fee} sats fee` : "";
-      const time     = age(tx.status?.block_time);
+    const satsBtc = (s) => s >= 1e8 ? `₿${(s / 1e8).toFixed(4)}` : `${(s || 0).toLocaleString()} sats`;
+    context.transactions = txs.map(tx => {
+      const inputs = tx.vin?.length || 0;
+      const outputs = tx.vout?.length || 0;
       const totalOut = (tx.vout || []).reduce((s, o) => s + (o.value || 0), 0);
-      const flags    = [];
-      if (outCount >= 5 && inCount >= 5) flags.push("possible CoinJoin");
-      if (inCount >= 4 && outCount <= 2) flags.push("consolidation");
+      const flags = [];
+      if (outputs >= 5 && inputs >= 5) flags.push("possible CoinJoin");
+      if (inputs >= 4 && outputs <= 2) flags.push("consolidation");
       if (isRoundSat(totalOut)) flags.push("round amount");
-      return `  ${i+1}. ${time} — ${inCount} inputs → ${outCount} outputs, ${satsBtc(totalOut)} total${fee ? `, ${fee}` : ""}${flags.length ? ` [${flags.join(", ")}]` : ""}`;
-    }).join("\n");
-
-    const utxoLines = utxos.slice(0, 10).map((u, i) =>
-      `  ${i+1}. ${satsBtc(u.value)} — ${u.status?.confirmed ? "confirmed" : "unconfirmed"}, ${age(u.status?.block_time)}, type: ${u.scriptpubkey_type || "unknown"}`
-    ).join("\n");
-
-    txSection = `
-On-chain transaction data (${txs.length} most recent, all public blockchain data):
-${txLines}
-
-Top UTXOs by value (${utxos.length} sampled):
-${utxoLines}`;
+      return {
+        time: age(tx.status?.block_time),
+        inputs, outputs,
+        total: satsBtc(totalOut),
+        fee: tx.fee ? `${tx.fee} sats fee` : "",
+        flags,
+      };
+    });
+    context.utxos = utxos.map(u => ({
+      value: satsBtc(u.value),
+      confirmed: !!u.status?.confirmed,
+      age: age(u.status?.block_time),
+      type: u.scriptpubkey_type || "unknown",
+    }));
   }
-
-  const walletFrame = isPublic
-    ? `The user is analyzing a PUBLIC/INSTITUTIONAL wallet — this is NOT the user's own wallet. It belongs to: ${entity}. Always use third-person language ("this wallet", "the entity", "their coins") — NEVER say "your wallet", "your coins", or "you should". Frame analysis as forensic/educational, not personal advice.`
-    : `The user ran a privacy analysis on their own wallet. Address was NOT shared — you have analysis results only.`;
-
-  const systemPrompt = `You are a Bitcoin privacy expert assistant. ${walletFrame}
-
-Analysis summary:
-- Privacy score: ${score}/100 (Grade ${grade})
-- Issues (${issues.length}):
-${issues.map(c => `  • ${c.name} [${c.status.toUpperCase()}]: ${c.plain}`).join("\n")}
-- Top recommendations:
-${recommendations.slice(0, 5).map((r, i) => `  ${i+1}. ${r.action} (+${r.impact}pts) — Options: ${(r.tools||[{name:r.tool}]).map(t=>t.name).join(", ")}`).join("\n")}${txSection}
-
-Rules:
-- Plain prose only. NO markdown — no **bold**, no *italic*, no bullet points with -, no # headers.
-- Use numbered lists (1. 2. 3.) sparingly if needed for steps.
-- Be concise. Under 150 words unless step-by-step instructions require more.
-- ${isPublic ? "This is forensic analysis of a public wallet — you have transaction data above. Discuss specific transactions when asked. Focus on what the chain reveals, historical context, and privacy lessons." : "Give practical wallet instructions when asked (Sparrow, Wasabi, Phoenix)."}
-- Never reproduce or reference full Bitcoin addresses.`;
 
   const preview = [
     `Score: ${score}/100 · Grade ${grade}`,
-    isPublic ? `Entity: ${entity}` : `${issues.length} issue${issues.length !== 1 ? "s" : ""}: ${issues.slice(0,3).map(c => c.name).join(", ")}${issues.length > 3 ? ` +${issues.length - 3} more` : ""}`,
+    isPublic ? `Entity: ${entity}` : `${issues.length} issue${issues.length !== 1 ? "s" : ""}: ${issues.slice(0, 3).map(c => c.name).join(", ")}${issues.length > 3 ? ` +${issues.length - 3} more` : ""}`,
     isPublic && walletMeta?.txs?.length ? `${walletMeta.txs.length} recent transactions (public blockchain data)` : `Top finding: ${recommendations[0]?.action || issues[0]?.name || "none"}`,
   ];
-  return { systemPrompt, preview };
+  return { context, preview };
+}
+
+function formatAiContext(context) {
+  const lines = [
+    `Privacy score: ${context.score}/100 (Grade ${context.grade})`,
+  ];
+  if (context.isPublic) lines.push(`Public wallet: ${context.entity || "unnamed"}`);
+  lines.push(`Issues (${context.issues.length}):`);
+  for (const issue of context.issues) lines.push(`  • ${issue.name} [${String(issue.status).toUpperCase()}]: ${issue.plain}`);
+  if (!context.issues.length) lines.push("  (none)");
+  lines.push("Recommendations:");
+  context.recommendations.forEach((r, n) => {
+    lines.push(`  ${n + 1}. ${r.action} (+${r.impact}pts)${r.tools?.length ? ` — ${r.tools.join(", ")}` : ""}`);
+  });
+  if (context.transactions?.length) {
+    lines.push(`Transactions (${context.transactions.length}, public chain data):`);
+    context.transactions.forEach((tx, n) => {
+      lines.push(`  ${n + 1}. ${tx.time} — ${tx.inputs} inputs → ${tx.outputs} outputs, ${tx.total}${tx.fee ? `, ${tx.fee}` : ""}${tx.flags?.length ? ` [${tx.flags.join(", ")}]` : ""}`);
+    });
+  }
+  if (context.utxos?.length) {
+    lines.push(`UTXOs (${context.utxos.length}):`);
+    context.utxos.forEach((u, n) => {
+      lines.push(`  ${n + 1}. ${u.value} — ${u.confirmed ? "confirmed" : "unconfirmed"}, ${u.age}, type: ${u.type}`);
+    });
+  }
+  return lines.join("\n");
 }
 
 /* ── Consent gate — shown before any data leaves the browser ── */
 function AiConsentGate({ score, grade, checks, recommendations, walletMeta, onAccept, onDecline }) {
-  const { systemPrompt } = buildAiContext(checks, recommendations, score, grade, walletMeta);
+  const { context } = buildAiContext(checks, recommendations, score, grade, walletMeta);
   const dialogRef = useDialog(onDecline);
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 950, display: "flex", alignItems: "center", justifyContent: "center", padding: 20, background: "#000000bb" }}>
@@ -6486,15 +6560,15 @@ function AiConsentGate({ score, grade, checks, recommendations, walletMeta, onAc
         </div>
 
         <div style={{ background: T.greenLo, border: `1px solid ${T.green}33`, borderRadius: 12, padding: "14px 16px", marginBottom: 10 }}>
-          <div style={{ fontFamily: T.mono, fontSize: 9, color: T.green, letterSpacing: 1.5, marginBottom: 8 }}>✓ SENT TO ANTHROPIC'S API — THE EXACT TEXT</div>
-          {/* Show the literal system prompt that gets POSTed — no summary, no
-              paraphrase. This is the whole point of a "verify, don't trust" tool. */}
-          <pre style={{ margin: 0, maxHeight: 200, overflow: "auto", background: T.bg, border: `1px solid ${T.borderLo}`, borderRadius: 8, padding: "10px 12px", fontFamily: T.mono, fontSize: 10.5, lineHeight: 1.5, color: T.textMid, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{systemPrompt}</pre>
+          <div style={{ fontFamily: T.mono, fontSize: 9, color: T.green, letterSpacing: 1.5, marginBottom: 8 }}>✓ SENT TO THE ASSISTANT — THE EXACT CONTEXT</div>
+          {/* The worker builds the system prompt. Show the structured context
+              that actually leaves the browser — no summary, no paraphrase. */}
+          <pre style={{ margin: 0, maxHeight: 200, overflow: "auto", background: T.bg, border: `1px solid ${T.borderLo}`, borderRadius: 8, padding: "10px 12px", fontFamily: T.mono, fontSize: 10.5, lineHeight: 1.5, color: T.textMid, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{formatAiContext(context)}</pre>
           <div style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim, marginTop: 8, lineHeight: 1.5 }}>
-            That's the complete context — plus the questions you type in the chat. Don't paste your address or anything you don't want sent.{" "}
-            <a href="https://github.com/netasset/anonscore/blob/main/anonscore.jsx" target="_blank" rel="noopener noreferrer"
+            That's the analysis sent to the assistant — plus the questions you type in the chat. The worker writes its own system prompt from these fields and rejects any system prompt a browser tries to attach. Don't paste your address or anything you don't want sent.{" "}
+            <a href="https://github.com/netasset/anonscore/blob/main/workers/ai/worker.js" target="_blank" rel="noopener noreferrer"
               style={{ color: T.cyan, textDecoration: "none" }}>
-              verify: the open-source code that builds this exact payload (search "buildAiContext") ↗
+              verify: the open-source worker that builds the prompt (search "buildSystemPrompt") ↗
             </a>
           </div>
         </div>
@@ -6586,7 +6660,7 @@ function AiAssistant({ checks, recommendations, score, grade, onClose, starters:
   const WORKER_URL = "https://anonscore-ai.netassetpremium.workers.dev";
 
   const issues = checks.filter(c => c.status !== "pass");
-  const { systemPrompt } = buildAiContext(checks, recommendations, score, grade, walletMeta);
+  const { context } = buildAiContext(checks, recommendations, score, grade, walletMeta);
   const exhausted = msgCount >= MAX_MSGS;
   const isPublic = walletMeta?.isPublic;
   const entity   = walletMeta?.entity || "";
@@ -6617,7 +6691,7 @@ function AiAssistant({ checks, recommendations, score, grade, onClose, starters:
       const res = await fetch(WORKER_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: next, systemPrompt }),
+        body: JSON.stringify({ messages: next, context }),
       });
       if (res.status === 429) {
         setRateLimited(true);
@@ -7382,7 +7456,7 @@ function MethodologyPage({ onBack, isMobile, onNav }) {
   );
 }
 
-function Dashboard({ address, addrInfo, utxos, txs, isMobile, onBack, onRescan, toast, autoShare, scanAt, defaultSimple, simpleMode: simpleModeFromApp, onSimpleModeChange, onCoach, delta, onNav, onOpenCase, onOpenWalletReview, onInspectTx, onInspectTxid }) {
+function Dashboard({ address, addrInfo, utxos, txs, txSample, isMobile, onBack, onRescan, toast, autoShare, scanAt, defaultSimple, simpleMode: simpleModeFromApp, onSimpleModeChange, onCoach, delta, onNav, onOpenCase, onOpenWalletReview, onInspectTx, onInspectTxid }) {
   const [tab, setTab] = useState("Fix It");
   const [threat, setThreat] = useState(null); // null = ranked for everyone; session-only, never stored
   const clusterN = useMemo(() => computeCluster(txs, address).linked.length, [txs, address]);
@@ -7483,6 +7557,7 @@ function Dashboard({ address, addrInfo, utxos, txs, isMobile, onBack, onRescan, 
       `Risk:       ${riskLabel}`,
       `Scanned:    ${scanAt ? new Date(scanAt).toUTCString() : "—"}`,
       `UTXOs:      ${utxos.length}  |  Transactions: ${txCount}`,
+      ...(txSample?.capped && txSample.total != null ? [`Sample:     based on the latest ${txSample.fetched} of ${txSample.total} transactions`] : []),
       "",
       "SCORE BREAKDOWN (every wallet starts at 100)",
       "--------------------------------------------",
@@ -7598,7 +7673,7 @@ function Dashboard({ address, addrInfo, utxos, txs, isMobile, onBack, onRescan, 
           <div style={{ display: "flex", gap: isMobile ? 14 : 24, flexWrap: "wrap" }}>
             {[
               { label: "BALANCE", val: `₿${(totalSats/1e8).toFixed(4)}`, sub: `${addrInfo?.chain_stats?.funded_txo_count != null ? (addrInfo.chain_stats.funded_txo_count - (addrInfo.chain_stats.spent_txo_count||0)) : utxos.length} UTXOs`, color: T.blue },
-              { label: "TXS", val: txCount, sub: "total", color: T.cyan },
+              { label: "TXS", val: txCount, sub: txSample?.capped ? `latest ${txSample.fetched}` : "total", color: T.cyan },
               { label: "VS TYPICAL", val: score > 38 ? `+${score-38}` : `${score-38}`, sub: "typical ~38", color: score > 38 ? T.green : T.red },
               // The cluster the common-input heuristic builds — surfaced here so
               // the Flow tab's headline finding is discoverable at a glance.
@@ -7629,6 +7704,12 @@ function Dashboard({ address, addrInfo, utxos, txs, isMobile, onBack, onRescan, 
             <div style={{ fontSize: 10, color: T.textDim, marginTop: 1 }}>potential gain</div>
           </div>
         </div>
+
+        {txSample?.capped && txSample.total != null && (
+          <div style={{ fontFamily: T.mono, fontSize: 11, color: T.textDim, margin: "-4px 4px 12px", lineHeight: 1.5 }}>
+            Based on the latest {txSample.fetched} of {txSample.total} transactions.
+          </div>
+        )}
 
         {/* Address-poisoning alert — a safety check, not a privacy metric, so it
             never moves the score. Loud on purpose: this is planted scam bait. */}
@@ -8012,7 +8093,13 @@ function Dashboard({ address, addrInfo, utxos, txs, isMobile, onBack, onRescan, 
         {tab === "Transactions" && (
           <div>
             <div style={{ fontSize: 13, color: T.textMid, marginBottom: 12 }}>
-              <strong style={{ color: T.text }}>{txs.length}</strong> transactions. We flag CoinJoins, unsafe consolidations, and round amounts.
+              {txSample?.capped && txSample.total != null ? (
+                <>Based on the latest <strong style={{ color: T.text }}>{txSample.fetched}</strong> of <strong style={{ color: T.text }}>{txSample.total}</strong> transactions.</>
+              ) : (
+                <><strong style={{ color: T.text }}>{txs.length}</strong> transactions.</>
+              )}
+              {" "}We flag CoinJoins, unsafe consolidations, and round amounts.
+              {txs.length > 20 ? " Showing the latest 20." : ""}
             </div>
             <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 16, overflow: "hidden" }}>
               <div style={{ display: "grid", gridTemplateColumns: onInspectTx ? "130px 90px 50px 50px 1fr 100px 76px" : "130px 90px 60px 60px 1fr 110px", padding: "10px 20px", borderBottom: `1px solid ${T.borderLo}` }}>
@@ -8768,6 +8855,7 @@ function App() {
   const [addrInfo, setAddrInfo] = useState(null);
   const [utxos, setUtxos] = useState([]);
   const [txs, setTxs] = useState([]);
+  const [txSample, setTxSample] = useState(null);
   const [autoShare, setAutoShare] = useState(false);
   const [scanAt, setScanAt] = useState(null);
   const [defaultSimple, setDefaultSimple] = useState(false);
@@ -8842,6 +8930,7 @@ function App() {
     setPage("scanning");
     setAutoShare(false);
     setDefaultSimple(plain);
+    setTxSample(null);
 
     try {
       if (addr === "DEMO" || addr === "DEMO_A") {
@@ -8871,6 +8960,7 @@ function App() {
       setAddrInfo(data.addrInfo);
       setUtxos(data.utxos);
       setTxs(data.txs);
+      setTxSample(data.txSample || null);
       setScanAt(Date.now());
       addToHistory({ addr, score: analysis.score, grade: analysis.grade, label: analysis.riskLabel, scanAt: Date.now(), isLightning: false });
       setScoreTint(scoreColor(analysis.score));
@@ -8910,7 +9000,7 @@ function App() {
       {page === "cases"        && <CaseFiles onOpenCase={c => { setActiveCaseFile(c); setPage("case_detail"); }} onBack={() => setPage("landing")} isMobile={isMobile} onNav={setPage} />}
       {page === "case_detail"  && activeCaseFile && <CaseDetail caseFile={activeCaseFile} onBack={() => setPage("cases")} onAnalyze={analyze} isMobile={isMobile} onNav={setPage} />}
       {page === "scanning"     && <Scanning address={address || lnNodeId} isLightning={isScanningLightning} dataReady={scanDataReady} />}
-      {page === "dashboard"    && <Dashboard address={address} addrInfo={addrInfo} utxos={utxos} txs={txs} isMobile={isMobile} onBack={() => setPage("landing")} onRescan={analyze} toast={toast} autoShare={autoShare} scanAt={scanAt} defaultSimple={defaultSimple} simpleMode={simpleMode} onSimpleModeChange={setSimpleMode} onCoach={() => setPage("coach")} delta={scoreDelta} onNav={setPage} onOpenCase={c => { setActiveCaseFile(c); setPage("case_detail"); }} onOpenWalletReview={name => { setWalletPick(wSlug(name)); setPage("wallets"); }} onInspectTx={tx => { setToolPrefill({ page: "inspector", txObj: tx }); setPage("inspector"); }} onInspectTxid={txid => { setToolPrefill({ page: "inspector", value: txid }); setPage("inspector"); }} />}
+      {page === "dashboard"    && <Dashboard address={address} addrInfo={addrInfo} utxos={utxos} txs={txs} txSample={txSample} isMobile={isMobile} onBack={() => setPage("landing")} onRescan={analyze} toast={toast} autoShare={autoShare} scanAt={scanAt} defaultSimple={defaultSimple} simpleMode={simpleMode} onSimpleModeChange={setSimpleMode} onCoach={() => setPage("coach")} delta={scoreDelta} onNav={setPage} onOpenCase={c => { setActiveCaseFile(c); setPage("case_detail"); }} onOpenWalletReview={name => { setWalletPick(wSlug(name)); setPage("wallets"); }} onInspectTx={tx => { setToolPrefill({ page: "inspector", txObj: tx }); setPage("inspector"); }} onInspectTxid={txid => { setToolPrefill({ page: "inspector", value: txid }); setPage("inspector"); }} />}
       {page === "ln_dashboard" && <LightningDashboard nodeId={lnNodeId} nodeData={lnNodeData} channels={lnChannels} isMobile={isMobile} onBack={() => setPage("landing")} onRescan={analyze} toast={toast} onNav={setPage} onOpenWalletReview={name => { setWalletPick(wSlug(name)); setPage("wallets"); }} />}
       {page === "coach"        && <CoachWaitlist onBack={() => setPage("landing")} isMobile={isMobile} onNav={setPage} />}
       {page === "wallets"      && <WalletDirectory onBack={() => setPage("landing")} isMobile={isMobile} onNav={setPage} pick={walletPick} />}

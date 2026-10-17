@@ -527,7 +527,6 @@ const TOOL_URL = {
   "Phoenix Wallet": "https://phoenix.acinq.co",
   "Breez": "https://breez.technology",
   "Zeus": "https://zeusln.app",
-  "Mutiny Wallet": "https://mutinywallet.com",
   "Blixt Wallet": "https://blixtwallet.github.io",
   "Alby": "https://getalby.com",
   "Bisq": "https://bisq.network",
@@ -662,13 +661,6 @@ const WALLET_REVIEWS = [{
   pitch: "Connect your own LND, CLN, or Eclair node from your phone. Power-user remote control.",
   strengths: ["You run the node — zero LSP / operator trust", "Supports LND, Core Lightning (CLN), Eclair, Embedded LND", "Per-channel routing controls"],
   watchOuts: ["Requires you to already have a Lightning node — not a beginner starting point", "Mobile connection back to your node needs careful Tor / VPN setup"]
-}, {
-  name: "Mutiny Wallet",
-  category: "lightning",
-  os: "Web (PWA) · Android",
-  pitch: "Self-custodial Lightning + on-chain wallet that runs in your browser. No app store.",
-  strengths: ["PWA — no app store to deplatform you", "Self-custodial Lightning via LDK", "Built-in Nostr Wallet Connect (NWC) for zaps"],
-  watchOuts: ["Browser environment means cookies/storage hygiene matters", "Younger codebase than Phoenix or Breez; treat as 'spending money', not 'cold storage'"]
 }, {
   name: "Blixt Wallet",
   category: "lightning",
@@ -3481,7 +3473,10 @@ async function scanXpub(xpub, opts = {}) {
       const cs = info.chain_stats || {};
       if ((cs.tx_count || 0) > 0) {
         gap = 0;
-        const full = await fetchAddress(address);
+        const full = await fetchAddress(address, {
+          pageCap: 1,
+          txCap: 30
+        });
         (full.utxos || []).forEach(u => {
           u.address = address;
         });
@@ -3854,9 +3849,6 @@ function runEngine(utxos = [], txs = [], txCount = 0, receiveCount = null) {
       name: "Zeus",
       note: "Connect to your own LND/CLN node, advanced"
     }, {
-      name: "Mutiny Wallet",
-      note: "Self-custodial, web + mobile, open source"
-    }, {
       name: "Blixt Wallet",
       note: "Self-custodial, full LND node on mobile"
     }, {
@@ -4078,21 +4070,71 @@ function runEngine(utxos = [], txs = [], txCount = 0, receiveCount = null) {
     recommendations: recs.slice(0, 6)
   };
 }
-async function fetchAddress(addr) {
+const TX_PAGE_SIZE = 25;
+const TX_PAGE_CAP = 10;
+const TX_HISTORY_CAP = 250;
+function confirmedOnPage(list) {
+  const out = [];
+  for (const tx of list || []) if (tx && tx.status && tx.status.confirmed && tx.txid) out.push(tx.txid);
+  return out;
+}
+async function fetchAddress(addr, opts = {}) {
+  const pageCap = opts.pageCap || TX_PAGE_CAP;
+  const txCap = opts.txCap || TX_HISTORY_CAP;
   const exp = explorer();
   const base = relayOn() ? `${RELAY_URL}${exp.relayPath}` : exp.api;
   const safe = encodeURIComponent(addr);
-  const [info, utxos, txs] = await Promise.all([fetch(`${base}/address/${safe}`).then(r => {
+  const [info, utxos, firstPage] = await Promise.all([fetch(`${base}/address/${safe}`).then(r => {
     if (!r.ok) throw new Error("Not found");
     return r.json();
   }), fetch(`${base}/address/${safe}/utxo`).then(r => r.json()), fetch(`${base}/address/${safe}/txs`).then(r => r.json())]);
   if (!info || typeof info !== "object") throw new Error("Invalid API response");
   if (!Array.isArray(utxos)) throw new Error("Invalid UTXO response");
-  if (!Array.isArray(txs)) throw new Error("Invalid TX response");
+  if (!Array.isArray(firstPage)) throw new Error("Invalid TX response");
+  const txs = [];
+  const seen = new Set();
+  const pushPage = page => {
+    let added = 0;
+    for (const tx of page) {
+      if (!tx || !tx.txid || seen.has(tx.txid)) continue;
+      if (txs.length >= txCap) break;
+      seen.add(tx.txid);
+      txs.push(tx);
+      added++;
+    }
+    return added;
+  };
+  pushPage(firstPage);
+  const chainCount = info.chain_stats && Number.isFinite(info.chain_stats.tx_count) ? info.chain_stats.tx_count : null;
+  let pages = 1;
+  let cursor = confirmedOnPage(firstPage).slice(-1)[0] || null;
+  let more = confirmedOnPage(firstPage).length >= TX_PAGE_SIZE;
+  while (more && cursor && pages < pageCap && txs.length < txCap && (chainCount == null || confirmedOnPage(txs).length < chainCount)) {
+    const page = await fetch(`${base}/address/${safe}/txs/chain/${encodeURIComponent(cursor)}`).then(r => {
+      if (!r.ok) throw new Error("Invalid TX response");
+      return r.json();
+    });
+    if (!Array.isArray(page)) throw new Error("Invalid TX response");
+    const added = pushPage(page);
+    pages++;
+    if (added === 0 || page.length === 0) break;
+    const next = confirmedOnPage(page).slice(-1)[0] || null;
+    if (!next || next === cursor) break;
+    cursor = next;
+    more = page.length >= TX_PAGE_SIZE;
+  }
+  const confirmedFetched = confirmedOnPage(txs).length;
+  const hitCap = pages >= pageCap || txs.length >= txCap;
+  const capped = chainCount != null && confirmedFetched < chainCount && hitCap;
   return {
     addrInfo: info,
     utxos: utxos.slice(0, 30),
-    txs: txs.slice(0, 30)
+    txs,
+    txSample: {
+      fetched: txs.length,
+      total: chainCount,
+      capped
+    }
   };
 }
 const now = () => Math.floor(Date.now() / 1000);
@@ -7984,7 +8026,6 @@ function Landing({
     href: "https://opnorange.com",
     target: "_blank",
     rel: "noopener noreferrer",
-    "aria-label": "OPNorange \u2014 the toolkit hub",
     style: {
       display: "flex",
       alignItems: "center",
@@ -13800,63 +13841,91 @@ function renderMd(text) {
   return React.createElement(React.Fragment, null, out);
 }
 function buildAiContext(checks, recommendations, score, grade, walletMeta) {
-  const issues = checks.filter(c => c.status !== "pass");
-  const isPublic = walletMeta?.isPublic;
+  const issues = checks.filter(c => c.status !== "pass").slice(0, 20).map(c => ({
+    name: String(c.name || ""),
+    status: String(c.status || ""),
+    plain: String(c.plain || "")
+  }));
+  const recs = recommendations.slice(0, 5).map(r => ({
+    action: String(r.action || ""),
+    impact: r.impact || 0,
+    tools: (r.tools || (r.tool ? [{
+      name: r.tool
+    }] : [])).map(t => t.name).filter(Boolean)
+  }));
+  const isPublic = !!walletMeta?.isPublic;
   const entity = walletMeta?.entity || "";
-  let txSection = "";
+  const context = {
+    score,
+    grade,
+    isPublic,
+    entity,
+    issues,
+    recommendations: recs
+  };
   if (isPublic && walletMeta?.txs?.length) {
     const txs = walletMeta.txs.slice(0, 20);
-    const utxos = (walletMeta.utxos || []).slice(0, 20);
+    const utxos = (walletMeta.utxos || []).slice(0, 10);
     const now = Math.floor(Date.now() / 1000);
     const age = ts => {
       if (!ts) return "unknown date";
       const d = Math.floor((now - ts) / 86400);
       return d === 0 ? "today" : d === 1 ? "1 day ago" : `${d} days ago`;
     };
-    const satsBtc = s => s >= 1e8 ? `₿${(s / 1e8).toFixed(4)}` : `${s.toLocaleString()} sats`;
-    const txLines = txs.map((tx, i) => {
-      const inCount = tx.vin?.length || 0;
-      const outCount = tx.vout?.length || 0;
-      const fee = tx.fee ? `${tx.fee} sats fee` : "";
-      const time = age(tx.status?.block_time);
+    const satsBtc = s => s >= 1e8 ? `₿${(s / 1e8).toFixed(4)}` : `${(s || 0).toLocaleString()} sats`;
+    context.transactions = txs.map(tx => {
+      const inputs = tx.vin?.length || 0;
+      const outputs = tx.vout?.length || 0;
       const totalOut = (tx.vout || []).reduce((s, o) => s + (o.value || 0), 0);
       const flags = [];
-      if (outCount >= 5 && inCount >= 5) flags.push("possible CoinJoin");
-      if (inCount >= 4 && outCount <= 2) flags.push("consolidation");
+      if (outputs >= 5 && inputs >= 5) flags.push("possible CoinJoin");
+      if (inputs >= 4 && outputs <= 2) flags.push("consolidation");
       if (isRoundSat(totalOut)) flags.push("round amount");
-      return `  ${i + 1}. ${time} — ${inCount} inputs → ${outCount} outputs, ${satsBtc(totalOut)} total${fee ? `, ${fee}` : ""}${flags.length ? ` [${flags.join(", ")}]` : ""}`;
-    }).join("\n");
-    const utxoLines = utxos.slice(0, 10).map((u, i) => `  ${i + 1}. ${satsBtc(u.value)} — ${u.status?.confirmed ? "confirmed" : "unconfirmed"}, ${age(u.status?.block_time)}, type: ${u.scriptpubkey_type || "unknown"}`).join("\n");
-    txSection = `
-On-chain transaction data (${txs.length} most recent, all public blockchain data):
-${txLines}
-
-Top UTXOs by value (${utxos.length} sampled):
-${utxoLines}`;
+      return {
+        time: age(tx.status?.block_time),
+        inputs,
+        outputs,
+        total: satsBtc(totalOut),
+        fee: tx.fee ? `${tx.fee} sats fee` : "",
+        flags
+      };
+    });
+    context.utxos = utxos.map(u => ({
+      value: satsBtc(u.value),
+      confirmed: !!u.status?.confirmed,
+      age: age(u.status?.block_time),
+      type: u.scriptpubkey_type || "unknown"
+    }));
   }
-  const walletFrame = isPublic ? `The user is analyzing a PUBLIC/INSTITUTIONAL wallet — this is NOT the user's own wallet. It belongs to: ${entity}. Always use third-person language ("this wallet", "the entity", "their coins") — NEVER say "your wallet", "your coins", or "you should". Frame analysis as forensic/educational, not personal advice.` : `The user ran a privacy analysis on their own wallet. Address was NOT shared — you have analysis results only.`;
-  const systemPrompt = `You are a Bitcoin privacy expert assistant. ${walletFrame}
-
-Analysis summary:
-- Privacy score: ${score}/100 (Grade ${grade})
-- Issues (${issues.length}):
-${issues.map(c => `  • ${c.name} [${c.status.toUpperCase()}]: ${c.plain}`).join("\n")}
-- Top recommendations:
-${recommendations.slice(0, 5).map((r, i) => `  ${i + 1}. ${r.action} (+${r.impact}pts) — Options: ${(r.tools || [{
-    name: r.tool
-  }]).map(t => t.name).join(", ")}`).join("\n")}${txSection}
-
-Rules:
-- Plain prose only. NO markdown — no **bold**, no *italic*, no bullet points with -, no # headers.
-- Use numbered lists (1. 2. 3.) sparingly if needed for steps.
-- Be concise. Under 150 words unless step-by-step instructions require more.
-- ${isPublic ? "This is forensic analysis of a public wallet — you have transaction data above. Discuss specific transactions when asked. Focus on what the chain reveals, historical context, and privacy lessons." : "Give practical wallet instructions when asked (Sparrow, Wasabi, Phoenix)."}
-- Never reproduce or reference full Bitcoin addresses.`;
   const preview = [`Score: ${score}/100 · Grade ${grade}`, isPublic ? `Entity: ${entity}` : `${issues.length} issue${issues.length !== 1 ? "s" : ""}: ${issues.slice(0, 3).map(c => c.name).join(", ")}${issues.length > 3 ? ` +${issues.length - 3} more` : ""}`, isPublic && walletMeta?.txs?.length ? `${walletMeta.txs.length} recent transactions (public blockchain data)` : `Top finding: ${recommendations[0]?.action || issues[0]?.name || "none"}`];
   return {
-    systemPrompt,
+    context,
     preview
   };
+}
+function formatAiContext(context) {
+  const lines = [`Privacy score: ${context.score}/100 (Grade ${context.grade})`];
+  if (context.isPublic) lines.push(`Public wallet: ${context.entity || "unnamed"}`);
+  lines.push(`Issues (${context.issues.length}):`);
+  for (const issue of context.issues) lines.push(`  • ${issue.name} [${String(issue.status).toUpperCase()}]: ${issue.plain}`);
+  if (!context.issues.length) lines.push("  (none)");
+  lines.push("Recommendations:");
+  context.recommendations.forEach((r, n) => {
+    lines.push(`  ${n + 1}. ${r.action} (+${r.impact}pts)${r.tools?.length ? ` — ${r.tools.join(", ")}` : ""}`);
+  });
+  if (context.transactions?.length) {
+    lines.push(`Transactions (${context.transactions.length}, public chain data):`);
+    context.transactions.forEach((tx, n) => {
+      lines.push(`  ${n + 1}. ${tx.time} — ${tx.inputs} inputs → ${tx.outputs} outputs, ${tx.total}${tx.fee ? `, ${tx.fee}` : ""}${tx.flags?.length ? ` [${tx.flags.join(", ")}]` : ""}`);
+    });
+  }
+  if (context.utxos?.length) {
+    lines.push(`UTXOs (${context.utxos.length}):`);
+    context.utxos.forEach((u, n) => {
+      lines.push(`  ${n + 1}. ${u.value} — ${u.confirmed ? "confirmed" : "unconfirmed"}, ${u.age}, type: ${u.type}`);
+    });
+  }
+  return lines.join("\n");
 }
 function AiConsentGate({
   score,
@@ -13868,7 +13937,7 @@ function AiConsentGate({
   onDecline
 }) {
   const {
-    systemPrompt
+    context
   } = buildAiContext(checks, recommendations, score, grade, walletMeta);
   const dialogRef = useDialog(onDecline);
   return React.createElement("div", {
@@ -13945,7 +14014,7 @@ function AiConsentGate({
       letterSpacing: 1.5,
       marginBottom: 8
     }
-  }, "\u2713 SENT TO ANTHROPIC'S API \u2014 THE EXACT TEXT"), React.createElement("pre", {
+  }, "\u2713 SENT TO THE ASSISTANT \u2014 THE EXACT CONTEXT"), React.createElement("pre", {
     style: {
       margin: 0,
       maxHeight: 200,
@@ -13961,7 +14030,7 @@ function AiConsentGate({
       whiteSpace: "pre-wrap",
       wordBreak: "break-word"
     }
-  }, systemPrompt), React.createElement("div", {
+  }, formatAiContext(context)), React.createElement("div", {
     style: {
       fontFamily: T.mono,
       fontSize: 9,
@@ -13969,15 +14038,15 @@ function AiConsentGate({
       marginTop: 8,
       lineHeight: 1.5
     }
-  }, "That's the complete context \u2014 plus the questions you type in the chat. Don't paste your address or anything you don't want sent.", " ", React.createElement("a", {
-    href: "https://github.com/netasset/anonscore/blob/main/anonscore.jsx",
+  }, "That's the analysis sent to the assistant \u2014 plus the questions you type in the chat. The worker writes its own system prompt from these fields and rejects any system prompt a browser tries to attach. Don't paste your address or anything you don't want sent.", " ", React.createElement("a", {
+    href: "https://github.com/netasset/anonscore/blob/main/workers/ai/worker.js",
     target: "_blank",
     rel: "noopener noreferrer",
     style: {
       color: T.cyan,
       textDecoration: "none"
     }
-  }, "verify: the open-source code that builds this exact payload (search \"buildAiContext\") \u2197"))), React.createElement("div", {
+  }, "verify: the open-source worker that builds the prompt (search \"buildSystemPrompt\") \u2197"))), React.createElement("div", {
     style: {
       background: T.redLo,
       border: `1px solid ${T.red}22`,
@@ -14208,7 +14277,7 @@ function AiAssistant({
   const WORKER_URL = "https://anonscore-ai.netassetpremium.workers.dev";
   const issues = checks.filter(c => c.status !== "pass");
   const {
-    systemPrompt
+    context
   } = buildAiContext(checks, recommendations, score, grade, walletMeta);
   const exhausted = msgCount >= MAX_MSGS;
   const isPublic = walletMeta?.isPublic;
@@ -14235,7 +14304,7 @@ function AiAssistant({
         },
         body: JSON.stringify({
           messages: next,
-          systemPrompt
+          context
         })
       });
       if (res.status === 429) {
@@ -16113,6 +16182,7 @@ function Dashboard({
   addrInfo,
   utxos,
   txs,
+  txSample,
   isMobile,
   onBack,
   onRescan,
@@ -16290,7 +16360,7 @@ function Dashboard({
   }, "\u2190 Try a different address"));
   const handleRescan = () => onRescan(address);
   const exportReport = () => {
-    const lines = ["ANONSCORE — PRIVACY REPORT", "===========================", `Address:    ${address}`, `Score:      ${score}/100 (Grade ${grade})`, `Risk:       ${riskLabel}`, `Scanned:    ${scanAt ? new Date(scanAt).toUTCString() : "—"}`, `UTXOs:      ${utxos.length}  |  Transactions: ${txCount}`, "", "SCORE BREAKDOWN (every wallet starts at 100)", "--------------------------------------------", ...checks.filter(c => c.pts).sort((a, b) => a.pts - b.pts).map(c => `  ${c.pts > 0 ? "+" + c.pts : c.pts}\t${c.name}`), `  = ${score}/100`, "", "CHECKS", "------", ...checks.map(c => `[${c.status === "pass" ? "PASS" : c.status === "warn" ? "WARN" : "FAIL"}] ${c.name}: ${c.plain}`), "", "RECOMMENDATIONS", "---------------", ...recommendations.map((r, i) => `${i + 1}. ${r.action} (+${r.impact}pts, ${r.effort})\n   ${r.plain}\n   Options: ${(r.tools || [{
+    const lines = ["ANONSCORE — PRIVACY REPORT", "===========================", `Address:    ${address}`, `Score:      ${score}/100 (Grade ${grade})`, `Risk:       ${riskLabel}`, `Scanned:    ${scanAt ? new Date(scanAt).toUTCString() : "—"}`, `UTXOs:      ${utxos.length}  |  Transactions: ${txCount}`, ...(txSample?.capped && txSample.total != null ? [`Sample:     based on the latest ${txSample.fetched} of ${txSample.total} transactions`] : []), "", "SCORE BREAKDOWN (every wallet starts at 100)", "--------------------------------------------", ...checks.filter(c => c.pts).sort((a, b) => a.pts - b.pts).map(c => `  ${c.pts > 0 ? "+" + c.pts : c.pts}\t${c.name}`), `  = ${score}/100`, "", "CHECKS", "------", ...checks.map(c => `[${c.status === "pass" ? "PASS" : c.status === "warn" ? "WARN" : "FAIL"}] ${c.name}: ${c.plain}`), "", "RECOMMENDATIONS", "---------------", ...recommendations.map((r, i) => `${i + 1}. ${r.action} (+${r.impact}pts, ${r.effort})\n   ${r.plain}\n   Options: ${(r.tools || [{
       name: r.tool
     }]).map(t => t.name).join(", ")}`), "", "TIMING ANALYSIS (non-scoring insight)", "-------------------------------------", ...(() => {
       const c = computeActivityClock(txs);
@@ -16652,7 +16722,7 @@ function Dashboard({
   }, {
     label: "TXS",
     val: txCount,
-    sub: "total",
+    sub: txSample?.capped ? `latest ${txSample.fetched}` : "total",
     color: T.cyan
   }, {
     label: "VS TYPICAL",
@@ -16755,7 +16825,15 @@ function Dashboard({
       color: T.textDim,
       marginTop: 1
     }
-  }, "potential gain"))), poison.lookalikes.length > 0 && React.createElement("div", {
+  }, "potential gain"))), txSample?.capped && txSample.total != null && React.createElement("div", {
+    style: {
+      fontFamily: T.mono,
+      fontSize: 11,
+      color: T.textDim,
+      margin: "-4px 4px 12px",
+      lineHeight: 1.5
+    }
+  }, "Based on the latest ", txSample.fetched, " of ", txSample.total, " transactions."), poison.lookalikes.length > 0 && React.createElement("div", {
     role: "alert",
     style: {
       display: "flex",
@@ -17956,11 +18034,19 @@ function Dashboard({
       color: T.textMid,
       marginBottom: 12
     }
-  }, React.createElement("strong", {
+  }, txSample?.capped && txSample.total != null ? React.createElement(React.Fragment, null, "Based on the latest ", React.createElement("strong", {
     style: {
       color: T.text
     }
-  }, txs.length), " transactions. We flag CoinJoins, unsafe consolidations, and round amounts."), React.createElement("div", {
+  }, txSample.fetched), " of ", React.createElement("strong", {
+    style: {
+      color: T.text
+    }
+  }, txSample.total), " transactions.") : React.createElement(React.Fragment, null, React.createElement("strong", {
+    style: {
+      color: T.text
+    }
+  }, txs.length), " transactions."), " ", "We flag CoinJoins, unsafe consolidations, and round amounts.", txs.length > 20 ? " Showing the latest 20." : ""), React.createElement("div", {
     style: {
       background: T.card,
       border: `1px solid ${T.border}`,
@@ -19913,6 +19999,7 @@ function App() {
   const [addrInfo, setAddrInfo] = useState(null);
   const [utxos, setUtxos] = useState([]);
   const [txs, setTxs] = useState([]);
+  const [txSample, setTxSample] = useState(null);
   const [autoShare, setAutoShare] = useState(false);
   const [scanAt, setScanAt] = useState(null);
   const [defaultSimple, setDefaultSimple] = useState(false);
@@ -20002,6 +20089,7 @@ function App() {
     setPage("scanning");
     setAutoShare(false);
     setDefaultSimple(plain);
+    setTxSample(null);
     try {
       if (addr === "DEMO" || addr === "DEMO_A") {
         const demoData = addr === "DEMO_A" ? DEMO_A : DEMO;
@@ -20031,6 +20119,7 @@ function App() {
       setAddrInfo(data.addrInfo);
       setUtxos(data.utxos);
       setTxs(data.txs);
+      setTxSample(data.txSample || null);
       setScanAt(Date.now());
       addToHistory({
         addr,
@@ -20120,6 +20209,7 @@ function App() {
     addrInfo: addrInfo,
     utxos: utxos,
     txs: txs,
+    txSample: txSample,
     isMobile: isMobile,
     onBack: () => setPage("landing"),
     onRescan: analyze,

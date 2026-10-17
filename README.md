@@ -15,7 +15,7 @@ Live: <https://anonscore.com>
 - **Cluster Exposure**: computes the common-input-ownership heuristic — the workhorse of chain surveillance — client-side, and draws the cluster of other addresses the chain ties to the one you scanned. Each linked address is auditable in one click.
 - **Address-poisoning alert**: flags lookalike addresses planted in your history (same first/last characters as yours) — the copy-paste scam bait — before you copy the wrong one. Deliberately not part of the privacy score: being targeted doesn't make a wallet more traceable.
 - **Plain-English mode**: every check rephrased for non-technical users.
-- **AI Privacy Assistant** (optional, consent-gated): personalized guidance for *your* specific issues. Your address is never sent — only your analysis results: the score, the findings (each with its plain-English explanation), and the ranked recommendations. For public/institutional wallets (Case Files, forensic mode) the payload also includes public on-chain transaction and UTXO summaries — all data anyone can already read off the chain. The **exact text** that will be sent is shown in the consent gate before anything leaves the browser, and the worker that receives it is open source ([`workers/ai/`](workers/ai/)).
+- **AI Privacy Assistant** (optional, consent-gated): personalized guidance for *your* specific issues. Your address is never sent — only your analysis results: the score, the findings (each with its plain-English explanation), and the ranked recommendations. For public/institutional wallets (Case Files, forensic mode) the payload also includes public on-chain transaction and UTXO summaries — all data anyone can already read off the chain. The **exact context** that will be sent is shown in the consent gate before anything leaves the browser. The worker builds the system prompt itself and rejects a client-supplied one; its source is open ([`workers/ai/`](workers/ai/)).
 - **Case Files**: forensic narratives of notable Bitcoin wallets (Bitfinex, Binance, Silk Road, etc.).
 - **PWA**: works fully offline after first visit. Installable to home screen.
 
@@ -27,7 +27,7 @@ Single static site. No backend, no database, no analytics.
 
 | File | Role |
 |---|---|
-| `anonscore.jsx` | **Source of truth.** ~6,000 lines of React with inline styles. Edit this. |
+| `anonscore.jsx` | **Source of truth.** ~9,000 lines of React with inline styles. Edit this. |
 | `anonscore.js` | **Auto-generated** from `anonscore.jsx` (classic React runtime, no in-browser Babel). |
 | `index.html` | Static shell: pre-rendered hero (instant paint), defer-loaded scripts, manifest + favicon + JSON-LD. |
 | `sw.js` | Service worker. Precaches for offline, serves stale-while-revalidate so returning visitors always converge on fresh code. No per-build cache key. |
@@ -35,7 +35,7 @@ Single static site. No backend, no database, no analytics.
 | `vendor/` | Self-hosted React, ReactDOM, canvas-confetti, dom-to-image-more, and Google Fonts. **Zero third-party requests at runtime.** |
 | `_headers` | Cloudflare security headers + strict CSP (`script-src 'self'`) + cache rules. |
 | `build.mjs` | One-shot compiler: `anonscore.jsx → anonscore.js`. Touches nothing else. |
-| `scripts/test.mjs` | End-to-end test suite (35 checks: build invariants, honesty guards that fail CI if a public claim drifts from the code, relay-worker SSRF and no-tracking unit tests, engine unit tests against the built bundle, browser smoke + a11y). Runs in CI on every PR. |
+| `scripts/test.mjs` | End-to-end test suite (68 checks: build invariants, honesty guards that fail CI if a public claim drifts from the code, relay-worker SSRF and no-tracking unit tests, AI-worker prompt and rate-limit tests, engine unit tests against the built bundle, browser smoke + a11y). Runs in CI on every PR. |
 | `scripts/fetch-fonts.mjs` | Re-fetches the self-hosted Google Fonts subset. Run only if updating font weights. |
 | `.github/workflows/` | `build.yml` auto-rebuilds `anonscore.js` on feature-branch pushes. `test.yml` runs the test suite on every PR. |
 
@@ -98,7 +98,7 @@ Until `endpoint` is set, the signup form opens a `mailto:` link instead. Point i
 
 ### 4. AI Assistant (already configured)
 
-The AI worker URL (`anonscore-ai.netassetpremium.workers.dev`) is wired in. The 5-message daily cap is enforced server-side. The worker only ever receives what the consent gate shows — never the user's address. Its full source is published at [`workers/ai/`](workers/ai/) so those claims are verifiable, exactly like the relay.
+The AI worker URL (`anonscore-ai.netassetpremium.workers.dev`) is wired in. The 5-message daily cap is enforced server-side and **fails closed**: the worker refuses requests if its KV binding or the `IP_HASH_SALT` secret is missing. The worker only ever receives what the consent gate shows — never the user's address — and it writes the system prompt itself. Its full source, including the required KV namespace id and secrets, is published at [`workers/ai/`](workers/ai/). Deploy steps are in that README; the `id` in `wrangler.toml` is a placeholder until you paste a real one.
 
 ### 5. Languages (i18n)
 
@@ -139,7 +139,7 @@ These same contacts are published machine-readably at [`/.well-known/security.tx
 
 **What we care about most**, given the threat model of a client-side privacy tool:
 
-- Anything that could leak a user's address off their device — the core promise is that the address you scan never reaches the AI worker or any server. The only outbound calls are the block explorer for the address you paste (by default via our open-source no-log relay — `workers/relay/` — so the explorer can't tie the address to your IP) and, if you opt in, the AI worker (also open source — `workers/ai/`) with the exact payload shown in the consent gate.
+- Anything that could leak a user's address off their device — the core promise is that the address you scan never reaches the AI worker or any server. The only outbound calls are the block explorer for the address you paste (by default via our open-source no-log relay — `workers/relay/` — so the explorer can't tie the address to your IP) and, if you opt in, the AI worker (also open source — `workers/ai/`) with the exact context shown in the consent gate. The worker builds its own system prompt; a client-supplied one is rejected.
 - CSP or self-hosting bypasses that would introduce a third-party runtime request.
 - XSS or injection via scanned addresses, URL params, or API responses.
 
@@ -151,7 +151,7 @@ There's no bug-bounty budget (this is a free, open-source project), but real rep
 
 Two paths:
 
-**Bug or small fix**: open a PR against `main`. CI runs the 35-check test suite automatically; it will reject regressions in scoring logic, accessibility, third-party requests, or feature flow.
+**Bug or small fix**: open a PR against `main`. CI runs the 68-check test suite automatically; it will reject regressions in scoring logic, accessibility, third-party requests, or feature flow.
 
 **Larger change**: open an issue first to discuss. The repo guide (`CLAUDE.md`) covers the architecture, build pipeline, and conventions.
 
