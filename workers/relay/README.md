@@ -15,7 +15,9 @@ verifiable — that's the point of a privacy relay.
   `/address/:addr/txs/chain/:txid` / a single tx and its outspends — via
   blockstream.info at `/btc/…` or mempool.space at `/btcm/…`, matching the
   site's explorer picker — plus LN node / channels), server-side. Txids are
-  exactly 64 hex characters; anything else is 404.
+  exactly 64 hex characters. Anything off the allowlist is **403** with
+  `{"error":"path not allowed"}`, which is not the 404 an explorer returns
+  for an unknown transaction (that 404 is passed through unchanged).
 - **Doesn't:** log anything, hold any state, forward your IP or headers upstream,
   or proxy anything outside its strict allowlist (SSRF-safe — see `worker.js`).
 
@@ -58,6 +60,7 @@ config around it. To keep it honest:
 # Allowed — returns the same JSON blockstream would:
 curl https://anonscore-relay.<subdomain>.workers.dev/btc/address/1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa
 
-# Blocked — anything off the allowlist is 404, so it can't be used as an open proxy:
+# Blocked — anything off the allowlist is 403 {"error":"path not allowed"},
+# so it can't be used as an open proxy and a client can tell it from a missing tx:
 curl -i https://anonscore-relay.<subdomain>.workers.dev/anything/else
 ```

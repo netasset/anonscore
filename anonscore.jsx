@@ -1514,9 +1514,31 @@ function detectTxInput(v) {
   if (/^[0-9a-fA-F]+$/.test(s) && s.length % 2 === 0 && s.length >= 20) return "rawhex";
   return null;
 }
+// A paste that is trying to be a txid but isn't 64 hex characters. Returns a
+// message and never a network call. Raw transaction hex and PSBTs return null
+// so the parser below can take them. Valid txids return null too.
+function txidShapeIssue(raw) {
+  const s = (raw || "").trim();
+  if (!s || /^cHNidP/.test(s)) return null;
+  if (/^[0-9a-fA-F]{64}$/.test(s)) return null;
+  if (/^[0-9a-fA-F]+$/.test(s) && s.length % 2 === 0 && s.length >= 20) return null;
+  const bare = s.replace(/^0x/i, "");
+  const hexBody = /^[0-9a-fA-F]+$/.test(bare);
+  const prefixed = /^0x/i.test(s);
+  const almost = /^[0-9a-zA-Z]+$/.test(s) && s.length >= 32 && s.length <= 80;
+  if (!prefixed && !hexBody && !almost) return null;
+  const sent = " This one was rejected before any request was sent.";
+  if (prefixed && /^[0-9a-fA-F]{64}$/.test(bare))
+    return "That isn't a valid transaction id — drop the 0x prefix. A txid is exactly 64 hexadecimal characters (0-9, a-f)." + sent;
+  if (hexBody)
+    return `That isn't a valid transaction id — ${bare.length} hex character${bare.length === 1 ? "" : "s"}, and a txid is exactly 64.` + sent;
+  return "That isn't a valid transaction id. A txid is exactly 64 hexadecimal characters (0-9, a-f)." + sent;
+}
 function parseTransactionInput(raw) {
   const s = (raw || "").trim();
   if (s.length > 100000) throw new Error("Input too large — paste a single transaction");
+  const shape = txidShapeIssue(s);
+  if (shape) { const e = new Error(shape); e.kind = "invalid"; throw e; }
   const kind = detectTxInput(s);
   if (kind === "psbt") return { kind, tx: parsePsbt(_base64ToBytes(s)) };
   if (kind === "rawhex") { const t = parseRawTx(_hexToBytes(s)); return { kind, tx: { txid: null, vin: t.vin, vout: t.vout, fee: null, partial: true, version: t.version, locktime: t.locktime } }; }
@@ -1632,18 +1654,109 @@ function normalizeEsploraTx(raw) {
    the user-selected explorer, via the no-log relay when enabled — the same
    honest-failure rule as fetchAddress: never silently fall back to a direct
    query when the relay is on. The outspends call is the confirmed-only intel:
-   which outputs have been spent since, and by which transaction. */
+   which outputs have been spent since, and by which transaction.
+
+   Failures are four different events, and the message says which one:
+     invalid  — txid shape rejected here, no request
+     blocked  — relay refused a well-formed txid (403, or the legacy 404 JSON)
+     unknown  — explorer 404 passed through (the tx really isn't indexed)
+     upstream — 5xx, 429, timeout, or the connection failed */
+const TX_LOOKUP_TIMEOUT_MS = 20000;
+function txLookupTimeoutMs() {
+  try {
+    const override = typeof window !== "undefined" && window.__TX_LOOKUP_TIMEOUT_MS;
+    if (Number.isFinite(override) && override > 0) return override;
+  } catch { /* no window in a worker */ }
+  return TX_LOOKUP_TIMEOUT_MS;
+}
+function blockedTxMessage(status) {
+  return `The privacy relay blocked this lookup (HTTP ${status}) before any explorer saw it. The txid is validly formed, so this is a relay allowlist problem, not a missing transaction. Turn the relay off to ask the explorer directly — it will then see your IP — or retry after the relay is updated.`;
+}
+function upstreamTxMessage(status, viaRelay, reason) {
+  const via = viaRelay ? " through the privacy relay" : "";
+  let lead;
+  if (status == null && reason === "timeout") lead = `The lookup timed out${via} before the explorer answered.`;
+  else if (status == null) lead = `The lookup didn't reach the explorer${via} — the connection failed.`;
+  else if (status === 429) lead = `The explorer rate-limited this lookup (HTTP 429)${via}.`;
+  else if (status >= 500) lead = `The explorer failed this lookup (HTTP ${status})${via}.`;
+  else lead = `The lookup failed (HTTP ${status})${via}.`;
+  const tail = viaRelay
+    ? " Try again in a moment, switch to the other explorer, or turn the relay off and query the explorer directly (it will then see your IP)."
+    : " Try again in a moment, or switch to the other explorer.";
+  return lead + tail;
+}
+function txLookupFailure(status, contentType, bodyText, viaRelay) {
+  const ct = String(contentType || "").toLowerCase();
+  const trimmed = String(bodyText || "").trim();
+  let payload = null;
+  if (ct.includes("json") || trimmed.startsWith("{")) {
+    try { payload = JSON.parse(trimmed); } catch { payload = null; }
+  }
+  // The deployed relay answers a blocked path with 404 {"error":"not found"}.
+  // The build in this repo answers 403 {"error":"path not allowed"}. An
+  // explorer's missing-tx 404 is text/plain "Transaction not found" and must
+  // not take this branch.
+  const relayBlock = !!(payload && (payload.error === "path not allowed" || payload.error === "not found"));
+  if (viaRelay && (status === 403 || (status === 404 && relayBlock))) {
+    return { kind: "blocked", message: blockedTxMessage(status) };
+  }
+  if (status === 404) {
+    return { kind: "unknown", message: "No explorer has a transaction with that txid. Check it for a typo, or wait if it has not been confirmed yet — unconfirmed transactions are not indexed." };
+  }
+  return { kind: "upstream", message: upstreamTxMessage(status, viaRelay) };
+}
 async function fetchTx(txid) {
+  const id = (txid || "").trim();
+  if (!/^[0-9a-fA-F]{64}$/.test(id)) {
+    const err = new Error(txidShapeIssue(id) || "That isn't a valid transaction id. A txid is exactly 64 hexadecimal characters (0-9, a-f). This one was rejected before any request was sent.");
+    err.kind = "invalid";
+    throw err;
+  }
   const exp = explorer();
-  const base = relayOn() ? `${RELAY_URL}${exp.relayPath}` : exp.api;
-  const safe = encodeURIComponent(txid);
-  const [tx, outspends] = await Promise.all([
-    fetch(`${base}/tx/${safe}`).then(r => { if (!r.ok) throw new Error(r.status === 404 ? "Transaction not found — check the txid (or it may not be confirmed yet)" : "Explorer error " + r.status); return r.json(); }),
-    fetch(`${base}/tx/${safe}/outspends`).then(r => r.ok ? r.json() : null).catch(() => null),
-  ]);
-  const norm = normalizeEsploraTx(tx);
-  norm.outspends = Array.isArray(outspends) ? outspends : null;
-  return norm;
+  const viaRelay = relayOn();
+  const base = viaRelay ? `${RELAY_URL}${exp.relayPath}` : exp.api;
+  const safe = encodeURIComponent(id);
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), txLookupTimeoutMs());
+  const outspendsP = fetch(`${base}/tx/${safe}/outspends`, { signal: ctrl.signal })
+    .then(r => r.ok ? r.json() : null)
+    .catch(() => null);
+  try {
+    let txRes;
+    try {
+      txRes = await fetch(`${base}/tx/${safe}`, { signal: ctrl.signal });
+    } catch (e) {
+      const timeout = !!(e && (e.name === "AbortError" || e.name === "TimeoutError"));
+      const err = new Error(upstreamTxMessage(null, viaRelay, timeout ? "timeout" : "network"));
+      err.kind = "upstream";
+      throw err;
+    }
+    if (!txRes.ok) {
+      const bodyText = await txRes.text().catch(() => "");
+      ctrl.abort();
+      const failure = txLookupFailure(txRes.status, txRes.headers.get("content-type"), bodyText, viaRelay);
+      const err = new Error(failure.message);
+      err.kind = failure.kind;
+      err.status = txRes.status;
+      throw err;
+    }
+    let tx;
+    try { tx = await txRes.json(); }
+    catch {
+      const tail = viaRelay
+        ? " Try again in a moment, switch to the other explorer, or turn the relay off and query the explorer directly (it will then see your IP)."
+        : " Try again in a moment, or switch to the other explorer.";
+      const err = new Error("The explorer returned a transaction the page couldn't read." + tail);
+      err.kind = "upstream";
+      throw err;
+    }
+    const norm = normalizeEsploraTx(tx);
+    const outspends = await outspendsP;
+    norm.outspends = Array.isArray(outspends) ? outspends : null;
+    return norm;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 /* ─────────────────────────────────────────────
@@ -5470,12 +5583,16 @@ function FlowGraph({ inputs, outputs, lp, outIdx, isMobile, onAudit }) {
    raw tx your wallet is about to sign and see what it leaks BEFORE you broadcast.
    PSBT/raw-hex are parsed and analyzed entirely in the browser (zero network).
 ───────────────────────────────────────────── */
+const txErrBtn = { background: "transparent", border: `1px solid ${T.border}`, borderRadius: 8, padding: "8px 12px", color: T.text, fontFamily: T.sans, fontSize: 13, cursor: "pointer" };
+
 function TransactionInspector({ onBack, isMobile, onScan, onNav, prefill, prefillTx }) {
   useLang();
+  const relayEnabled = useRelay() && !!RELAY_URL;
+  const expId = useExplorer();
   const [raw, setRaw] = useState(prefill || "");
   const [busy, setBusy] = useState(false);   // fetching a confirmed tx by txid
   const [result, setResult] = useState(null);   // { kind, tx }
-  const [error, setError] = useState("");
+  const [error, setError] = useState(null);     // { kind, message } | null
   const detected = detectTxInput(raw);
 
   // The whole analysis pipeline (incl. the Boltzmann entropy counter) computed
@@ -5498,21 +5615,26 @@ function TransactionInspector({ onBack, isMobile, onScan, onNav, prefill, prefil
 
   const inspect = async (text) => {
     const input = text != null ? text : raw;
-    setError(""); setResult(null);
+    setError(null); setResult(null);
     let parsed;
     try {
       parsed = parseTransactionInput(input);
-    } catch (e) { setError(e && e.message ? e.message : "Couldn't parse that input."); return; }
+    } catch (e) {
+      setError({ kind: e && e.kind ? e.kind : "parse", message: e && e.message ? e.message : "Couldn't parse that input." });
+      return;
+    }
     if (parsed.kind !== "txid") { setResult(parsed); return; }
     // Confirmed-tx lookup — the one networked path in the Inspector. It runs on
     // the user's Inspect click (or the landing handoff click), via the relay
     // when enabled, and fails honestly — never a silent direct fallback.
+    // fetchTx names which failure it was (relay block, explorer outage,
+    // unknown txid). An invalid shape never gets this far.
     setBusy(true);
     try {
       const tx = await fetchTx(input.trim());
       setResult({ kind: "txid", tx });
     } catch (e) {
-      setError((e && e.message ? e.message : "Couldn't fetch that transaction.") + (relayOn() ? " (Fetched via the privacy relay — try again, or switch the relay off in the landing page's privacy panel to query the explorer directly.)" : ""));
+      setError({ kind: e && e.kind ? e.kind : "upstream", message: e && e.message ? e.message : "Couldn't fetch that transaction." });
     } finally { setBusy(false); }
   };
   const loadDemo = () => { setRaw(DEMO_PSBT); inspect(DEMO_PSBT); };
@@ -5832,7 +5954,7 @@ function TransactionInspector({ onBack, isMobile, onScan, onNav, prefill, prefil
 
         <div style={{ background: T.card, border: `1.5px solid ${detected ? T.cyan + "55" : T.border}`, borderRadius: 16, padding: isMobile ? "16px" : "20px 22px", transition: "border .2s" }}>
           <label htmlFor="tx-input" style={{ display: "block", fontFamily: T.mono, fontSize: 9, color: T.textDim, letterSpacing: 1.5, marginBottom: 8 }}>PSBT (BASE64) · RAW TX HEX · TXID</label>
-          <textarea id="tx-input" value={raw} onChange={e => { setRaw(e.target.value); setError(""); setResult(null); }}
+          <textarea id="tx-input" value={raw} onChange={e => { setRaw(e.target.value); setError(null); setResult(null); }}
             placeholder="cHNidP8B…  or  0200000001…"
             aria-label="Paste a PSBT (base64), raw transaction hex, or a transaction id"
             spellCheck={false}
@@ -5851,8 +5973,26 @@ function TransactionInspector({ onBack, isMobile, onScan, onNav, prefill, prefil
         </div>
 
         {error && (
-          <div role="alert" style={{ marginTop: 14, background: T.red + "12", border: `1px solid ${T.red}44`, borderRadius: 12, padding: "12px 16px", fontSize: 13, color: T.text, lineHeight: 1.6 }}>
-            <span style={{ color: T.red, fontFamily: T.mono, marginRight: 6 }}>⚠</span>{error}
+          <div style={{ marginTop: 14, background: T.red + "12", border: `1px solid ${T.red}44`, borderRadius: 12, padding: "12px 16px", fontSize: 13, color: T.text, lineHeight: 1.6 }}>
+            <div role="alert">
+              <span style={{ color: T.red, fontFamily: T.mono, marginRight: 6 }} aria-hidden="true">⚠</span>{error.message}
+            </div>
+            {error.kind === "upstream" && (
+              <div role="group" aria-label="Retry this lookup" style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 12 }}>
+                <button type="button" onClick={() => inspect()} style={txErrBtn}>Try again</button>
+                <button type="button" onClick={() => { setExplorer(expId === "mempool" ? "blockstream" : "mempool"); inspect(); }} style={txErrBtn}>
+                  {`Switch to ${EXPLORERS[expId === "mempool" ? "blockstream" : "mempool"].label} and retry`}
+                </button>
+                {relayEnabled && (
+                  <button type="button" onClick={() => { setRelay(false); inspect(); }} style={txErrBtn}>Turn the relay off and retry</button>
+                )}
+              </div>
+            )}
+            {error.kind === "blocked" && relayEnabled && (
+              <div role="group" aria-label="Look up this transaction without the relay" style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 12 }}>
+                <button type="button" onClick={() => { setRelay(false); inspect(); }} style={txErrBtn}>Turn the relay off and retry</button>
+              </div>
+            )}
           </div>
         )}
 
