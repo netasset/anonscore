@@ -1,0 +1,33 @@
+name: Live smoke
+
+# Hits the deployed relay and https://anonscore.com. The PR test suite mocks
+# **/tx/**, so it cannot see a production allowlist hole. This job can.
+#
+# On a push to main, wait before the first attempt so Cloudflare Pages has a
+# chance to publish the commit. The script also retries the site hash, and
+# retries transient explorer errors (429/5xx/network). A rejected allowlisted
+# path fails the job and lists every path that failed.
+on:
+  schedule:
+    - cron: "17 6 * * *"
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  smoke-live:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Wait for the Cloudflare Pages deploy
+        if: github.event_name == 'push'
+        run: sleep 90
+      - name: Smoke the live relay and site
+        run: npm run smoke:live

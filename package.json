@@ -7,6 +7,7 @@
   "scripts": {
     "build": "node build.mjs",
     "test": "node scripts/test.mjs",
+    "smoke:live": "node scripts/smoke-live.mjs",
     "fetch-fonts": "node scripts/fetch-fonts.mjs"
   },
   "devDependencies": {

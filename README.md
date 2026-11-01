@@ -45,9 +45,14 @@ Single static site. No backend, no database, no analytics.
 npm install        # once
 npm run build      # compiles anonscore.jsx → anonscore.js
 npm test           # full E2E (build invariants + smoke + a11y in headless Chromium)
+npm run smoke:live # deployed relay + https://anonscore.com (not part of npm test)
 ```
 
 Then open `index.html` via any static server (e.g. `python3 -m http.server`).
+
+`npm run smoke:live` (`scripts/smoke-live.mjs`) calls the real privacy relay and the production site. It checks an address (summary, UTXO, and transactions), the genesis coinbase transaction and its outspends, `/txs/chain/<txid>` paging, the mempool.space mirror under `/btcm/`, and a Lightning node. A malformed txid must be rejected by the relay. It also checks that https://anonscore.com serves `anonscore.js` with the same hash as the committed file, and that the HTML loads no third-party scripts. Transient explorer errors are retried. A path the relay rejects, or a bundle that does not match this commit, fails the run and lists every check that failed.
+
+GitHub Actions runs it every day, when started by hand, and after each push to `main` (that run waits briefly so the Pages deploy can finish). It does not run inside `npm test`, which stays offline.
 
 The built bundle exposes its pure engine functions read-only at `window.__ANONSCORE_TEST__` — open the console on the live site and test the scoring logic yourself (`runEngine`, `computeCluster`, `computePoisoning`, …). CI unit-tests the built bundle through the same hook, so what you can verify in your console is exactly what's tested.
 
