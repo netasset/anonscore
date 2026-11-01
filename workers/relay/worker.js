@@ -41,14 +41,18 @@ const UPSTREAM = {
   ln: "https://mempool.space/api/v1/lightning",
 };
 
-// The ONLY path shapes AnonScore requests. Address/pubkey charsets are bounded
-// and length-capped so this can't be coerced into fetching anything else.
+// The ONLY path shapes AnonScore requests. Address/pubkey/txid charsets are
+// bounded and length-capped so this can't be coerced into fetching anything else.
+// `/btc` and `/btcm` are the blockstream and mempool.space mirrors (see UPSTREAM).
 const ALLOW = [
-  /^\/btcm?\/address\/[a-zA-Z0-9]{10,120}$/,          // address summary
-  /^\/btcm?\/address\/[a-zA-Z0-9]{10,120}\/utxo$/,    // UTXO set
-  /^\/btcm?\/address\/[a-zA-Z0-9]{10,120}\/txs$/,     // recent transactions
-  /^\/ln\/nodes\/[0-9a-fA-F]{66}$/,                   // LN node
-  /^\/ln\/nodes\/[0-9a-fA-F]{66}\/channels$/,         // LN node channels
+  /^\/btcm?\/address\/[a-zA-Z0-9]{10,120}$/,                                  // address summary
+  /^\/btcm?\/address\/[a-zA-Z0-9]{10,120}\/utxo$/,                            // UTXO set
+  /^\/btcm?\/address\/[a-zA-Z0-9]{10,120}\/txs$/,                             // first tx page (mempool + newest confirmed)
+  /^\/btcm?\/address\/[a-zA-Z0-9]{10,120}\/txs\/chain\/[0-9a-fA-F]{64}$/,    // older confirmed pages, cursor = last seen txid
+  /^\/btcm?\/tx\/[0-9a-fA-F]{64}$/,                                           // one transaction (Inspector txid lookup)
+  /^\/btcm?\/tx\/[0-9a-fA-F]{64}\/outspends$/,                                // which outputs of that tx were later spent
+  /^\/ln\/nodes\/[0-9a-fA-F]{66}$/,                                           // LN node
+  /^\/ln\/nodes\/[0-9a-fA-F]{66}\/channels$/,                                 // LN node channels
 ];
 
 const CORS = {

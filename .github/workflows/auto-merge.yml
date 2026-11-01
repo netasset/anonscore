@@ -1,15 +1,17 @@
 name: Auto-merge claude PRs
 
-# Eliminates pipeline build-up. Any open PR from a claude/* branch (the
-# only branches Claude opens; user PRs are unaffected) is merged the moment
-# all required status checks pass, and its head branch is deleted. So:
+# claude/* PRs can still auto-merge, but only after a human who is not the PR
+# author has an approving review AND the required checks are green. A green CI
+# run alone is not enough — that path was merging straight to main, and
+# Cloudflare Pages deploys main, with nobody looking. PRs that modify the test
+# suite, the build, or CI workflows still never auto-merge; those need a
+# manual merge even after approval.
 #
-#   push to claude/foo → PR opens → CI runs → green → auto-merge → branch gone
-#
-# No manual merge step, no stale branches accumulating in the repo.
+#   push to claude/foo → PR opens → CI green → human approves → auto-merge
 #
 # Required-check names live in REQUIRED_CHECKS below. If a check is missing
 # OR not yet completed OR conclusion != "success", the PR is left alone.
+# Any branch that does not start with claude/ is never merged here.
 
 on:
   check_suite:
@@ -88,6 +90,27 @@ jobs:
               if (missing.length) { console.log(`Skip ${tag}: required checks missing: ${missing.join(", ")}`); continue; }
               const failing = REQUIRED_CHECKS.filter(n => byName[n].status !== "completed" || byName[n].conclusion !== "success");
               if (failing.length) { console.log(`Skip ${tag}: required checks not green: ${failing.map(n => `${n}=${byName[n].status}/${byName[n].conclusion}`).join(", ")}`); continue; }
+
+              // A green check is not approval. Require a non-author human
+              // review whose latest state is APPROVED. Bots and the PR author
+              // do not count; a later CHANGES_REQUESTED from the same person
+              // replaces an earlier approval.
+              const { data: reviews } = await github.rest.pulls.listReviews({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: pr.number,
+                per_page: 100,
+              });
+              const latestByUser = new Map();
+              for (const rev of reviews) {
+                const login = rev.user && rev.user.login;
+                if (!login || login === (pr.user && pr.user.login) || login.endsWith("[bot]")) continue;
+                latestByUser.set(login, rev.state);
+              }
+              if (![...latestByUser.values()].includes("APPROVED")) {
+                console.log(`Skip ${tag}: needs an approving review from someone other than the author`);
+                continue;
+              }
 
               try {
                 await github.rest.pulls.merge({
