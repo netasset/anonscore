@@ -31,8 +31,10 @@
  * -----------
  * The relay can reach ONLY the exact endpoint shapes AnonScore uses, enforced by
  * a strict path allowlist below. It is not a general-purpose proxy: anything not
- * matching an allowed pattern returns 404, so it can't be abused to fetch
- * arbitrary URLs.
+ * matching an allowed pattern returns 403 with {"error":"path not allowed"}.
+ * That is deliberately not the 404 an explorer returns for an unknown
+ * transaction, so a client can tell a blocked path from a missing tx. The body
+ * never leaves this worker — a blocked path makes no upstream request.
  */
 
 const UPSTREAM = {
@@ -78,7 +80,16 @@ export default {
     const url = new URL(request.url);
     const path = url.pathname;
 
-    if (!ALLOW.some((re) => re.test(path))) return json({ error: "not found" }, 404);
+    // 403, not 404. An explorer's "no such tx" is a 404 passed through below;
+    // a blocked path must not look like that. "not found" was the old body —
+    // clients still treat that exact 404 JSON as a block, for the worker that
+    // is deployed until this one is.
+    if (!ALLOW.some((re) => re.test(path))) {
+      return json({
+        error: "path not allowed",
+        reason: "This path is not on the AnonScore relay allowlist.",
+      }, 403);
+    }
 
     const seg = path.split("/");           // ["", "btc"|"ln", ...rest]
     const kind = seg[1];

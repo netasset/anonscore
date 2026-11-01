@@ -190,7 +190,9 @@ console.log("[2/7] Relay worker unit tests");
     ) fail("relay: tx/paging upstream mapping wrong: " + txTargets.join(" , "));
     else pass("relay: tx lookups (/tx/:txid, /outspends, /btcm) and /txs/chain/:txid paging are allowlisted");
 
-    // SSRF: everything off the allowlist is 404 and NEVER touches the network.
+    // SSRF: everything off the allowlist is 403 {"error":"path not allowed"}
+    // and NEVER touches the network. 403 (not 404) so a blocked well-formed
+    // txid can't be mistaken for an explorer's "transaction not found".
     // Short or non-hex txids stay blocked; so does /txs/chain with no cursor.
     upstreamCalls = [];
     const blocked = [
@@ -202,10 +204,38 @@ console.log("[2/7] Relay worker unit tests");
       `/btc/tx/${"g".repeat(64)}`, `/btc/tx/${"a".repeat(63)}`, `/btc/tx/${"a".repeat(65)}`,
       `/btc/tx/${txid}/raw`,
     ];
-    const statuses = await Promise.all(blocked.map(p => hit(p).then(r => r.status)));
-    if (statuses.some(s => s !== 404)) fail(`relay: non-allowlisted path not 404 (got ${statuses.join(",")})`);
+    const blockedRes = await Promise.all(blocked.map(p => hit(p)));
+    const statuses = blockedRes.map(r => r.status);
+    const bodies = await Promise.all(blockedRes.map(r => r.json()));
+    if (statuses.some(s => s !== 403)) fail(`relay: non-allowlisted path not 403 (got ${statuses.join(",")})`);
+    else if (bodies.some(b => !b || b.error !== "path not allowed" || typeof b.reason !== "string"))
+      fail("relay: blocked path body is not {error:\"path not allowed\", reason}");
+    else if (blockedRes.some(r => r.headers.get("Access-Control-Allow-Origin") !== "*"))
+      fail("relay: blocked path is missing CORS — the browser would hide the 403 and the app couldn't tell a block from a network error");
     else if (upstreamCalls.length !== 0) fail(`relay: blocked path still reached upstream (${upstreamCalls.length} calls) — SSRF!`);
-    else pass(`relay: SSRF allowlist blocks ${blocked.length}/${blocked.length} hostile paths with zero upstream calls`);
+    else pass(`relay: SSRF allowlist blocks ${blocked.length}/${blocked.length} hostile paths with 403 and zero upstream calls`);
+
+    // An explorer 404 for a real but unknown tx must pass through unchanged.
+    // Rewriting it to the allowlist 403 would make a missing tx look like a relay block.
+    upstreamResponse = () => new Response("Transaction not found", {
+      status: 404,
+      headers: { "Content-Type": "text/plain; charset=utf-8", "Set-Cookie": "spy=1", "X-Track": "yes" },
+    });
+    upstreamCalls = [];
+    const missing = await hit(`/btc/tx/${txid}`);
+    const missingBody = await missing.text();
+    const missingType = missing.headers.get("content-type") || "";
+    if (missing.status !== 404 || missingBody !== "Transaction not found")
+      fail(`relay: upstream 404 was rewritten (status ${missing.status}, body ${JSON.stringify(missingBody).slice(0, 80)}) — a missing tx must stay distinguishable from a blocked path`);
+    else if (missingType.includes("json"))
+      fail(`relay: upstream 404 content-type was replaced (${missingType})`);
+    else if (upstreamCalls.length !== 1)
+      fail(`relay: unknown-tx 404 did not reach upstream (${upstreamCalls.length} calls)`);
+    else pass("relay: explorer 404 for an unknown tx passes through unchanged (not the allowlist 403)");
+    upstreamResponse = () => new Response(JSON.stringify({ ok: 1 }), {
+      status: 200,
+      headers: { "Content-Type": "application/json", "Set-Cookie": "spy=1; HttpOnly", "X-Track": "yes" },
+    });
 
     // Methods: POST rejected, OPTIONS answers CORS preflight.
     const post = await hit(`/btc/address/${addr}`, { method: "POST" });
@@ -625,6 +655,219 @@ else {
     fail("txid report: " + e.message.slice(0, 140));
   } finally {
     await txPage.close();
+  }
+}
+
+// Tx lookup errors are four different events. The old copy said "Transaction
+// not found" for all of them, including a relay allowlist 404 on a valid txid.
+// Each case below is a local fixture — nothing reaches the relay or an explorer.
+{
+  const TXID = "ab".repeat(32);
+  const txBody = (txid) => ({
+    txid, version: 2, locktime: 0, size: 110, weight: 440, fee: 500,
+    status: { confirmed: true, block_height: 100, block_time: 1700000000 },
+    vin: [{ txid: "11".repeat(32), vout: 0, sequence: 4294967295, is_coinbase: false,
+      prevout: { value: 1500, scriptpubkey_type: "v0_p2wpkh", scriptpubkey_address: "bc1qinputaaa" } }],
+    vout: [{ value: 1000, scriptpubkey_type: "v0_p2wpkh", scriptpubkey_address: "bc1qoutputbbb" }],
+  });
+  const resetPrefs = (page) => page.evaluate(() => {
+    localStorage.setItem("anonscore_relay", "1");
+    localStorage.removeItem("anonscore_explorer");
+  }).catch(() => {});
+  const openInspector = async (page) => {
+    await page.goto(`http://127.0.0.1:${PORT}/?page=inspector`, { waitUntil: "load" });
+    await page.waitForFunction(() => document.getElementById("root")?.childElementCount > 0, { timeout: 15000 });
+    await page.waitForTimeout(250);
+  };
+  const pasteInspect = async (page, value, needle) => {
+    await page.locator("textarea#tx-input").fill(value);
+    await page.getByText("Inspect →").click();
+    // Wait for this attempt's message. A previous alert can still be in the
+    // DOM for a frame after fill(), and waitFor(role=alert) would return it.
+    await page.waitForFunction((want) => {
+      const alert = document.querySelector('[role="alert"]');
+      return !!(alert && (alert.textContent || "").includes(want));
+    }, needle, { timeout: 8000 });
+    return page.getByRole("alert").innerText();
+  };
+
+  // (d) invalid txid — rejected in the page, no request.
+  {
+    const page = await ctx.newPage();
+    const hits = [];
+    await page.route("**/tx/**", (route) => { hits.push(route.request().url()); return route.abort(); });
+    try {
+      await openInspector(page);
+      const short = await pasteInspect(page, "ab".repeat(31) + "a", "63 hex");
+      const junk = await pasteInspect(page, "g".repeat(64), "exactly 64 hexadecimal");
+      const prefixed = await pasteInspect(page, "0x" + TXID, "0x prefix");
+      if (!/63 hex characters/.test(short) || !/before any request was sent/.test(short))
+        fail(`txid invalid: wrong-length message was "${short}"`);
+      else if (!/exactly 64 hexadecimal/.test(junk) || !/before any request was sent/.test(junk))
+        fail(`txid invalid: non-hex message was "${junk}"`);
+      else if (!/0x prefix/.test(prefixed) || !/before any request was sent/.test(prefixed))
+        fail(`txid invalid: 0x message was "${prefixed}"`);
+      else if (hits.length) fail(`txid invalid: sent ${hits.length} request(s) for a bad txid: ${hits.join(", ")}`);
+      else pass("txid invalid: bad shapes are rejected in the page before any request");
+    } catch (e) {
+      fail("txid invalid: " + e.message.slice(0, 160));
+    } finally {
+      await resetPrefs(page);
+      await page.close();
+    }
+  }
+
+  // (a) relay blocked a well-formed txid — 403, and the legacy 404 JSON.
+  {
+    const page = await ctx.newPage();
+    let mode = "403";
+    const seen = [];
+    await page.route("**/tx/**", (route) => {
+      const url = route.request().url();
+      seen.push(url);
+      if (url.includes("anonscore-relay")) {
+        const body = mode === "403"
+          ? { error: "path not allowed", reason: "This path is not on the AnonScore relay allowlist." }
+          : { error: "not found" };
+        const status = mode === "403" ? 403 : 404;
+        return route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
+      }
+      if (url.endsWith("/outspends")) return route.fulfill({ status: 200, contentType: "application/json", body: "[]" });
+      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(txBody(TXID)) });
+    });
+    try {
+      await openInspector(page);
+      const blocked = await pasteInspect(page, TXID, "HTTP 403");
+      const turnOff = page.getByRole("button", { name: "Turn the relay off and retry" });
+      if (!/privacy relay blocked this lookup \(HTTP 403\)/.test(blocked) || !/not a missing transaction/.test(blocked))
+        fail(`txid blocked: 403 message was "${blocked}"`);
+      else if (/No explorer has a transaction/.test(blocked))
+        fail("txid blocked: 403 was described as a missing transaction");
+      else if (await turnOff.count() !== 1)
+        fail("txid blocked: missing the turn-relay-off action");
+      else {
+        await turnOff.click();
+        await page.waitForFunction(() => /FORENSIC VERDICT/.test(document.body.innerText), { timeout: 8000 });
+        const direct = seen.filter(u => u.includes("blockstream.info") && !u.endsWith("/outspends"));
+        if (!direct.length) fail("txid blocked: turning the relay off did not query the explorer directly");
+        else pass("txid blocked: relay 403 is an allowlist problem, and turning the relay off reaches the explorer");
+      }
+      mode = "legacy";
+      seen.length = 0;
+      await resetPrefs(page);
+      await page.reload({ waitUntil: "load" });
+      await page.waitForTimeout(300);
+      const legacy = await pasteInspect(page, TXID, "HTTP 404");
+      if (!/privacy relay blocked this lookup \(HTTP 404\)/.test(legacy) || !/not a missing transaction/.test(legacy))
+        fail(`txid blocked: legacy 404 JSON message was "${legacy}"`);
+      else if (/No explorer has a transaction/.test(legacy))
+        fail("txid blocked: legacy relay 404 was described as a missing transaction");
+      else pass("txid blocked: legacy relay 404 {\"error\":\"not found\"} is not a missing transaction");
+    } catch (e) {
+      fail("txid blocked: " + e.message.slice(0, 180));
+    } finally {
+      await resetPrefs(page);
+      await page.close();
+    }
+  }
+
+  // (c) explorer 404 passed through — the txid really isn't indexed.
+  {
+    const page = await ctx.newPage();
+    await page.route("**/tx/**", (route) => {
+      if (route.request().url().endsWith("/outspends"))
+        return route.fulfill({ status: 404, contentType: "text/plain", body: "Transaction not found" });
+      return route.fulfill({ status: 404, contentType: "text/plain", body: "Transaction not found" });
+    });
+    try {
+      await openInspector(page);
+      const msg = await pasteInspect(page, TXID, "No explorer has a transaction");
+      if (!/No explorer has a transaction with that txid/.test(msg))
+        fail(`txid unknown: message was "${msg}"`);
+      else if (/privacy relay blocked/.test(msg))
+        fail("txid unknown: a passed-through explorer 404 was described as a relay block");
+      else if (await page.getByRole("button", { name: "Try again" }).count())
+        fail("txid unknown: offered a retry for a tx the explorer does not have");
+      else pass("txid unknown: explorer 404 is a missing transaction, not a relay block");
+    } catch (e) {
+      fail("txid unknown: " + e.message.slice(0, 160));
+    } finally {
+      await resetPrefs(page);
+      await page.close();
+    }
+  }
+
+  // (b) upstream: rate limit, with retry / switch explorer / relay off.
+  // Also a 502, a dropped connection, and a timeout. Axe runs on the rate-limit
+  // panel because that is the one with the new controls.
+  {
+    const page = await ctx.newPage();
+    let mode = "429";
+    const seen = [];
+    await page.route("**/tx/**", async (route) => {
+      const url = route.request().url();
+      seen.push(url);
+      if (mode === "429" && url.includes("/btc/tx/")) {
+        return route.fulfill({ status: 429, contentType: "application/json", body: JSON.stringify({ error: "slow down" }) });
+      }
+      if (mode === "502") {
+        return route.fulfill({ status: 502, contentType: "application/json", body: JSON.stringify({ error: "upstream unreachable" }) });
+      }
+      if (mode === "down") return route.abort("failed");
+      if (mode === "hang") return new Promise(() => {});
+      if (url.endsWith("/outspends")) return route.fulfill({ status: 200, contentType: "application/json", body: "[]" });
+      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(txBody(TXID)) });
+    });
+    try {
+      await openInspector(page);
+      const limited = await pasteInspect(page, TXID, "HTTP 429");
+      const names = ["Try again", "Switch to mempool.space and retry", "Turn the relay off and retry"];
+      const missingBtns = [];
+      for (const name of names) if (await page.getByRole("button", { name }).count() !== 1) missingBtns.push(name);
+      if (!/rate-limited this lookup \(HTTP 429\)/.test(limited) || !/Try again in a moment/.test(limited))
+        fail(`txid upstream: 429 message was "${limited}"`);
+      else if (missingBtns.length) fail(`txid upstream: missing actions: ${missingBtns.join(", ")}`);
+      else {
+        await page.addScriptTag({ content: readFileSync(join(ROOT, "node_modules/axe-core/axe.min.js"), "utf8") });
+        const violations = await page.evaluate(async () => (await window.axe.run()).violations
+          .filter(v => v.impact === "critical" || v.impact === "serious")
+          .map(v => `${v.impact}/${v.id}(${v.nodes.length}x)`));
+        if (violations.length) fail(`txid upstream: a11y ${violations.join(", ")}`);
+        else {
+          seen.length = 0;
+          await page.getByRole("button", { name: "Switch to mempool.space and retry" }).click();
+          await page.waitForFunction(() => /FORENSIC VERDICT/.test(document.body.innerText), { timeout: 8000 });
+          const switched = seen.filter(u => u.includes("/btcm/tx/") && !u.endsWith("/outspends"));
+          if (!switched.length) fail(`txid upstream: switch-explorer did not call /btcm/tx/ (${seen.join(" | ")})`);
+          else pass("txid upstream: HTTP 429 offers retry, switch explorer, and turn the relay off");
+        }
+      }
+
+      mode = "502";
+      await resetPrefs(page);
+      await page.reload({ waitUntil: "load" });
+      await page.waitForTimeout(250);
+      const failed = await pasteInspect(page, TXID, "HTTP 502");
+      if (!/explorer failed this lookup \(HTTP 502\)/.test(failed)) fail(`txid upstream: 502 message was "${failed}"`);
+      else pass("txid upstream: HTTP 502 names the explorer failure");
+
+      mode = "down";
+      const dropped = await pasteInspect(page, TXID, "connection failed");
+      if (!/connection failed/.test(dropped) || !/Try again in a moment/.test(dropped))
+        fail(`txid upstream: network message was "${dropped}"`);
+      else pass("txid upstream: a dropped connection asks the user to retry");
+
+      mode = "hang";
+      await page.evaluate(() => { window.__TX_LOOKUP_TIMEOUT_MS = 400; });
+      const timed = await pasteInspect(page, TXID, "timed out");
+      if (!/timed out/.test(timed)) fail(`txid upstream: timeout message was "${timed}"`);
+      else pass("txid upstream: a timeout is not reported as a missing transaction");
+    } catch (e) {
+      fail("txid upstream: " + e.message.slice(0, 200));
+    } finally {
+      await resetPrefs(page);
+      await page.close();
+    }
   }
 }
 
