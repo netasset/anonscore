@@ -117,6 +117,28 @@ const T = {
   display:  "'Oxanium',sans-serif",
 };
 
+/* Repeated control styles. Spread these and override padding or color
+   per call site — the border, radius, and type ramp stay one place. */
+const ui = {
+  ghost: {
+    background: "transparent",
+    border: `1.5px solid ${T.border}`,
+    borderRadius: 8,
+    color: T.textMid,
+    fontFamily: T.sans,
+    cursor: "pointer",
+  },
+  primary: (bg) => ({
+    background: bg,
+    border: "none",
+    borderRadius: 12,
+    color: T.bg,
+    fontFamily: T.sans,
+    fontWeight: 700,
+    cursor: "pointer",
+  }),
+};
+
 const RISK_META = {
   critical: { color: T.red,   bg: T.redLo,   label: "Critical" },
   high:     { color: T.btc,   bg: T.btcLo,   label: "High"     },
@@ -233,7 +255,7 @@ const STRINGS = {
     "hero.h1.line1": "Is your Bitcoin",
     "hero.h1.line2": "stack leaking?",
     "hero.h1.em": "Find out in 60 seconds.",
-    "hero.sub": "Surveillance firms run these exact heuristics against you. We run them for you — entirely in your browser, before anyone else looks. A privacy score, every issue explained, and a ranked fix plan. Free, open source, nothing stored.",
+    "hero.sub": "Paste an address. Get a score from 0–100 and the fix that moves it most. It runs in your browser. Nothing is stored.",
     "spectrum.low": "0 · Fully traceable",
     "spectrum.avg": "typical wallet: ~38",
     "spectrum.high": "100 · Invisible",
@@ -268,16 +290,16 @@ const STRINGS = {
     "sample.lightning": "⚡ Lightning node",
     "recent.title": "RECENT SCANS",
     "err.empty": "Please enter a Bitcoin address or Lightning node pubkey.",
-    "err.invalid": "Not recognized. This console reads: a Bitcoin address (bc1…, 1…, 3…), a Lightning node pubkey (66-char hex), a BOLT11 invoice, a BOLT12 offer, an LNURL, a Silent Payment address (sp1…), an xpub/ypub/zpub, a PSBT or raw transaction, or a Cashu token.",
+    "err.invalid": "That isn't a Bitcoin address or a Lightning node pubkey.",
     "err.lnaddress": "Lightning addresses can't be audited yet — paste your node's 66-character pubkey instead.",
     "finalcta.h2.a": "A typical wallet scores ~38/100.",
     "finalcta.h2.b": "Where does yours land?",
     "finalcta.sub": "Free, open source, nothing stored. Takes 60 seconds.",
-    "finalcta.scan": "Scan my address ↑",
+    "finalcta.scan": "Analyze an address ↑",
     "finalcta.sample": "▶ See a sample wallet",
     "scanning.btc.title": "Analyzing your wallet…",
     "scanning.ln.title": "Auditing your node…",
-    "scanning.btc.checks": "RUNNING 10 CHECKS",
+    "scanning.btc.checks": "RUNNING 11 CHECKS",
     "scanning.ln.checks": "⚡ RUNNING 8 LIGHTNING CHECKS",
     "scanning.didyouknow": "DID YOU KNOW",
   },
@@ -296,7 +318,7 @@ const STRINGS = {
     "hero.h1.line1": "¿Tu stack de Bitcoin",
     "hero.h1.line2": "está filtrando datos?",
     "hero.h1.em": "Descúbrelo en 60 segundos.",
-    "hero.sub": "Las firmas de vigilancia ejecutan estas mismas heurísticas contra ti. Nosotros las ejecutamos para ti — completamente en tu navegador, antes de que nadie más mire. Una puntuación de privacidad, cada problema explicado y un plan de mejora priorizado. Gratis, código abierto, nada se guarda.",
+    "hero.sub": "Pega una dirección. Obtén una puntuación de 0 a 100 y la mejora que más la mueve. Corre en tu navegador. Nada se guarda.",
     "spectrum.low": "0 · Totalmente rastreable",
     "spectrum.avg": "billetera típica: ~38",
     "spectrum.high": "100 · Invisible",
@@ -330,16 +352,16 @@ const STRINGS = {
     "sample.lightning": "⚡ Nodo Lightning",
     "recent.title": "ESCANEOS RECIENTES",
     "err.empty": "Ingresa una dirección de Bitcoin o la clave pública de un nodo Lightning.",
-    "err.invalid": "No reconocido. Esta consola lee: una dirección de Bitcoin (bc1…, 1…, 3…), la clave pública de un nodo Lightning (66 hex), una factura BOLT11, una oferta BOLT12, un LNURL, una dirección de Pago Silencioso (sp1…), un xpub/ypub/zpub, una PSBT o transacción sin firmar, o un token Cashu.",
+    "err.invalid": "Eso no es una dirección de Bitcoin ni la clave pública de un nodo Lightning.",
     "err.lnaddress": "Las direcciones Lightning aún no se pueden auditar — pega la clave pública (66 caracteres hex) de tu nodo.",
     "finalcta.h2.a": "Una billetera típica puntúa ~38/100.",
     "finalcta.h2.b": "¿Dónde queda la tuya?",
     "finalcta.sub": "Gratis, código abierto, nada se guarda. Toma 60 segundos.",
-    "finalcta.scan": "Escanear mi dirección ↑",
+    "finalcta.scan": "Analizar una dirección ↑",
     "finalcta.sample": "▶ Ver una billetera de ejemplo",
     "scanning.btc.title": "Analizando tu billetera…",
     "scanning.ln.title": "Auditando tu nodo…",
-    "scanning.btc.checks": "EJECUTANDO 10 VERIFICACIONES",
+    "scanning.btc.checks": "EJECUTANDO 11 VERIFICACIONES",
     "scanning.ln.checks": "⚡ EJECUTANDO 8 VERIFICACIONES LIGHTNING",
     "scanning.didyouknow": "¿SABÍAS QUE?",
   },
@@ -452,6 +474,7 @@ function useExplorer() {
 const TOOL_URL = {
   // Desktop wallets
   "Wasabi Wallet":   "https://wasabiwallet.io",
+  "Ginger Wallet":   "https://gingerwallet.io",
   "Sparrow Wallet":  "https://sparrowwallet.com",
   "Bitcoin Core":    "https://bitcoincore.org",
   "Electrum":        "https://electrum.org",
@@ -812,21 +835,6 @@ const clearAllHistory = () => { try { localStorage.removeItem(HISTORY_KEY); } ca
 const FIXES_KEY = "anonscore_fixes_v1";
 const getDoneFixes  = (addr) => { try { return new Set(JSON.parse(localStorage.getItem(FIXES_KEY + ":" + addr) || "[]")); } catch { return new Set(); } };
 const saveDoneFixes = (addr, set) => { try { localStorage.setItem(FIXES_KEY + ":" + addr, JSON.stringify([...set])); } catch {} };
-
-const DEMO_EXAMPLES = [
-  {
-    grade:"F", score:22, label:"High Risk", color:T.red,
-    issues:["Address reused 12 times","KYC coins merged with private","3 dust UTXOs (trackers)","No CoinJoin ever used"],
-  },
-  {
-    grade:"C", score:61, label:"Moderate", color:T.amber,
-    issues:["Address reused 3 times","Round-number withdrawal","Single UTXO — exposes balance","Change sent to fresh addresses ✓"],
-  },
-  {
-    grade:"A", score:91, label:"Low Risk", color:T.green,
-    issues:["Fresh address every transaction ✓","CoinJoin used — 2 rounds ✓","Balanced UTXO set ✓","Lightning for spending ✓"],
-  },
-];
 
 const LANDING_CHECKS_LN = [
   { n:"01", k:"node",    label:"Public Node Announcement",    desc:"Whether your node is gossiped publicly. Public nodes expose IP or Tor address to every peer on the network." },
@@ -2852,6 +2860,8 @@ const DEMO_LN = {
 
 const fmt = {
   btc:  v => v >= 1e8 ? `₿${(v / 1e8).toFixed(4)}` : `${v.toLocaleString()} sats`,
+  // One unit for a list, so a 1.2 BTC row and a 546-sat row compare.
+  btcRow: v => "₿" + (v / 1e8).toFixed(8).replace(/0+$/, "").replace(/\.$/, ""),
   age:  ts => { const d = Math.floor((Date.now()/1000 - ts) / 86400); return d < 1 ? "Today" : d === 1 ? "Yesterday" : d < 30 ? `${d}d ago` : d < 365 ? `${Math.floor(d/30)}mo ago` : `${Math.floor(d/365)}yr ago`; },
   txid: id => id ? `${id.slice(0,8)}…${id.slice(-4)}` : "—",
   addr: a => a === "DEMO" ? "Demo Wallet" : a ? `${a.slice(0,10)}…${a.slice(-6)}` : "—",
@@ -3286,68 +3296,6 @@ function ScoreRing({ score, size = 130, animate = true }) {
 }
 
 /* ─────────────────────────────────────────────
-   DEMO PREVIEW — rotating F/C/A examples
-───────────────────────────────────────────── */
-function DemoPreview() {
-  const [idx, setIdx] = useState(0);
-  const [animKey, setAnimKey] = useState(0);
-  const intervalRef = useRef(null);
-
-  useEffect(() => {
-    intervalRef.current = setInterval(() => {
-      setIdx(i => (i + 1) % DEMO_EXAMPLES.length);
-      setAnimKey(k => k + 1);
-    }, 5500);
-    return () => clearInterval(intervalRef.current);
-  }, []);
-
-  const ex = DEMO_EXAMPLES[idx];
-
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-      <div key={animKey} style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 20, padding: 28, boxShadow: "0 16px 64px #00000044", animation: "demoSlide .45s ease both" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 20 }}>
-          <div style={{ width: 8, height: 8, borderRadius: "50%", background: T.green, animation: "pulse 2s infinite" }} />
-          <span style={{ fontFamily: T.mono, fontSize: 10, color: T.textDim, letterSpacing: 1.5 }}>LIVE EXAMPLE · ROTATING</span>
-        </div>
-        <div style={{ display: "flex", gap: 20, alignItems: "center", marginBottom: 22 }}>
-          <ScoreRing score={ex.score} size={100} animate={false} />
-          <div>
-            <div style={{ fontFamily: T.serif, fontSize: 38, color: ex.color, lineHeight: 1, fontWeight: 400 }}>Grade {ex.grade}</div>
-            <div style={{ fontSize: 13, color: T.textMid, marginTop: 5 }}>{ex.label}</div>
-            <div style={{ fontFamily: T.mono, fontSize: 10, color: T.textDim, marginTop: 6 }}>{ex.score}/100 privacy score</div>
-          </div>
-        </div>
-        <div style={{ fontSize: 11, color: T.textDim, marginBottom: 10, fontFamily: T.mono, letterSpacing: 1 }}>FINDINGS</div>
-        {ex.issues.map((issue, i) => {
-          const isGood = issue.includes("✓");
-          return (
-            <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderTop: `1px solid ${T.borderLo}` }}>
-              <div style={{ width: 5, height: 5, borderRadius: "50%", background: isGood ? T.green : (i < 2 ? T.red : T.amber), flexShrink: 0 }} />
-              <span style={{ fontSize: 13, color: isGood ? T.textMid : T.text }}>{issue}</span>
-            </div>
-          );
-        })}
-      </div>
-      {/* Dot indicators */}
-      <div style={{ display: "flex", justifyContent: "center", gap: 8 }} role="tablist" aria-label="Example wallets">
-        {DEMO_EXAMPLES.map((ex, i) => (
-          <button key={i} onClick={() => { setIdx(i); setAnimKey(k => k + 1); }}
-            role="tab" aria-selected={i === idx} aria-label={`Show example ${i + 1} of ${DEMO_EXAMPLES.length}${ex.label ? ": " + ex.label : ""}`}
-            style={{ width: i === idx ? 20 : 8, height: 8, borderRadius: 4, background: i === idx ? ex.color : T.textDim, border: "none", cursor: "pointer", transition: "all .3s", padding: 0 }} />
-        ))}
-      </div>
-      {/* Source callout */}
-      <div style={{ background: T.btcLo, border: `1px solid ${T.btcMid}`, borderRadius: 12, padding: "14px 18px" }}>
-        <div style={{ fontSize: 12, color: T.btc, fontWeight: 600, marginBottom: 4 }}>₿ A typical wallet scores ~38/100</div>
-        <div style={{ fontSize: 12, color: T.textMid, lineHeight: 1.6 }}>Most wallets have at least 3 fixable issues — usually address reuse, no CoinJoin, and round-amount withdrawals.</div>
-        <div style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim, marginTop: 6, letterSpacing: 1 }}>Illustrative baseline — reproducible, we store no scan data</div>
-      </div>
-    </div>
-  );
-}
-
-/* ─────────────────────────────────────────────
    SHARE CARD
 ───────────────────────────────────────────── */
 // Lazy-load the self-hosted dom-to-image library on first PNG export (same-origin
@@ -3690,15 +3638,27 @@ function ShareCard({ score, grade, checks, address, isLightning = false, onClose
 function RelayToggle({ trustLine }) {
   const on = useRelay();
   const expId = useExplorer();
+  const [open, setOpen] = useState(false);
   useLang(); // strings below are localized
   const exp = EXPLORERS[expId];
   return (
     <div style={{ maxWidth: HERO_COL, margin: "0 auto 12px", animation: "fadeUp .5s ease .2s both", background: on ? T.cyanLo : T.surface, border: `1px solid ${on ? T.cyan + "66" : T.border}`, borderRadius: 10, padding: "10px 14px", transition: "all .2s" }}>
       {trustLine && (
-        <div style={{ fontFamily: T.sans, fontSize: 12, color: T.textMid, lineHeight: 1.5, textAlign: "left", paddingBottom: 9, marginBottom: 9, borderBottom: `1px solid ${T.borderLo}` }}>
+        <div style={{ fontFamily: T.sans, fontSize: 12, color: T.textMid, lineHeight: 1.5, textAlign: "left", marginBottom: open ? 9 : 0, paddingBottom: open ? 9 : 0, borderBottom: open ? `1px solid ${T.borderLo}` : "none" }}>
           {trustLine}
         </div>
       )}
+      {!open && (
+        <button type="button" onClick={() => setOpen(true)} aria-expanded={false}
+          style={{ marginTop: trustLine ? 8 : 0, width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, background: "transparent", border: "none", padding: 0, cursor: "pointer", textAlign: "left" }}>
+          <span style={{ fontFamily: T.sans, fontSize: 12, color: T.textMid, lineHeight: 1.4 }}>
+            <strong style={{ color: on ? T.cyan : T.text }}>{t(on ? "relay.on.label" : "relay.off.label")}</strong>
+            {" · "}{exp.label}
+          </span>
+          <span style={{ fontFamily: T.mono, fontSize: 10, color: T.cyan, flexShrink: 0 }}>Change</span>
+        </button>
+      )}
+      {open && <>
       <div style={{ display: "flex", alignItems: "flex-start", gap: 11 }}>
         <button role="switch" aria-checked={on} aria-label={t("relay.aria")}
           onClick={() => setRelay(!on)}
@@ -3727,7 +3687,12 @@ function RelayToggle({ trustLine }) {
           </button>
         ))}
         <span aria-hidden="true" style={{ fontFamily: T.mono, fontSize: 9.5, color: T.cyan, letterSpacing: 0.5, marginLeft: 2, whiteSpace: "nowrap" }}>⇄ tap to switch</span>
+        <button type="button" onClick={() => setOpen(false)} aria-expanded={true}
+          style={{ marginLeft: "auto", background: "transparent", border: "none", padding: 0, fontFamily: T.mono, fontSize: 10, color: T.textDim, cursor: "pointer" }}>
+          Done
+        </button>
       </div>
+      </>}
     </div>
   );
 }
@@ -3790,42 +3755,6 @@ function TrustBox() {
         </div>
       )}
     </div>
-  );
-}
-
-/* ── GUARANTEE RAIL — the six guarantees as a quick-glance column in the
-   hero's right margin, beside the relay switch. Each row links straight to
-   its proof (same GUARANTEES data as the trust box). Renders only on wide
-   viewports (≥1100px) where the margin actually exists; mobile/tablet users
-   get the full trust box further down the page instead. ── */
-function GuaranteeRail() {
-  // Only render when the viewport is wide enough that the rail can sit right
-  // beside the centered 860px content column (not stranded at the far edge).
-  const [wide, setWide] = useState(() => typeof window !== "undefined" && window.innerWidth >= 1500);
-  useEffect(() => {
-    const onR = () => setWide(window.innerWidth >= 1500);
-    window.addEventListener("resize", onR);
-    return () => window.removeEventListener("resize", onR);
-  }, []);
-  if (!wide) return null;
-  return (
-    // left = column centre (50%) + half the 860 column (430) + a 40px gutter.
-    // width scales with the leftover space so it fills it without overflowing.
-    <aside aria-label="Privacy guarantees — each links to its proof"
-      style={{ position: "absolute", left: "calc(50% + 470px)", top: 300, width: "min(360px, calc(50vw - 494px))", zIndex: 1, animation: "fadeUp .5s ease .3s both" }}>
-      <div style={{ fontFamily: T.mono, fontSize: 10, color: T.textDim, letterSpacing: 2, marginBottom: 14, paddingBottom: 10, borderBottom: `1px solid ${T.border}` }}>{t("rail.title")}</div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
-        {GUARANTEES.map((g, i) => (
-          <a key={i} href={g.href} target="_blank" rel="noopener noreferrer"
-            style={{ display: "flex", alignItems: "flex-start", gap: 10, fontFamily: T.mono, fontSize: 13, color: T.textMid, textDecoration: "none", lineHeight: 1.4, padding: "9px 10px", marginLeft: -10, borderRadius: 8, transition: "color .15s, background .15s", animation: `fadeUp .45s ease ${(0.35 + i * 0.08).toFixed(2)}s both` }}
-            onMouseOver={e => { e.currentTarget.style.color = T.cyan; e.currentTarget.style.background = T.cyanLo; }}
-            onMouseOut={e => { e.currentTarget.style.color = T.textMid; e.currentTarget.style.background = "transparent"; }}>
-            <span style={{ color: T.green, flexShrink: 0, fontSize: 14, lineHeight: 1.3 }}>✓</span>{t(`g.${i}.label`)}
-          </a>
-        ))}
-      </div>
-      <div style={{ fontFamily: T.mono, fontSize: 10, color: T.textDim, marginTop: 12, paddingLeft: 10, lineHeight: 1.5 }}>{t("rail.foot")}</div>
-    </aside>
   );
 }
 
@@ -4216,6 +4145,7 @@ function Landing({ onAnalyze, isMobile, onCases, onNav, onOpenTool }) {
   }, []);
   const [input, setInput] = useState("");
   const [error, setError] = useState("");
+  const [formatsOpen, setFormatsOpen] = useState(false);
   const [spInfo, setSpInfo] = useState(null);   // decoded Silent Payments (BIP352) address, if entered
   const [lnInvoice, setLnInvoice] = useState(null);   // decoded BOLT11 Lightning invoice, if entered
   const [lnPay, setLnPay] = useState(null);           // { kind: "offer"|"lnurl"|"lnaddress", ...decoded }
@@ -4309,6 +4239,7 @@ function Landing({ onAnalyze, isMobile, onCases, onNav, onOpenTool }) {
         // Only offer the handoff when it genuinely parses (pure local check).
         try { parseTransactionInput(v); setError(""); setToolHint({ kind: "tx", value: v }); return; } catch {}
       }
+      setFormatsOpen(true);
       setError(t("err.invalid"));
       return;
     }
@@ -4335,57 +4266,57 @@ function Landing({ onAnalyze, isMobile, onCases, onNav, onOpenTool }) {
           <span style={{ fontFamily: T.mono, fontSize: 10, color: T.textMid, letterSpacing: 1.5, fontWeight: 700 }}>OPN<span style={{ color: T.opn }}>ORANGE</span></span>
           {!isMobile && <span style={{ fontFamily: T.mono, fontSize: 10, color: T.textDim, letterSpacing: 1.5 }}>· {t("umbrella.label")}</span>}
         </a>
-        {!isMobile && <>
-          <span style={{ color: T.borderLo, flexShrink: 0 }}>|</span>
-          <div style={{ display: "flex", alignItems: "center", gap: 9, flexShrink: 0 }}>
+        <span style={{ color: T.borderLo, flexShrink: 0 }}>|</span>
+          <div style={{ display: "flex", alignItems: "center", gap: 9, flex: "1 1 auto", minWidth: 0, overflowX: "auto", scrollbarWidth: "none" }}>
             {/* Current tool — highlighted, not a link (you're here) */}
-            <span style={{ fontFamily: T.mono, fontSize: 10, color: T.opn, fontWeight: 700, letterSpacing: 0.5 }}>{t("umbrella.privacy")}</span>
+            {!isMobile && <>
+            <span style={{ fontFamily: T.mono, fontSize: 10, color: T.opn, fontWeight: 700, letterSpacing: 0.5, whiteSpace: "nowrap", flexShrink: 0 }}>{t("umbrella.privacy")}</span>
             <span style={{ color: T.borderLo }}>·</span>
+            </>}
             <a href="https://dcabutler.com" target="_blank" rel="noopener noreferrer"
-              style={{ fontFamily: T.mono, fontSize: 10, color: T.textMid, textDecoration: "none", letterSpacing: 0.5, transition: "color .15s" }}
+              style={{ fontFamily: T.mono, fontSize: 10, color: T.textMid, textDecoration: "none", letterSpacing: 0.5, whiteSpace: "nowrap", flexShrink: 0, transition: "color .15s" }}
               onMouseOver={e => e.currentTarget.style.color = T.opn}
               onMouseOut={e => e.currentTarget.style.color = T.textMid}>
               {t("umbrella.dca")} ↗
             </a>
             <span style={{ color: T.borderLo }}>·</span>
             <a href={`${BTCHUB_URL}/?from=anonscore`} target="_blank" rel="noopener noreferrer"
-              style={{ fontFamily: T.mono, fontSize: 10, color: T.textMid, textDecoration: "none", letterSpacing: 0.5, transition: "color .15s" }}
+              style={{ fontFamily: T.mono, fontSize: 10, color: T.textMid, textDecoration: "none", letterSpacing: 0.5, whiteSpace: "nowrap", flexShrink: 0, transition: "color .15s" }}
               onMouseOver={e => e.currentTarget.style.color = T.opn}
               onMouseOut={e => e.currentTarget.style.color = T.textMid}>
               {t("umbrella.intel")} ↗
             </a>
             <span style={{ color: T.borderLo }}>·</span>
             <a href="https://opnorange.com" target="_blank" rel="noopener noreferrer"
-              style={{ fontFamily: T.mono, fontSize: 10, color: T.textMid, textDecoration: "none", letterSpacing: 0.5, transition: "color .15s" }}
+              style={{ fontFamily: T.mono, fontSize: 10, color: T.textMid, textDecoration: "none", letterSpacing: 0.5, whiteSpace: "nowrap", flexShrink: 0, transition: "color .15s" }}
               onMouseOver={e => e.currentTarget.style.color = T.opn}
               onMouseOut={e => e.currentTarget.style.color = T.textMid}>
               {t("umbrella.hub")} ↗
             </a>
           </div>
-        </>}
       </nav>
       <div role="main" aria-label="AnonScore — Bitcoin & Lightning privacy audit" style={{ minHeight: "100vh", display: "flex", flexDirection: "column", background: "transparent" }}>
       {/* Nav — trust signals left · brand centered · actions right */}
-      <nav style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", alignItems: "center", padding: isMobile ? "14px 20px" : "14px 48px", borderBottom: `1px solid ${T.border}`, background: T.bg, position: "sticky", top: 0, zIndex: 100 }}>
-        {/* Left — the toolkit (every flagship tool, one click from the front door;
-            trust signals live in the hero privacy panel + TrustBox below) */}
+      <nav style={{ display: "grid", gridTemplateColumns: navWide ? "1fr auto 1fr" : "1fr auto", alignItems: "center", gap: 8, padding: isMobile ? "12px 16px" : "14px 48px", borderBottom: `1px solid ${T.border}`, background: T.bg, position: "sticky", top: 0, zIndex: 100 }}>
+        {navWide && (
         <div style={{ display: "flex", alignItems: "center", gap: 2, minWidth: 0, justifySelf: "start" }}>
-          {navWide && NAV_LINKS.map(l => (
+          {NAV_LINKS.map(l => (
             <a key={l.page} href={l.href} onClick={l.page === "cases" ? (e => { if (e.button === 0 && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey) { e.preventDefault(); onCases(null); } }) : navLink(l.page)}
               style={{ fontFamily: T.mono, fontSize: 10, color: T.textMid, textDecoration: "none", letterSpacing: 0.5, padding: "4px 7px", transition: "color .15s", whiteSpace: "nowrap" }}
               onMouseOver={e => e.currentTarget.style.color = T.cyan}
               onMouseOut={e => e.currentTarget.style.color = T.textMid}>{l.label}</a>
           ))}
         </div>
-        {/* Center — the brand */}
-        <div style={{ display: "flex", alignItems: "center", gap: 8, justifySelf: "center" }}>
+        )}
+        {/* Brand. Centered when the tool links flank it; left-aligned on a phone so GitHub doesn't wrap. */}
+        <div style={{ display: "flex", alignItems: "center", gap: 8, justifySelf: navWide ? "center" : "start" }}>
           <span style={{ color: T.btc, fontFamily: T.mono, fontSize: 15, lineHeight: 1, textShadow: `0 0 14px ${T.btc}77` }}>₿</span>
           <span style={{ fontFamily: T.display, fontWeight: 700, fontSize: 16, letterSpacing: 4, color: T.text, textTransform: "uppercase" }}>ANON<span style={{ color: T.cyan, textShadow: `0 0 14px ${T.cyan}55` }}>SCORE</span></span>
         </div>
         {/* Right — actions */}
         <div style={{ display: "flex", gap: 8, alignItems: "center", justifySelf: "end" }}>
-          <a href="https://github.com/netasset/anonscore" target="_blank" rel="noopener noreferrer"
-            style={{ display: "flex", alignItems: "center", gap: 5, padding: "5px 10px", background: T.surface, border: `1px solid ${T.border}`, borderRadius: 7, color: T.textMid, textDecoration: "none", fontSize: 11, fontFamily: T.mono, transition: "border-color .15s" }}
+          <a href="https://github.com/netasset/anonscore" target="_blank" rel="noopener noreferrer" aria-label="AnonScore on GitHub"
+            style={{ ...ui.ghost, display: "flex", alignItems: "center", gap: 5, padding: "5px 10px", background: T.surface, borderRadius: 7, textDecoration: "none", fontSize: 11, fontFamily: T.mono, whiteSpace: "nowrap", transition: "border-color .15s" }}
             onMouseOver={e => e.currentTarget.style.borderColor = T.cyan}
             onMouseOut={e => e.currentTarget.style.borderColor = T.border}>
             GitHub ↗
@@ -4395,37 +4326,6 @@ function Landing({ onAnalyze, isMobile, onCases, onNav, onOpenTool }) {
         </div>
       </nav>
 
-      {/* ── CASE FILES STRIP ── */}
-      <div style={{ background: T.surface, borderBottom: `1px solid ${T.border}`, borderTop: `2px solid ${T.btc}`, overflowX: "auto", WebkitOverflowScrolling: "touch", scrollbarWidth: "none" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 0, minWidth: "max-content", padding: "0 20px" }}>
-          {/* Label */}
-          <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "9px 14px 9px 0", borderRight: `1px solid ${T.border}`, marginRight: 14, flexShrink: 0 }}>
-            <span style={{ fontFamily: T.mono, fontSize: 9, color: T.btc, letterSpacing: 2, fontWeight: 700 }}>📁 CASE FILES</span>
-            <span style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim, whiteSpace: "nowrap" }}>— this audit, run on famous wallets</span>
-          </div>
-          {/* Case pills */}
-          {CASE_FILES.map((c, i) => {
-            const cat = CATEGORY_META[c.category];
-            return (
-              <button key={c.id} onClick={() => onCases(c)}
-                style={{ display: "flex", alignItems: "center", gap: 7, padding: "9px 14px", background: "transparent", border: "none", borderRight: `1px solid ${T.borderLo}`, color: T.textMid, fontFamily: T.sans, fontSize: 12, cursor: "pointer", whiteSpace: "nowrap", transition: "all .15s", flexShrink: 0 }}
-                onMouseEnter={e => { e.currentTarget.style.background = T.card; e.currentTarget.style.color = T.text; }}
-                onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = T.textMid; }}>
-                <span style={{ fontFamily: T.mono, fontSize: 9, color: cat.color, fontWeight: 700 }}>#{c.id}</span>
-                {c.title}
-              </button>
-            );
-          })}
-          {/* View all */}
-          <button onClick={() => onCases(null)}
-            style={{ display: "flex", alignItems: "center", gap: 5, padding: "9px 16px", background: "transparent", border: "none", color: T.btc, fontFamily: T.mono, fontSize: 9, cursor: "pointer", letterSpacing: 1, whiteSpace: "nowrap", flexShrink: 0, transition: "color .15s", fontWeight: 700 }}
-            onMouseEnter={e => e.currentTarget.style.color = T.text}
-            onMouseLeave={e => e.currentTarget.style.color = T.btc}>
-            VIEW ALL →
-          </button>
-        </div>
-      </div>
-
       {/* ── HERO ── */}
       <div ref={heroRef} style={{ position: "relative", overflow: "hidden" }}>
         <ParticleCanvas color={T.cyan} />
@@ -4434,9 +4334,8 @@ function Landing({ onAnalyze, isMobile, onCases, onNav, onOpenTool }) {
         <div className="aurora" style={{ top: "-10%", right: "-12%", width: 460, height: 460, background: "radial-gradient(circle,#F7931A16 0%,transparent 70%)", animationDelay: "-8s" }} />
         <div className="aurora" style={{ bottom: "-24%", left: "32%", width: 400, height: 400, background: "radial-gradient(circle,#22D3EE12 0%,transparent 70%)", animationDelay: "-15s" }} />
         <div className="scan-ov" />
-        <GuaranteeRail />
 
-        <section style={{ position: "relative", padding: isMobile ? "34px 20px 40px" : "50px 48px 56px", maxWidth: 860, margin: "0 auto", width: "100%", textAlign: "center" }}>
+        <section style={{ position: "relative", padding: isMobile ? "18px 16px 28px" : "28px 48px 36px", maxWidth: 860, margin: "0 auto", width: "100%", textAlign: "center" }}>
           {/* Eyebrow */}
           <div style={{ fontFamily: T.mono, fontSize: 10, letterSpacing: 2.5, marginBottom: 14, animation: "fadeUp .5s ease both", display: "flex", gap: 8, alignItems: "center", justifyContent: "center" }}>
             <span style={{ color: T.btc }}>₿</span>
@@ -4444,27 +4343,13 @@ function Landing({ onAnalyze, isMobile, onCases, onNav, onOpenTool }) {
           </div>
 
           {/* Headline */}
-          <h1 style={{ fontFamily: T.serif, fontSize: isMobile ? 38 : 56, lineHeight: 1.06, color: T.text, marginBottom: 20, animation: "fadeUp .5s ease .08s both", fontWeight: 400 }}>
+          <h1 style={{ fontFamily: T.serif, fontSize: isMobile ? 34 : 52, lineHeight: 1.06, color: T.text, marginBottom: 12, animation: "fadeUp .5s ease .08s both", fontWeight: 400 }}>
             {t("hero.h1.line1")}<br />{t("hero.h1.line2")}<br /><em className="accent-glow" style={{ color: T.cyan, fontStyle: "italic" }}>{t("hero.h1.em")}</em>
           </h1>
 
-          <p style={{ fontSize: isMobile ? 15 : 18, color: T.textMid, lineHeight: 1.6, fontWeight: 300, animation: "fadeUp .5s ease .14s both", maxWidth: 560, margin: "0 auto 20px" }}>
+          <p style={{ fontSize: isMobile ? 15 : 17, color: T.textMid, lineHeight: 1.55, fontWeight: 300, animation: "fadeUp .5s ease .14s both", maxWidth: 520, margin: "0 auto 14px" }}>
             {t("hero.sub")}
           </p>
-
-          {/* Score spectrum — slim, inline — hidden when Lightning detected */}
-          {!isLn && (
-            <div style={{ maxWidth: HERO_COL, margin: "0 auto 16px", animation: "fadeUp .5s ease .16s both" }}>
-              <div style={{ position: "relative", height: 6, borderRadius: 6, background: `linear-gradient(90deg, ${T.red} 0%, ${T.btc} 40%, ${T.amber} 60%, ${T.green} 100%)`, marginBottom: 6 }}>
-                <div style={{ position: "absolute", top: "50%", left: "38%", transform: "translate(-50%,-50%)", width: 12, height: 12, borderRadius: "50%", background: T.bg, border: `2px solid ${T.btc}`, boxShadow: `0 0 8px ${T.btc}`, animation: "dotPulse 2.4s ease-out infinite" }} />
-              </div>
-              <div style={{ display: "flex", justifyContent: "space-between" }}>
-                <span style={{ fontFamily: T.mono, fontSize: 9, color: T.red }}>{t("spectrum.low")}</span>
-                <span style={{ fontFamily: T.mono, fontSize: 9, color: T.btc }}>{t("spectrum.avg")}</span>
-                <span style={{ fontFamily: T.mono, fontSize: 9, color: T.green }}>{t("spectrum.high")}</span>
-              </div>
-            </div>
-          )}
 
           {/* Privacy panel — trust line + relay switch in one compact box */}
           {RELAY_URL
@@ -4474,7 +4359,7 @@ function Landing({ onAnalyze, isMobile, onCases, onNav, onOpenTool }) {
           {/* CTAs — wrapped in a glowing "scan console" panel. Intentionally the
               WIDEST hero element (HERO_WIDE > HERO_COL) so it breaks out of the
               supporting column and is unmistakably the main event. */}
-          <div style={{ display: "flex", flexDirection: "column", gap: 12, maxWidth: HERO_WIDE, margin: "4px auto 0", animation: "fadeUp .5s ease .22s both, breathe 5s ease-in-out 1.2s infinite", background: T.card, border: `1px solid ${T.cyan}44`, borderRadius: 18, padding: isMobile ? "18px 16px" : "26px 30px", boxShadow: `0 0 60px -14px ${T.cyan}4d` }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10, maxWidth: HERO_WIDE, margin: "4px auto 0", animation: "fadeUp .5s ease .22s both", background: T.card, border: `1px solid ${T.cyan}44`, borderRadius: 18, padding: isMobile ? "14px 14px" : "18px 22px", boxShadow: `0 0 60px -14px ${T.cyan}4d` }}>
             <div>
               {/* Type detection pill — appears when input is recognised */}
               {inputType && (
@@ -4487,17 +4372,27 @@ function Landing({ onAnalyze, isMobile, onCases, onNav, onOpenTool }) {
                   </span>
                 </div>
               )}
-              {/* Micro-label so the field reads unmistakably as the input, not prose */}
-              <div style={{ fontFamily: T.mono, fontSize: 9, letterSpacing: 1.5, color: T.textDim, marginBottom: 7, textAlign: "left" }}>
-                {isLn ? "NODE PUBKEY" : "ADDRESS · NODE PUBKEY · INVOICE · OFFER · XPUB · PSBT · ECASH"}
+              <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 8, marginBottom: 7 }}>
+                <div style={{ fontFamily: T.mono, fontSize: 9, letterSpacing: 1.5, color: T.textDim, textAlign: "left" }}>
+                  {isLn ? "NODE PUBKEY" : "BITCOIN ADDRESS OR LIGHTNING NODE"}
+                </div>
+                <button type="button" onClick={() => setFormatsOpen(o => !o)} aria-expanded={formatsOpen}
+                  style={{ background: "none", border: "none", padding: 0, fontFamily: T.mono, fontSize: 9, letterSpacing: 0.4, color: T.cyan, cursor: "pointer", flexShrink: 0 }}>
+                  {formatsOpen ? "Hide other formats" : "Other formats"}
+                </button>
               </div>
+              {formatsOpen && (
+                <div style={{ fontSize: 12, color: T.textMid, lineHeight: 1.55, textAlign: "left", marginBottom: 8, animation: "slideDown .2s ease" }}>
+                  This box also reads a BOLT11 invoice, a BOLT12 offer, an LNURL or Lightning address, a Silent Payment address (sp1…), an xpub, ypub or zpub, a PSBT or raw transaction, and a Cashu token. Paste one and it stays on this page.
+                </div>
+              )}
               {/* Input on its own full-width row so the field is the widest, most
                   prominent element; Analyze becomes a full-width CTA below it. */}
               <div style={{ display: "flex", gap: 8 }}>
                 {isMobile && (
-                  <button onClick={async () => {
+                  <button type="button" aria-label="Paste from clipboard" onClick={async () => {
                     try { const t = await navigator.clipboard.readText(); setInput(t.trim()); setError(""); } catch {}
-                  }} style={{ background: T.surface, border: `1.5px solid ${T.border}`, borderRadius: 14, padding: "16px 15px", color: T.textMid, fontSize: 18, cursor: "pointer", flexShrink: 0, alignSelf: "stretch" }} title="Paste">
+                  }} style={{ ...ui.ghost, background: T.surface, borderRadius: 14, padding: "12px 14px", fontSize: 18, flexShrink: 0, alignSelf: "stretch" }}>
                     📋
                   </button>
                 )}
@@ -4514,7 +4409,7 @@ function Landing({ onAnalyze, isMobile, onCases, onNav, onOpenTool }) {
                     placeholder={isLn ? "03abc… (66-char node pubkey)" : "Paste an address or pubkey…"}
                     style={{ width: "100%", boxSizing: "border-box", background: "#070910",
                       border: `2px solid ${error ? T.red : inputType ? (isLn ? T.ln : T.btc) : T.cyan + "77"}`,
-                      borderRadius: 14, padding: "22px 18px 22px 50px", color: T.text, fontFamily: T.mono, fontSize: 17, letterSpacing: 0.3, outline: "none", transition: "border .18s, box-shadow .25s", boxShadow: `inset 0 2px 14px #00000080`, minWidth: 0 }}
+                      borderRadius: 14, padding: "16px 16px 16px 48px", color: T.text, fontFamily: T.mono, fontSize: 16, letterSpacing: 0.3, outline: "none", transition: "border .18s, box-shadow .25s", boxShadow: `inset 0 2px 14px #00000080`, minWidth: 0 }}
                     onFocus={e => {
                       const c = isLn ? T.ln : T.cyan;
                       e.target.style.borderColor = c;
@@ -4527,8 +4422,7 @@ function Landing({ onAnalyze, isMobile, onCases, onNav, onOpenTool }) {
                 </div>
               </div>
               <button onClick={() => submit(null, !isLn)} className="sheen"
-                style={{ width: "100%", marginTop: 10, background: isLn ? T.ln : T.btc, border: "none", borderRadius: 14, padding: "18px 26px",
-                  color: T.bg, fontFamily: T.sans, fontWeight: 700, fontSize: 16, cursor: "pointer", whiteSpace: "nowrap", transition: "all .15s" }}
+                style={{ ...ui.primary(isLn ? T.ln : T.btc), width: "100%", marginTop: 10, borderRadius: 14, padding: "14px 22px", fontSize: 16, whiteSpace: "nowrap", transition: "opacity .15s" }}
                 onMouseOver={e => e.currentTarget.style.opacity = ".88"}
                 onMouseOut={e => e.currentTarget.style.opacity = "1"}>
                 {isLn ? t("cta.audit") : t("cta.analyze")}
@@ -4701,10 +4595,22 @@ function Landing({ onAnalyze, isMobile, onCases, onNav, onOpenTool }) {
                 </button>
               ))}
             </div>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
-              <a href="https://github.com/netasset/anonscore" target="_blank" rel="noopener noreferrer"
-                style={{ fontFamily: T.mono, fontSize: 10, color: T.cyan, textDecoration: "none" }}>Open source ↗</a>
-            </div>
+            {!isLn && (
+              <div style={{ maxWidth: HERO_COL, margin: "2px auto 0", width: "100%" }}>
+                <div style={{ position: "relative", height: 6, borderRadius: 6, background: `linear-gradient(90deg, ${T.red} 0%, ${T.btc} 40%, ${T.amber} 60%, ${T.green} 100%)`, marginBottom: 6 }}>
+                  <div style={{ position: "absolute", top: "50%", left: "38%", transform: "translate(-50%,-50%)", width: 12, height: 12, borderRadius: "50%", background: T.bg, border: `2px solid ${T.btc}`, boxShadow: `0 0 8px ${T.btc}` }} />
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between" }}>
+                  <span style={{ fontFamily: T.mono, fontSize: 9, color: T.red }}>{t("spectrum.low")}</span>
+                  <span style={{ fontFamily: T.mono, fontSize: 9, color: T.btc }}>{t("spectrum.avg")}</span>
+                  <span style={{ fontFamily: T.mono, fontSize: 9, color: T.green }}>{t("spectrum.high")}</span>
+                </div>
+              </div>
+            )}
+            <button type="button" onClick={() => onCases(null)}
+              style={{ background: "none", border: "none", padding: 0, fontFamily: T.mono, fontSize: 11, color: T.textMid, cursor: "pointer", textDecoration: "underline", textUnderlineOffset: 3 }}>
+              See this audit on famous wallets →
+            </button>
           </div>
 
           {/* Recent scans history — only shown if they have prior scans */}
@@ -4738,7 +4644,7 @@ function Landing({ onAnalyze, isMobile, onCases, onNav, onOpenTool }) {
                         <div style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim, flexShrink: 0 }}>{h.score}/100</div>
                         <div style={{ fontFamily: T.mono, fontSize: 8, color: T.textDim, flexShrink: 0 }}>{h.isXpub ? "→" : "↺"}</div>
                       </button>
-                      <button onClick={() => deleteHistory(h.addr)}
+                      <button onClick={() => deleteHistory(h.addr)} aria-label={"Remove " + (h.addr || "scan") + " from recent scans"}
                         style={{ background: "none", border: "none", color: T.textDim, fontSize: 12, cursor: "pointer", padding: "0 2px", flexShrink: 0, lineHeight: 1 }}
                         onMouseOver={e => e.currentTarget.style.color = T.red}
                         onMouseOut={e => e.currentTarget.style.color = T.textDim}>✕</button>
@@ -4760,9 +4666,9 @@ function Landing({ onAnalyze, isMobile, onCases, onNav, onOpenTool }) {
         <div style={{ maxWidth: 860, margin: "0 auto" }}>
           <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(3, 1fr)", gap: isMobile ? 20 : 0 }}>
             {[
-              { n:"01", icon:"📋", title:"Paste an address or pubkey", desc:"Bitcoin address (bc1…, 1…, 3…) or Lightning node pubkey (66-char hex). No account, no email, nothing saved." },
-              { n:"02", icon:"🔍", title:"We run the checks",  desc:"Bitcoin: 11 on-chain heuristics. Lightning: 8 node privacy checks. Same patterns surveillance firms use — runs in your browser." },
-              { n:"03", icon:"🎯", title:"Score + fix plan",  desc:"A score from 0–100, every issue explained, fixes ranked by impact. Bitcoin scan also has a 💬 Plain English mode." },
+              { n:"01", icon:"📋", title:"Paste an address", desc:"A Bitcoin address or a Lightning node pubkey. No account. The result stays in this browser." },
+              { n:"02", icon:"🔍", title:"The checks run here",  desc:"Eleven on-chain heuristics, or eight Lightning checks. The same patterns surveillance firms use — nothing is uploaded to score it." },
+              { n:"03", icon:"🎯", title:"Score, then the first fix",  desc:"0–100, every issue explained, fixes ranked by the points they return. Plain English is one toggle." },
             ].map((s, i) => (
               <div key={i} style={{ display: "flex", gap: 14, alignItems: "flex-start", padding: isMobile ? 0 : "0 28px", borderLeft: !isMobile && i > 0 ? `1px solid ${T.border}` : "none" }}>
                 <div style={{ fontSize: 22, flexShrink: 0, marginTop: 2 }}>{s.icon}</div>
@@ -4789,31 +4695,6 @@ function Landing({ onAnalyze, isMobile, onCases, onNav, onOpenTool }) {
           <TrustBox />
         </div>
       </div>
-
-      {/* ── DEMO PREVIEW — desktop full, mobile score cards ── */}
-      {!isMobile && (
-        <div style={{ padding: "48px 48px 0", maxWidth: 860, margin: "0 auto", width: "100%" }}>
-          <div style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim, letterSpacing: 2, marginBottom: 14, textAlign: "center" }}>LIVE EXAMPLE — WHAT YOUR RESULTS LOOK LIKE</div>
-          <DemoPreview />
-        </div>
-      )}
-      {isMobile && (
-        <div style={{ padding: "32px 20px 0" }}>
-          <div style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim, letterSpacing: 2, marginBottom: 14, textAlign: "center" }}>EXAMPLE SCORES</div>
-          <div style={{ display: "flex", gap: 10, overflowX: "auto", paddingBottom: 8, scrollbarWidth: "none" }}>
-            {DEMO_EXAMPLES.map((ex, i) => (
-              <div key={i} onClick={() => onAnalyze("DEMO", false, "btc")} style={{ flexShrink: 0, background: T.card, border: `1px solid ${ex.color}33`, borderRadius: 14, padding: "16px 18px", cursor: "pointer", minWidth: 140 }}>
-                <div style={{ height: 2, background: `linear-gradient(90deg,transparent,${ex.color},transparent)`, margin: "0 -18px 12px", marginTop: -16, borderRadius: "14px 14px 0 0" }} />
-                <div style={{ fontFamily: T.serif, fontSize: 38, color: ex.color, lineHeight: 1 }}>{ex.grade}</div>
-                <div style={{ fontFamily: T.mono, fontSize: 10, color: ex.color, marginTop: 2 }}>{ex.label}</div>
-                <div style={{ fontFamily: T.mono, fontSize: 16, color: T.text, marginTop: 6, fontWeight: 600 }}>{ex.score}<span style={{ fontSize: 9, color: T.textDim }}>/100</span></div>
-                <div style={{ fontFamily: T.mono, fontSize: 8, color: T.textDim, marginTop: 8 }}>{ex.issues[0]}</div>
-              </div>
-            ))}
-          </div>
-          <div style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim, textAlign: "center", marginTop: 8 }}>tap to try the demo →</div>
-        </div>
-      )}
 
       <Divider />
 
@@ -4958,26 +4839,6 @@ function Landing({ onAnalyze, isMobile, onCases, onNav, onOpenTool }) {
               )}
             </span>
           )}
-          {/* OPNorange toolkit row — cross-tool nav */}
-          <span style={{ display: "inline-flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-            <span style={{ width: 6, height: 6, borderRadius: "50%", background: T.opn, boxShadow: `0 0 6px ${T.opn}`, flexShrink: 0 }} />
-            <span style={{ fontFamily: T.mono, fontSize: 10, color: T.opn, letterSpacing: 0.5, fontWeight: 700 }}>{t("umbrella.privacy")}</span>
-            <span style={{ color: T.borderLo }}>·</span>
-            <a href="https://dcabutler.com" target="_blank" rel="noopener noreferrer"
-              style={{ fontFamily: T.mono, fontSize: 10, color: T.textDim, textDecoration: "none", transition: "color .15s" }}
-              onMouseOver={e => e.currentTarget.style.color = T.opn}
-              onMouseOut={e => e.currentTarget.style.color = T.textDim}>{t("umbrella.dca")} ↗</a>
-            <span style={{ color: T.borderLo }}>·</span>
-            <a href={`${BTCHUB_URL}/?from=anonscore`} target="_blank" rel="noopener noreferrer"
-              style={{ fontFamily: T.mono, fontSize: 10, color: T.textDim, textDecoration: "none", transition: "color .15s" }}
-              onMouseOver={e => e.currentTarget.style.color = T.opn}
-              onMouseOut={e => e.currentTarget.style.color = T.textDim}>{t("umbrella.intel")} ↗</a>
-            <span style={{ color: T.borderLo }}>·</span>
-            <a href="https://opnorange.com" target="_blank" rel="noopener noreferrer"
-              style={{ fontFamily: T.mono, fontSize: 10, color: T.textDim, textDecoration: "none", transition: "color .15s" }}
-              onMouseOver={e => e.currentTarget.style.color = T.opn}
-              onMouseOut={e => e.currentTarget.style.color = T.textDim}>{t("umbrella.hub")} ↗</a>
-          </span>
         </div>
       </div>
       {showFunding && <FundingDisclosure onClose={() => setShowFunding(false)} />}
@@ -6080,7 +5941,7 @@ function XpubScan({ onBack, isMobile, onScan, onNav, prefill, onOpenWalletReview
         <div style={{ display: "flex", flexDirection: "column", gap: 14, marginTop: 20, animation: "fadeUp .4s ease both" }}>
           {/* score header */}
           <div style={{ ...panel(), display: "flex", gap: isMobile ? 14 : 22, alignItems: "center", flexWrap: "wrap" }}>
-            <div style={{ flexShrink: 0 }}><ScoreRing score={r.score} size={isMobile ? 96 : 118} /></div>
+            <div style={{ flexShrink: 0 }}><ScoreRing score={r.score} size={isMobile ? 96 : 118} animate={false} /></div>
             <div style={{ flex: 1, minWidth: 200 }}>
               <div style={{ fontFamily: T.serif, fontSize: isMobile ? 22 : 26, color: r.riskColor, fontWeight: 400 }}>Grade {r.grade} · {r.riskLabel}</div>
               <div style={{ fontSize: 13, color: T.textMid, lineHeight: 1.6, marginTop: 4 }}>Wallet-level privacy across {r.stats.used} used address{r.stats.used !== 1 ? "es" : ""} ({r.stats.addresses} derived & checked).</div>
@@ -6756,6 +6617,8 @@ function AiConsentGate({ score, grade, checks, recommendations, walletMeta, onAc
    and gets the shared dialog a11y (focus + Escape + trap). ── */
 function ConfirmScanModal({ pendingScan, onCancel, onConfirm }) {
   const dialogRef = useDialog(onCancel);
+  const relay = useRelay() && !!RELAY_URL;
+  const exp = explorer();
   const kind = pendingScan.inputType === "btc" ? "Bitcoin address" : pendingScan.inputType === "ln_address" ? "Lightning address" : "Lightning node";
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 900, display: "flex", alignItems: "center", justifyContent: "center", padding: 20, background: "#000000aa" }}>
@@ -6763,13 +6626,15 @@ function ConfirmScanModal({ pendingScan, onCancel, onConfirm }) {
         style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 18, padding: 28, width: "min(400px,94vw)", animation: "fadeUp .25s ease" }}>
         <div style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim, letterSpacing: 2, marginBottom: 14 }}>SHARED SCAN LINK</div>
         <div style={{ fontFamily: T.serif, fontSize: 20, color: T.text, marginBottom: 10, fontWeight: 400 }}>
-          You were linked to scan this {kind}
+          You were linked to analyze this {kind}
         </div>
         <div style={{ fontFamily: T.mono, fontSize: 11, color: T.textDim, background: T.surface, border: `1px solid ${T.border}`, borderRadius: 8, padding: "10px 14px", marginBottom: 16, wordBreak: "break-all" }}>
           {pendingScan.addr.length > 30 ? `${pendingScan.addr.slice(0, 20)}…${pendingScan.addr.slice(-8)}` : pendingScan.addr}
         </div>
         <div style={{ fontSize: 13, color: T.textMid, lineHeight: 1.65, marginBottom: 20 }}>
-          This queries a public block explorer directly from your browser. The address is public data — but the explorer sees your IP alongside it. On Tor or your own node, even that link stays private.
+          {relay
+            ? <>The privacy relay is on, so {exp.label} sees the address and not your IP. Nothing is stored. Turn the relay off under the address box if you would rather the lookup never touch AnonScore.</>
+            : <>The privacy relay is off, so this queries {exp.label} directly and that explorer sees your IP next to the address. Turn the relay on under the address box to hide it.</>}
         </div>
         <div style={{ display: "flex", gap: 10 }}>
           <button onClick={onCancel} style={{ flex: 1, padding: "12px", background: "transparent", border: `1.5px solid ${T.border}`, borderRadius: 10, color: T.textMid, fontSize: 13, cursor: "pointer" }}>
@@ -6777,7 +6642,7 @@ function ConfirmScanModal({ pendingScan, onCancel, onConfirm }) {
           </button>
           <button onClick={onConfirm}
             style={{ flex: 1, padding: "12px", background: T.cyan, border: "none", borderRadius: 10, color: T.bg, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
-            Scan it →
+            Analyze →
           </button>
         </div>
       </div>
@@ -7599,6 +7464,7 @@ function MethodologyPage({ onBack, isMobile, onNav }) {
 function Dashboard({ address, addrInfo, utxos, txs, txSample, isMobile, onBack, onRescan, toast, autoShare, scanAt, defaultSimple, simpleMode: simpleModeFromApp, onSimpleModeChange, onCoach, delta, onNav, onOpenCase, onOpenWalletReview, onInspectTx, onInspectTxid }) {
   const [tab, setTab] = useState("Fix It");
   const [threat, setThreat] = useState(null); // null = ranked for everyone; session-only, never stored
+  const [threatOpen, setThreatOpen] = useState(false);
   const clusterN = useMemo(() => computeCluster(txs, address).linked.length, [txs, address]);
   const poison = useMemo(() => computePoisoning(txs, address), [txs, address]);
   const caseHit = CASE_FILES.find(c => c.address === address);
@@ -7616,7 +7482,6 @@ function Dashboard({ address, addrInfo, utxos, txs, txSample, isMobile, onBack, 
     return next;
   });
   const [aiStage, setAiStage] = useState(null);
-  const [aiWidgetMin, setAiWidgetMin] = useState(false);
   const openAi = () => setAiStage("consent");
 
   const txCount = addrInfo?.chain_stats?.tx_count || txs.length;
@@ -7782,7 +7647,7 @@ function Dashboard({ address, addrInfo, utxos, txs, txSample, isMobile, onBack, 
         <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 14, padding: isMobile ? "12px 14px" : "12px 20px", marginBottom: 12, display: "flex", alignItems: "center", gap: isMobile ? 12 : 20, flexWrap: "wrap", animation: "fadeUp .35s ease both" }}>
           {/* Score ring — smaller */}
           <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
-            <ScoreRing score={score} size={52} />
+            <ScoreRing score={score} size={52} animate={false} />
             <div>
               <div style={{ fontFamily: T.serif, fontSize: 20, color: riskColor, lineHeight: 1, animation: `popIn .55s cubic-bezier(.34,1.56,.64,1) .85s both${score < 30 ? ", shake .5s ease 2s" : ""}`, transformOrigin: "left center" }}>Grade {grade}</div>
               <div style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim, letterSpacing: 1, marginTop: 2, animation: "fadeIn .35s ease 1.4s both" }}>{score}/100</div>
@@ -7917,69 +7782,11 @@ function Dashboard({ address, addrInfo, utxos, txs, txSample, isMobile, onBack, 
             ? [...recommendations].sort((a, b) => weight(b) - weight(a) || b.impact - a.impact)
             : recommendations;
           return (
-          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            {/* Threat-model lens — re-ranks the same plan for a chosen adversary */}
-            <div style={{ background: T.card, border: `1px solid ${tm ? T.cyan + "44" : T.border}`, borderRadius: 14, padding: "12px 16px", marginBottom: 2 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-                <span style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim, letterSpacing: 1.5, flexShrink: 0 }}>WHO ARE YOU HIDING FROM?</span>
-                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                  <Pill active={!tm} onClick={() => setThreat(null)}>Everyone</Pill>
-                  {THREAT_MODELS.map(m => (
-                    <Pill key={m.id} active={threat === m.id} onClick={() => setThreat(threat === m.id ? null : m.id)}>{m.icon} {m.label}</Pill>
-                  ))}
-                </div>
-              </div>
-              {tm && (
-                <div style={{ fontSize: 12.5, color: T.textMid, lineHeight: 1.6, marginTop: 10, borderTop: `1px solid ${T.borderLo}`, paddingTop: 10 }}>
-                  {tm.sees}
-                </div>
-              )}
-            </div>
-            <div style={{ fontSize: 13, color: T.textMid, marginBottom: 4 }}>
+          <div key={tab} style={{ display: "flex", flexDirection: "column", gap: 10, animation: "fadeIn .22s ease both" }}>
+            <div style={{ fontSize: 14, color: T.textMid, lineHeight: 1.5 }}>
               {tm
-                ? <>Re-ranked for <strong style={{ color: T.cyan }}>{tm.label.toLowerCase()}</strong>. Impact points are unchanged — only the priorities shift with the adversary.</>
-                : <>Sorted by impact. Fixing the top 3 alone could raise your score by <strong style={{ color: T.cyan }}>{recommendations.slice(0, 3).reduce((a, r) => a + r.impact, 0)} points</strong>.</>}
-            </div>
-            {/* AI assistant card — privacy guarantees shown before clicking */}
-            <div style={{ background: T.card, border: `1px solid ${T.cyan}33`, borderRadius: 16, overflow: "hidden", marginBottom: 2 }}>
-              {/* Privacy badges — visible without any interaction */}
-              <div style={{ display: "flex", gap: 0, borderBottom: `1px solid ${T.borderLo}` }}>
-                {[
-                  { icon: "✕", label: "Address never sent" },
-                  { icon: "✕", label: "No data stored" },
-                  { icon: "✕", label: "Not used for training" },
-                ].map((badge, i) => (
-                  <div key={i} style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 5, padding: "7px 8px", borderRight: i < 2 ? `1px solid ${T.borderLo}` : undefined, background: T.greenLo }}>
-                    <span style={{ fontFamily: T.mono, fontSize: 9, color: T.green, fontWeight: 700 }}>{badge.icon}</span>
-                    <span style={{ fontFamily: T.mono, fontSize: 9, color: T.green, letterSpacing: 0.3, whiteSpace: "nowrap" }}>{badge.label}</span>
-                  </div>
-                ))}
-              </div>
-              {/* Main clickable area */}
-              <button onClick={openAi} style={{ display: "flex", alignItems: "center", gap: 14, padding: "16px 18px", cursor: "pointer", textAlign: "left", width: "100%", background: "transparent", border: "none", transition: "background .15s" }}
-                onMouseOver={e => e.currentTarget.style.background = T.cyan + "0a"}
-                onMouseOut={e => e.currentTarget.style.background = "transparent"}>
-                <div style={{ width: 36, height: 36, background: T.cyan + "18", border: `1px solid ${T.cyan}33`, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, flexShrink: 0 }}>✦</div>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: T.text, marginBottom: 3 }}>Ask the Privacy Assistant</div>
-                  <div style={{ fontSize: 12, color: T.textMid, lineHeight: 1.55 }}>
-                    Get step-by-step guidance for your {checks.filter(c => c.status !== "pass").length} specific issues. Only your score and issue names are shared — never your address. <span style={{ color: T.textDim }}>5 questions per session.</span>
-                  </div>
-                </div>
-                <div style={{ flexShrink: 0, textAlign: "center" }}>
-                  <div style={{ background: T.cyan, borderRadius: 8, padding: "7px 14px", color: T.bg, fontSize: 12, fontWeight: 700, whiteSpace: "nowrap" }}>Ask now →</div>
-                </div>
-              </button>
-              {/* Coach upsell — subtle, single line, validates demand */}
-              {onCoach && (
-                <div style={{ borderTop: `1px solid ${T.borderLo}`, padding: "8px 18px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                  <span style={{ fontFamily: T.mono, fontSize: 10, color: T.textDim }}>Hit the 5-question cap?</span>
-                  <button onClick={onCoach}
-                    style={{ background: "none", border: "none", padding: 0, fontFamily: T.mono, fontSize: 10, color: T.cyan, cursor: "pointer", textDecoration: "underline", textUnderlineOffset: 3 }}>
-                    Join the Coach early-access waitlist →
-                  </button>
-                </div>
-              )}
+                ? <>Re-ranked for <strong style={{ color: T.cyan }}>{tm.label.toLowerCase()}</strong>. The points do not change — only the order does.</>
+                : <>Sorted by impact. The top 3 could add <strong style={{ color: T.cyan }}>{recommendations.slice(0, 3).reduce((a, r) => a + r.impact, 0)} points</strong>.</>}
             </div>
             {shownRecs.map((r, i) => {
               const done = doneFixes.has(r.key);
@@ -8035,6 +7842,74 @@ function Dashboard({ address, addrInfo, utxos, txs, txSample, isMobile, onBack, 
               </div>
             </div>
             ); })()}
+
+            <div style={{ background: T.card, border: `1px solid ${threatOpen || tm ? T.cyan + "44" : T.border}`, borderRadius: 14, padding: "12px 16px" }}>
+              {!threatOpen ? (
+                <button type="button" onClick={() => setThreatOpen(true)} aria-expanded={false}
+                  style={{ background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: T.mono, fontSize: 11, color: T.cyan, letterSpacing: 0.4 }}>
+                  Rank these for a specific adversary →
+                </button>
+              ) : (
+                <>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                    <span style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim, letterSpacing: 1.5, flexShrink: 0 }}>WHO ARE YOU HIDING FROM?</span>
+                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                      <Pill active={!tm} onClick={() => setThreat(null)}>Everyone</Pill>
+                      {THREAT_MODELS.map(m => (
+                        <Pill key={m.id} active={threat === m.id} onClick={() => setThreat(threat === m.id ? null : m.id)}>{m.icon} {m.label}</Pill>
+                      ))}
+                    </div>
+                    <button type="button" onClick={() => setThreatOpen(false)} aria-expanded={true}
+                      style={{ marginLeft: "auto", background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: T.mono, fontSize: 10, color: T.textDim }}>
+                      Hide
+                    </button>
+                  </div>
+                  {tm && (
+                    <div style={{ fontSize: 12.5, color: T.textMid, lineHeight: 1.6, marginTop: 10, borderTop: `1px solid ${T.borderLo}`, paddingTop: 10 }}>
+                      {tm.sees}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+
+            <div style={{ background: T.card, border: `1px solid ${T.cyan}33`, borderRadius: 16, overflow: "hidden" }}>
+              <div style={{ display: "flex", gap: 0, borderBottom: `1px solid ${T.borderLo}` }}>
+                {[
+                  { icon: "✕", label: "Address never sent" },
+                  { icon: "✕", label: "No data stored" },
+                  { icon: "✕", label: "Not used for training" },
+                ].map((badge, i) => (
+                  <div key={i} style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 5, padding: "7px 8px", borderRight: i < 2 ? `1px solid ${T.borderLo}` : undefined, background: T.greenLo }}>
+                    <span style={{ fontFamily: T.mono, fontSize: 9, color: T.green, fontWeight: 700 }}>{badge.icon}</span>
+                    <span style={{ fontFamily: T.mono, fontSize: 9, color: T.green, letterSpacing: 0.3, whiteSpace: "nowrap" }}>{badge.label}</span>
+                  </div>
+                ))}
+              </div>
+              <button onClick={openAi} style={{ display: "flex", alignItems: "center", gap: 14, padding: "16px 18px", cursor: "pointer", textAlign: "left", width: "100%", background: "transparent", border: "none", transition: "background .15s" }}
+                onMouseOver={e => e.currentTarget.style.background = T.cyan + "0a"}
+                onMouseOut={e => e.currentTarget.style.background = "transparent"}>
+                <div style={{ width: 36, height: 36, background: T.cyan + "18", border: `1px solid ${T.cyan}33`, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, flexShrink: 0 }}>✦</div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: T.text, marginBottom: 3 }}>Ask the Privacy Assistant</div>
+                  <div style={{ fontSize: 12, color: T.textMid, lineHeight: 1.55 }}>
+                    A walkthrough for your {checks.filter(c => c.status !== "pass").length} issues. You'll see the exact text first — the score and these findings, never your address. <span style={{ color: T.textDim }}>5 questions per session.</span>
+                  </div>
+                </div>
+                <div style={{ flexShrink: 0, textAlign: "center" }}>
+                  <div style={{ background: T.cyan, borderRadius: 8, padding: "7px 14px", color: T.bg, fontSize: 12, fontWeight: 700, whiteSpace: "nowrap" }}>Ask now →</div>
+                </div>
+              </button>
+              {onCoach && (
+                <div style={{ borderTop: `1px solid ${T.borderLo}`, padding: "8px 18px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                  <span style={{ fontFamily: T.mono, fontSize: 10, color: T.textDim }}>Hit the 5-question cap?</span>
+                  <button onClick={onCoach}
+                    style={{ background: "none", border: "none", padding: 0, fontFamily: T.mono, fontSize: 10, color: T.cyan, cursor: "pointer", textDecoration: "underline", textUnderlineOffset: 3 }}>
+                    Join the Coach early-access waitlist →
+                  </button>
+                </div>
+              )}
+            </div>
 
             {/* Next moves — close the loop into the sibling tools. Diagnosis is
                 only half the hub; these hand the user the tool that prevents the
@@ -8197,7 +8072,7 @@ function Dashboard({ address, addrInfo, utxos, txs, txSample, isMobile, onBack, 
                   onMouseLeave={e => !open && (e.currentTarget.style.borderColor = T.border)}>
                   <div style={{ display: "flex", alignItems: isMobile ? "flex-start" : "center", flexDirection: isMobile ? "column" : "row", gap: isMobile ? 8 : 18 }}>
                     <div style={{ flex: 1 }}>
-                      <div style={{ fontFamily: T.serif, fontSize: isMobile ? 20 : 26, color, lineHeight: 1 }}>{fmt.btc(u.value)}</div>
+                      <div style={{ fontFamily: T.serif, fontSize: isMobile ? 20 : 26, color, lineHeight: 1 }}>{fmt.btcRow(u.value)}</div>
                       <div style={{ fontFamily: T.mono, fontSize: 10, color: T.textDim, marginTop: 4 }}>{fmt.txid(u.txid)} · {u.status?.block_time ? fmt.age(u.status.block_time) : "unconfirmed"}</div>
                     </div>
                     <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
@@ -8335,18 +8210,6 @@ function Dashboard({ address, addrInfo, utxos, txs, txSample, isMobile, onBack, 
 
       </div>
 
-      {/* Mobile bottom nav */}
-      {isMobile && (
-        <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, background: T.card, borderTop: `1px solid ${T.border}`, display: "flex", zIndex: 200 }}>
-          {["Fix It","Overview","Flow","UTXOs","Transactions"].map(t => (
-            <button key={t} onClick={() => setTab(t)} style={{ flex: 1, padding: "10px 0 8px", background: "transparent", border: "none", borderTop: `2px solid ${tab === t ? T.cyan : "transparent"}`, color: tab === t ? T.cyan : T.textDim, fontFamily: T.mono, fontSize: 8, letterSpacing: .5, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 3 }}>
-              <span style={{ fontSize: 15 }}>{t === "Fix It" ? "★" : t === "Overview" ? "◎" : t === "Flow" ? "⋔" : t === "Transactions" ? "↔" : "⬡"}</span>
-              {t}
-            </button>
-          ))}
-        </div>
-      )}
-
       {shareOpen && <ShareCard score={score} grade={grade} checks={checks} address={address} isLightning={false} onClose={() => setShareOpen(false)} />}
       {(() => {
         const matchedCase = CASE_FILES.find(c => c.address === address);
@@ -8359,103 +8222,15 @@ function Dashboard({ address, addrInfo, utxos, txs, txSample, isMobile, onBack, 
         </>;
       })()}
 
-      {/* ── Floating AI widget — visible on all tabs, prominent CTA ── */}
-      {aiStage === null && (
-        <div style={{
-          position: "fixed",
-          bottom: isMobile ? 72 : 28,
-          right: isMobile ? 12 : 28,
-          zIndex: 500,
-          width: aiWidgetMin ? "auto" : "min(340px, calc(100vw - 24px))",
-          animation: "fadeUp .4s ease both",
-          filter: "drop-shadow(0 8px 32px #000000aa)",
-        }}>
-          {aiWidgetMin ? (
-            /* ── Minimized pill ── */
-            <button onClick={() => setAiWidgetMin(false)} style={{
-              display: "flex", alignItems: "center", gap: 10,
-              background: T.card, border: `1.5px solid ${T.cyan}55`,
-              borderRadius: 99, padding: "10px 18px 10px 14px",
-              cursor: "pointer", transition: "all .2s",
-              boxShadow: `0 0 24px ${T.cyan}22`,
-            }}
-              onMouseOver={e => e.currentTarget.style.borderColor = T.cyan}
-              onMouseOut={e => e.currentTarget.style.borderColor = T.cyan + "55"}>
-              <div style={{ width: 28, height: 28, background: T.cyan + "22", border: `1px solid ${T.cyan}44`, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, flexShrink: 0 }}>✦</div>
-              <div>
-                <div style={{ fontSize: 13, fontWeight: 700, color: T.text, lineHeight: 1 }}>Privacy Assistant</div>
-                <div style={{ fontSize: 11, color: T.cyan, marginTop: 2 }}>Ask about your {issueCount} issues →</div>
-              </div>
-            </button>
-          ) : (
-            /* ── Expanded card ── */
-            <div style={{
-              background: T.card,
-              border: `1.5px solid ${T.cyan}44`,
-              borderRadius: 20,
-              overflow: "hidden",
-              boxShadow: `0 0 0 1px ${T.cyan}11, 0 24px 64px #000000bb`,
-            }}>
-              {/* Privacy guarantee strip */}
-              <div style={{ display: "flex", borderBottom: `1px solid ${T.borderLo}`, background: T.greenLo }}>
-                {["✕ Address never sent", "✕ Nothing stored", "✕ Not for training"].map((t, i) => (
-                  <div key={i} style={{ flex: 1, textAlign: "center", padding: "6px 4px", borderRight: i < 2 ? `1px solid ${T.borderLo}` : undefined }}>
-                    <span style={{ fontFamily: T.mono, fontSize: 9, color: T.green, letterSpacing: 0.2 }}>{t}</span>
-                  </div>
-                ))}
-              </div>
-
-              {/* Main content */}
-              <div style={{ padding: "20px 22px 22px" }}>
-                {/* Header row */}
-                <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 14 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                    <div style={{ width: 44, height: 44, background: T.cyan + "18", border: `1.5px solid ${T.cyan}44`, borderRadius: 13, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, flexShrink: 0, boxShadow: `0 0 16px ${T.cyan}22` }}>✦</div>
-                    <div>
-                      <div style={{ fontSize: 15, fontWeight: 700, color: T.text, lineHeight: 1 }}>Privacy Assistant</div>
-                      <div style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim, letterSpacing: 1, marginTop: 3 }}>POWERED BY CLAUDE · FREE</div>
-                    </div>
-                  </div>
-                  <button onClick={() => setAiWidgetMin(true)} style={{ background: "transparent", border: `1px solid #ffffff44`, borderRadius: 7, padding: "4px 9px", color: "#ffffff", fontSize: 12, cursor: "pointer", lineHeight: 1, transition: "all .15s", flexShrink: 0 }}
-                    onMouseOver={e => e.currentTarget.style.borderColor = "#ffffff88"}
-                    onMouseOut={e => e.currentTarget.style.borderColor = "#ffffff44"}>
-                    — minimize
-                  </button>
-                </div>
-
-                <div style={{ fontSize: 13, color: T.textMid, lineHeight: 1.6, marginBottom: 16 }}>
-                  Get step-by-step instructions for your <strong style={{ color: T.text }}>{issueCount} specific issue{issueCount !== 1 ? "s" : ""}</strong> — which wallet to use, what to click, in plain English.
-                </div>
-
-                <button onClick={openAi} style={{
-                  width: "100%", padding: "14px 20px",
-                  background: `linear-gradient(135deg, ${T.cyan}, #0ea5e9)`,
-                  border: "none", borderRadius: 12,
-                  color: T.bg, fontFamily: T.sans, fontWeight: 700, fontSize: 15,
-                  cursor: "pointer", transition: "opacity .15s",
-                  display: "flex", alignItems: "center", justifyContent: "center", gap: 10,
-                  boxShadow: `0 4px 20px ${T.cyan}44`,
-                }}
-                  onMouseOver={e => e.currentTarget.style.opacity = ".88"}
-                  onMouseOut={e => e.currentTarget.style.opacity = "1"}>
-                  <span>✦</span>
-                  <span>Ask about your {issueCount} issues →</span>
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
       {/* ── Mobile sticky bottom tab bar ── */}
       {isMobile && (
         <nav style={{ position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 200, background: T.bg, borderTop: `1px solid ${T.border}`, display: "flex", height: 64, paddingBottom: "env(safe-area-inset-bottom, 0px)" }}>
           {TABS.map(t => {
-            const icons = { "Fix It": "★", "Overview": "◎", "UTXOs": "⬡", "Transactions": "⇄", "Methodology": "≡" };
+            const icons = { "Fix It": "★", "Overview": "◎", "Flow": "⋔", "UTXOs": "⬡", "Transactions": "⇄", "Methodology": "≡" };
             return (
-              <button key={t} onClick={() => setTab(t)} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3, background: "none", border: "none", cursor: "pointer", borderTop: `2px solid ${tab === t ? T.cyan : "transparent"}`, transition: "border-color .15s" }}>
+              <button key={t} onClick={() => setTab(t)} aria-current={tab === t ? "page" : undefined} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3, background: "none", border: "none", cursor: "pointer", borderTop: `2px solid ${tab === t ? T.cyan : "transparent"}`, transition: "border-color .15s" }}>
                 <span style={{ fontSize: 14, color: tab === t ? T.cyan : T.textDim }}>{icons[t]}</span>
-                <span style={{ fontFamily: T.mono, fontSize: 8, color: tab === t ? T.cyan : T.textDim, letterSpacing: 0.5 }}>{t.toUpperCase()}</span>
+                <span style={{ fontFamily: T.mono, fontSize: 9, color: tab === t ? T.cyan : T.textDim, letterSpacing: 0.2 }}>{t}</span>
               </button>
             );
           })}
@@ -8495,6 +8270,9 @@ function LightningDashboard({ nodeId, nodeData, channels, isMobile, onBack, onRe
 
       {/* ── Share modal — unified with BTC ── */}
       {shareOpen && <ShareCard score={score} grade={grade} checks={checks} address={nodeId} isLightning={true} onClose={() => setShareOpen(false)} />}
+      {aiStage === "consent" && (
+        <AiConsentGate score={score} grade={grade} checks={checks} recommendations={recommendations} walletMeta={{ isPublic: false }} onAccept={() => setAiStage("chat")} onDecline={() => setAiStage(null)} />
+      )}
 
       {/* ── Nav — matches BTC nav ── */}
       <nav style={{ display: "flex", alignItems: "center", gap: 10, padding: isMobile ? "12px 16px" : "12px 32px", borderBottom: `1px solid ${T.border}`, background: T.bg, position: "sticky", top: 0, zIndex: 100 }}>
@@ -8536,7 +8314,7 @@ function LightningDashboard({ nodeId, nodeData, channels, isMobile, onBack, onRe
 
           {/* Score ring + grade */}
           <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
-            <ScoreRing score={score} size={52} />
+            <ScoreRing score={score} size={52} animate={false} />
             <div>
               <div style={{ fontFamily: T.serif, fontSize: 20, color: col, lineHeight: 1 }}>Grade {grade}</div>
               <div style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim, letterSpacing: 1, marginTop: 2 }}>{score}/100</div>
@@ -8607,64 +8385,6 @@ function LightningDashboard({ nodeId, nodeData, channels, isMobile, onBack, onRe
               <div style={{ fontSize: 13, color: T.textMid, padding: "12px 0" }}>No specific fixes generated. Check the Checks tab for detail.</div>
             )}
 
-            {/* AI assistant card — same pattern as BTC */}
-            {aiStage !== "chat" && (
-              <div style={{ background: T.card, border: `1px solid ${T.ln}33`, borderRadius: 16, overflow: "hidden", marginBottom: 2 }}>
-                <div style={{ display: "flex", gap: 0, borderBottom: `1px solid ${T.borderLo}` }}>
-                  {[
-                    { icon: "✕", label: "Node ID never sent" },
-                    { icon: "✕", label: "No data stored" },
-                    { icon: "✕", label: "Not used for training" },
-                  ].map((badge, i) => (
-                    <div key={i} style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 5, padding: "7px 8px", borderRight: i < 2 ? `1px solid ${T.borderLo}` : undefined, background: T.greenLo }}>
-                      <span style={{ fontFamily: T.mono, fontSize: 9, color: T.green, fontWeight: 700 }}>{badge.icon}</span>
-                      <span style={{ fontFamily: T.mono, fontSize: 9, color: T.green, letterSpacing: 0.3, whiteSpace: "nowrap" }}>{badge.label}</span>
-                    </div>
-                  ))}
-                </div>
-                <button onClick={() => setAiStage("consent")} style={{ display: "flex", alignItems: "center", gap: 14, padding: "16px 18px", cursor: "pointer", textAlign: "left", width: "100%", background: "transparent", border: "none", transition: "background .15s" }}
-                  onMouseOver={e => e.currentTarget.style.background = T.ln + "0a"}
-                  onMouseOut={e => e.currentTarget.style.background = "transparent"}>
-                  <div style={{ width: 36, height: 36, background: T.ln + "18", border: `1px solid ${T.ln}33`, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, flexShrink: 0 }}>⚡</div>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: T.text, marginBottom: 3 }}>Ask the Privacy Assistant</div>
-                    <div style={{ fontSize: 12, color: T.textMid, lineHeight: 1.55 }}>
-                      Get step-by-step guidance for your {checks.filter(c => c.status !== "pass").length} Lightning issues. Only your score and issue names are shared — never your node ID. <span style={{ color: T.textDim }}>5 questions per session.</span>
-                    </div>
-                  </div>
-                  <div style={{ flexShrink: 0 }}>
-                    <div style={{ background: T.ln, borderRadius: 8, padding: "7px 14px", color: T.bg, fontSize: 12, fontWeight: 700, whiteSpace: "nowrap" }}>Ask now →</div>
-                  </div>
-                </button>
-                {aiStage === "consent" && (
-                  <div style={{ padding: "14px 18px", borderTop: `1px solid ${T.borderLo}`, background: T.lnLo }}>
-                    <div style={{ fontSize: 13, color: T.textMid, marginBottom: 12, lineHeight: 1.6 }}>
-                      The assistant will receive your score ({score}/100) and issue names only. No node ID, no channel data, no on-chain info. Powered by Claude.
-                    </div>
-                    <div style={{ display: "flex", gap: 8 }}>
-                      <button onClick={() => setAiStage("chat")} style={{ flex: 1, background: T.ln, border: "none", borderRadius: 8, padding: "10px", color: T.bg, fontFamily: T.sans, fontWeight: 700, fontSize: 13, cursor: "pointer" }}>I understand — open assistant</button>
-                      <button onClick={() => setAiStage(null)} style={{ background: "transparent", border: `1.5px solid ${T.border}`, borderRadius: 8, padding: "10px 14px", color: T.textDim, fontSize: 12, cursor: "pointer" }}>Cancel</button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {aiStage === "chat" && (
-              <AiAssistant
-                checks={checks}
-                recommendations={recommendations}
-                score={score}
-                grade={grade}
-                onClose={() => setAiStage(null)}
-                starters={[
-                  `Which of my ${checks.filter(c => c.status !== "pass").length} issues should I fix first?`,
-                  "How do I switch my node to Tor-only?",
-                  "What's the actual risk of peering with a KYC exchange?",
-                  "How do I set a pseudonymous node alias?",
-                ]}
-              />
-            )}
             {recommendations.map((r, i) => {
               const done = doneFixes.has(r.key);
               return (
@@ -8689,6 +8409,53 @@ function LightningDashboard({ nodeId, nodeData, channels, isMobile, onBack, onRe
                 </div>
               );
             })}
+            {/* AI assistant card — same pattern as BTC */}
+            {aiStage !== "chat" && (
+              <div style={{ background: T.card, border: `1px solid ${T.ln}33`, borderRadius: 16, overflow: "hidden", marginBottom: 2 }}>
+                <div style={{ display: "flex", gap: 0, borderBottom: `1px solid ${T.borderLo}` }}>
+                  {[
+                    { icon: "✕", label: "Node ID never sent" },
+                    { icon: "✕", label: "No data stored" },
+                    { icon: "✕", label: "Not used for training" },
+                  ].map((badge, i) => (
+                    <div key={i} style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 5, padding: "7px 8px", borderRight: i < 2 ? `1px solid ${T.borderLo}` : undefined, background: T.greenLo }}>
+                      <span style={{ fontFamily: T.mono, fontSize: 9, color: T.green, fontWeight: 700 }}>{badge.icon}</span>
+                      <span style={{ fontFamily: T.mono, fontSize: 9, color: T.green, letterSpacing: 0.3, whiteSpace: "nowrap" }}>{badge.label}</span>
+                    </div>
+                  ))}
+                </div>
+                <button onClick={() => setAiStage("consent")} style={{ display: "flex", alignItems: "center", gap: 14, padding: "16px 18px", cursor: "pointer", textAlign: "left", width: "100%", background: "transparent", border: "none", transition: "background .15s" }}
+                  onMouseOver={e => e.currentTarget.style.background = T.ln + "0a"}
+                  onMouseOut={e => e.currentTarget.style.background = "transparent"}>
+                  <div style={{ width: 36, height: 36, background: T.ln + "18", border: `1px solid ${T.ln}33`, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, flexShrink: 0 }}>⚡</div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: T.text, marginBottom: 3 }}>Ask the Privacy Assistant</div>
+                    <div style={{ fontSize: 12, color: T.textMid, lineHeight: 1.55 }}>
+                      A walkthrough for your {checks.filter(c => c.status !== "pass").length} Lightning issues. You'll see the exact text first — the score and these findings, never your node pubkey. <span style={{ color: T.textDim }}>5 questions per session.</span>
+                    </div>
+                  </div>
+                  <div style={{ flexShrink: 0 }}>
+                    <div style={{ background: T.ln, borderRadius: 8, padding: "7px 14px", color: T.bg, fontSize: 12, fontWeight: 700, whiteSpace: "nowrap" }}>Ask now →</div>
+                  </div>
+                </button>
+              </div>
+            )}
+
+            {aiStage === "chat" && (
+              <AiAssistant
+                checks={checks}
+                recommendations={recommendations}
+                score={score}
+                grade={grade}
+                onClose={() => setAiStage(null)}
+                starters={[
+                  `Which of my ${checks.filter(c => c.status !== "pass").length} issues should I fix first?`,
+                  "How do I switch my node to Tor-only?",
+                  "What's the actual risk of peering with a KYC exchange?",
+                  "How do I set a pseudonymous node alias?",
+                ]}
+              />
+            )}
             {/* Next moves — Lightning's on-chain feet + the open methodology.
                 Also the mobile path to Methodology (the tab is desktop-only). */}
             {onNav && (

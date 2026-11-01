@@ -116,6 +116,25 @@ const T = {
   sans: "'Outfit',sans-serif",
   display: "'Oxanium',sans-serif"
 };
+const ui = {
+  ghost: {
+    background: "transparent",
+    border: `1.5px solid ${T.border}`,
+    borderRadius: 8,
+    color: T.textMid,
+    fontFamily: T.sans,
+    cursor: "pointer"
+  },
+  primary: bg => ({
+    background: bg,
+    border: "none",
+    borderRadius: 12,
+    color: T.bg,
+    fontFamily: T.sans,
+    fontWeight: 700,
+    cursor: "pointer"
+  })
+};
 const RISK_META = {
   critical: {
     color: T.red,
@@ -287,7 +306,7 @@ const STRINGS = {
     "hero.h1.line1": "Is your Bitcoin",
     "hero.h1.line2": "stack leaking?",
     "hero.h1.em": "Find out in 60 seconds.",
-    "hero.sub": "Surveillance firms run these exact heuristics against you. We run them for you — entirely in your browser, before anyone else looks. A privacy score, every issue explained, and a ranked fix plan. Free, open source, nothing stored.",
+    "hero.sub": "Paste an address. Get a score from 0–100 and the fix that moves it most. It runs in your browser. Nothing is stored.",
     "spectrum.low": "0 · Fully traceable",
     "spectrum.avg": "typical wallet: ~38",
     "spectrum.high": "100 · Invisible",
@@ -321,16 +340,16 @@ const STRINGS = {
     "sample.lightning": "⚡ Lightning node",
     "recent.title": "RECENT SCANS",
     "err.empty": "Please enter a Bitcoin address or Lightning node pubkey.",
-    "err.invalid": "Not recognized. This console reads: a Bitcoin address (bc1…, 1…, 3…), a Lightning node pubkey (66-char hex), a BOLT11 invoice, a BOLT12 offer, an LNURL, a Silent Payment address (sp1…), an xpub/ypub/zpub, a PSBT or raw transaction, or a Cashu token.",
+    "err.invalid": "That isn't a Bitcoin address or a Lightning node pubkey.",
     "err.lnaddress": "Lightning addresses can't be audited yet — paste your node's 66-character pubkey instead.",
     "finalcta.h2.a": "A typical wallet scores ~38/100.",
     "finalcta.h2.b": "Where does yours land?",
     "finalcta.sub": "Free, open source, nothing stored. Takes 60 seconds.",
-    "finalcta.scan": "Scan my address ↑",
+    "finalcta.scan": "Analyze an address ↑",
     "finalcta.sample": "▶ See a sample wallet",
     "scanning.btc.title": "Analyzing your wallet…",
     "scanning.ln.title": "Auditing your node…",
-    "scanning.btc.checks": "RUNNING 10 CHECKS",
+    "scanning.btc.checks": "RUNNING 11 CHECKS",
     "scanning.ln.checks": "⚡ RUNNING 8 LIGHTNING CHECKS",
     "scanning.didyouknow": "DID YOU KNOW"
   },
@@ -349,7 +368,7 @@ const STRINGS = {
     "hero.h1.line1": "¿Tu stack de Bitcoin",
     "hero.h1.line2": "está filtrando datos?",
     "hero.h1.em": "Descúbrelo en 60 segundos.",
-    "hero.sub": "Las firmas de vigilancia ejecutan estas mismas heurísticas contra ti. Nosotros las ejecutamos para ti — completamente en tu navegador, antes de que nadie más mire. Una puntuación de privacidad, cada problema explicado y un plan de mejora priorizado. Gratis, código abierto, nada se guarda.",
+    "hero.sub": "Pega una dirección. Obtén una puntuación de 0 a 100 y la mejora que más la mueve. Corre en tu navegador. Nada se guarda.",
     "spectrum.low": "0 · Totalmente rastreable",
     "spectrum.avg": "billetera típica: ~38",
     "spectrum.high": "100 · Invisible",
@@ -383,16 +402,16 @@ const STRINGS = {
     "sample.lightning": "⚡ Nodo Lightning",
     "recent.title": "ESCANEOS RECIENTES",
     "err.empty": "Ingresa una dirección de Bitcoin o la clave pública de un nodo Lightning.",
-    "err.invalid": "No reconocido. Esta consola lee: una dirección de Bitcoin (bc1…, 1…, 3…), la clave pública de un nodo Lightning (66 hex), una factura BOLT11, una oferta BOLT12, un LNURL, una dirección de Pago Silencioso (sp1…), un xpub/ypub/zpub, una PSBT o transacción sin firmar, o un token Cashu.",
+    "err.invalid": "Eso no es una dirección de Bitcoin ni la clave pública de un nodo Lightning.",
     "err.lnaddress": "Las direcciones Lightning aún no se pueden auditar — pega la clave pública (66 caracteres hex) de tu nodo.",
     "finalcta.h2.a": "Una billetera típica puntúa ~38/100.",
     "finalcta.h2.b": "¿Dónde queda la tuya?",
     "finalcta.sub": "Gratis, código abierto, nada se guarda. Toma 60 segundos.",
-    "finalcta.scan": "Escanear mi dirección ↑",
+    "finalcta.scan": "Analizar una dirección ↑",
     "finalcta.sample": "▶ Ver una billetera de ejemplo",
     "scanning.btc.title": "Analizando tu billetera…",
     "scanning.ln.title": "Auditando tu nodo…",
-    "scanning.btc.checks": "EJECUTANDO 10 VERIFICACIONES",
+    "scanning.btc.checks": "EJECUTANDO 11 VERIFICACIONES",
     "scanning.ln.checks": "⚡ EJECUTANDO 8 VERIFICACIONES LIGHTNING",
     "scanning.didyouknow": "¿SABÍAS QUE?"
   }
@@ -516,6 +535,7 @@ function useExplorer() {
 }
 const TOOL_URL = {
   "Wasabi Wallet": "https://wasabiwallet.io",
+  "Ginger Wallet": "https://gingerwallet.io",
   "Sparrow Wallet": "https://sparrowwallet.com",
   "Bitcoin Core": "https://bitcoincore.org",
   "Electrum": "https://electrum.org",
@@ -933,25 +953,6 @@ const saveDoneFixes = (addr, set) => {
     localStorage.setItem(FIXES_KEY + ":" + addr, JSON.stringify([...set]));
   } catch {}
 };
-const DEMO_EXAMPLES = [{
-  grade: "F",
-  score: 22,
-  label: "High Risk",
-  color: T.red,
-  issues: ["Address reused 12 times", "KYC coins merged with private", "3 dust UTXOs (trackers)", "No CoinJoin ever used"]
-}, {
-  grade: "C",
-  score: 61,
-  label: "Moderate",
-  color: T.amber,
-  issues: ["Address reused 3 times", "Round-number withdrawal", "Single UTXO — exposes balance", "Change sent to fresh addresses ✓"]
-}, {
-  grade: "A",
-  score: 91,
-  label: "Low Risk",
-  color: T.green,
-  issues: ["Fresh address every transaction ✓", "CoinJoin used — 2 rounds ✓", "Balanced UTXO set ✓", "Lightning for spending ✓"]
-}];
 const LANDING_CHECKS_LN = [{
   n: "01",
   k: "node",
@@ -4790,6 +4791,7 @@ const DEMO_LN = {
 };
 const fmt = {
   btc: v => v >= 1e8 ? `₿${(v / 1e8).toFixed(4)}` : `${v.toLocaleString()} sats`,
+  btcRow: v => "₿" + (v / 1e8).toFixed(8).replace(/0+$/, "").replace(/\.$/, ""),
   age: ts => {
     const d = Math.floor((Date.now() / 1000 - ts) / 86400);
     return d < 1 ? "Today" : d === 1 ? "Yesterday" : d < 30 ? `${d}d ago` : d < 365 ? `${Math.floor(d / 30)}mo ago` : `${Math.floor(d / 365)}yr ago`;
@@ -5526,178 +5528,6 @@ function ScoreRing({
       marginTop: 2
     }
   }, "/100")));
-}
-function DemoPreview() {
-  const [idx, setIdx] = useState(0);
-  const [animKey, setAnimKey] = useState(0);
-  const intervalRef = useRef(null);
-  useEffect(() => {
-    intervalRef.current = setInterval(() => {
-      setIdx(i => (i + 1) % DEMO_EXAMPLES.length);
-      setAnimKey(k => k + 1);
-    }, 5500);
-    return () => clearInterval(intervalRef.current);
-  }, []);
-  const ex = DEMO_EXAMPLES[idx];
-  return React.createElement("div", {
-    style: {
-      display: "flex",
-      flexDirection: "column",
-      gap: 14
-    }
-  }, React.createElement("div", {
-    key: animKey,
-    style: {
-      background: T.card,
-      border: `1px solid ${T.border}`,
-      borderRadius: 20,
-      padding: 28,
-      boxShadow: "0 16px 64px #00000044",
-      animation: "demoSlide .45s ease both"
-    }
-  }, React.createElement("div", {
-    style: {
-      display: "flex",
-      alignItems: "center",
-      gap: 6,
-      marginBottom: 20
-    }
-  }, React.createElement("div", {
-    style: {
-      width: 8,
-      height: 8,
-      borderRadius: "50%",
-      background: T.green,
-      animation: "pulse 2s infinite"
-    }
-  }), React.createElement("span", {
-    style: {
-      fontFamily: T.mono,
-      fontSize: 10,
-      color: T.textDim,
-      letterSpacing: 1.5
-    }
-  }, "LIVE EXAMPLE \xB7 ROTATING")), React.createElement("div", {
-    style: {
-      display: "flex",
-      gap: 20,
-      alignItems: "center",
-      marginBottom: 22
-    }
-  }, React.createElement(ScoreRing, {
-    score: ex.score,
-    size: 100,
-    animate: false
-  }), React.createElement("div", null, React.createElement("div", {
-    style: {
-      fontFamily: T.serif,
-      fontSize: 38,
-      color: ex.color,
-      lineHeight: 1,
-      fontWeight: 400
-    }
-  }, "Grade ", ex.grade), React.createElement("div", {
-    style: {
-      fontSize: 13,
-      color: T.textMid,
-      marginTop: 5
-    }
-  }, ex.label), React.createElement("div", {
-    style: {
-      fontFamily: T.mono,
-      fontSize: 10,
-      color: T.textDim,
-      marginTop: 6
-    }
-  }, ex.score, "/100 privacy score"))), React.createElement("div", {
-    style: {
-      fontSize: 11,
-      color: T.textDim,
-      marginBottom: 10,
-      fontFamily: T.mono,
-      letterSpacing: 1
-    }
-  }, "FINDINGS"), ex.issues.map((issue, i) => {
-    const isGood = issue.includes("✓");
-    return React.createElement("div", {
-      key: i,
-      style: {
-        display: "flex",
-        alignItems: "center",
-        gap: 10,
-        padding: "8px 0",
-        borderTop: `1px solid ${T.borderLo}`
-      }
-    }, React.createElement("div", {
-      style: {
-        width: 5,
-        height: 5,
-        borderRadius: "50%",
-        background: isGood ? T.green : i < 2 ? T.red : T.amber,
-        flexShrink: 0
-      }
-    }), React.createElement("span", {
-      style: {
-        fontSize: 13,
-        color: isGood ? T.textMid : T.text
-      }
-    }, issue));
-  })), React.createElement("div", {
-    style: {
-      display: "flex",
-      justifyContent: "center",
-      gap: 8
-    },
-    role: "tablist",
-    "aria-label": "Example wallets"
-  }, DEMO_EXAMPLES.map((ex, i) => React.createElement("button", {
-    key: i,
-    onClick: () => {
-      setIdx(i);
-      setAnimKey(k => k + 1);
-    },
-    role: "tab",
-    "aria-selected": i === idx,
-    "aria-label": `Show example ${i + 1} of ${DEMO_EXAMPLES.length}${ex.label ? ": " + ex.label : ""}`,
-    style: {
-      width: i === idx ? 20 : 8,
-      height: 8,
-      borderRadius: 4,
-      background: i === idx ? ex.color : T.textDim,
-      border: "none",
-      cursor: "pointer",
-      transition: "all .3s",
-      padding: 0
-    }
-  }))), React.createElement("div", {
-    style: {
-      background: T.btcLo,
-      border: `1px solid ${T.btcMid}`,
-      borderRadius: 12,
-      padding: "14px 18px"
-    }
-  }, React.createElement("div", {
-    style: {
-      fontSize: 12,
-      color: T.btc,
-      fontWeight: 600,
-      marginBottom: 4
-    }
-  }, "\u20BF A typical wallet scores ~38/100"), React.createElement("div", {
-    style: {
-      fontSize: 12,
-      color: T.textMid,
-      lineHeight: 1.6
-    }
-  }, "Most wallets have at least 3 fixable issues \u2014 usually address reuse, no CoinJoin, and round-amount withdrawals."), React.createElement("div", {
-    style: {
-      fontFamily: T.mono,
-      fontSize: 9,
-      color: T.textDim,
-      marginTop: 6,
-      letterSpacing: 1
-    }
-  }, "Illustrative baseline \u2014 reproducible, we store no scan data")));
 }
 function ensureDomToImage() {
   if (window.domtoimage) return Promise.resolve();
@@ -6537,6 +6367,7 @@ function RelayToggle({
 }) {
   const on = useRelay();
   const expId = useExplorer();
+  const [open, setOpen] = useState(false);
   useLang();
   const exp = EXPLORERS[expId];
   return React.createElement("div", {
@@ -6557,11 +6388,46 @@ function RelayToggle({
       color: T.textMid,
       lineHeight: 1.5,
       textAlign: "left",
-      paddingBottom: 9,
-      marginBottom: 9,
-      borderBottom: `1px solid ${T.borderLo}`
+      marginBottom: open ? 9 : 0,
+      paddingBottom: open ? 9 : 0,
+      borderBottom: open ? `1px solid ${T.borderLo}` : "none"
     }
-  }, trustLine), React.createElement("div", {
+  }, trustLine), !open && React.createElement("button", {
+    type: "button",
+    onClick: () => setOpen(true),
+    "aria-expanded": false,
+    style: {
+      marginTop: trustLine ? 8 : 0,
+      width: "100%",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: 10,
+      background: "transparent",
+      border: "none",
+      padding: 0,
+      cursor: "pointer",
+      textAlign: "left"
+    }
+  }, React.createElement("span", {
+    style: {
+      fontFamily: T.sans,
+      fontSize: 12,
+      color: T.textMid,
+      lineHeight: 1.4
+    }
+  }, React.createElement("strong", {
+    style: {
+      color: on ? T.cyan : T.text
+    }
+  }, t(on ? "relay.on.label" : "relay.off.label")), " · ", exp.label), React.createElement("span", {
+    style: {
+      fontFamily: T.mono,
+      fontSize: 10,
+      color: T.cyan,
+      flexShrink: 0
+    }
+  }, "Change")), open && React.createElement(React.Fragment, null, React.createElement("div", {
     style: {
       display: "flex",
       alignItems: "flex-start",
@@ -6673,7 +6539,21 @@ function RelayToggle({
       marginLeft: 2,
       whiteSpace: "nowrap"
     }
-  }, "\u21C4 tap to switch")));
+  }, "\u21C4 tap to switch"), React.createElement("button", {
+    type: "button",
+    onClick: () => setOpen(false),
+    "aria-expanded": true,
+    style: {
+      marginLeft: "auto",
+      background: "transparent",
+      border: "none",
+      padding: 0,
+      fontFamily: T.mono,
+      fontSize: 10,
+      color: T.textDim,
+      cursor: "pointer"
+    }
+  }, "Done"))));
 }
 const REPO = "https://github.com/netasset/anonscore";
 const GUARANTEES = [{
@@ -6838,87 +6718,6 @@ function TrustBox() {
       fontFamily: T.mono
     }
   }, "Don't take our word for it \u2014 every claim above links to its proof. Audit the full source on GitHub \u2197"))));
-}
-function GuaranteeRail() {
-  const [wide, setWide] = useState(() => typeof window !== "undefined" && window.innerWidth >= 1500);
-  useEffect(() => {
-    const onR = () => setWide(window.innerWidth >= 1500);
-    window.addEventListener("resize", onR);
-    return () => window.removeEventListener("resize", onR);
-  }, []);
-  if (!wide) return null;
-  return (React.createElement("aside", {
-      "aria-label": "Privacy guarantees \u2014 each links to its proof",
-      style: {
-        position: "absolute",
-        left: "calc(50% + 470px)",
-        top: 300,
-        width: "min(360px, calc(50vw - 494px))",
-        zIndex: 1,
-        animation: "fadeUp .5s ease .3s both"
-      }
-    }, React.createElement("div", {
-      style: {
-        fontFamily: T.mono,
-        fontSize: 10,
-        color: T.textDim,
-        letterSpacing: 2,
-        marginBottom: 14,
-        paddingBottom: 10,
-        borderBottom: `1px solid ${T.border}`
-      }
-    }, t("rail.title")), React.createElement("div", {
-      style: {
-        display: "flex",
-        flexDirection: "column",
-        gap: 3
-      }
-    }, GUARANTEES.map((g, i) => React.createElement("a", {
-      key: i,
-      href: g.href,
-      target: "_blank",
-      rel: "noopener noreferrer",
-      style: {
-        display: "flex",
-        alignItems: "flex-start",
-        gap: 10,
-        fontFamily: T.mono,
-        fontSize: 13,
-        color: T.textMid,
-        textDecoration: "none",
-        lineHeight: 1.4,
-        padding: "9px 10px",
-        marginLeft: -10,
-        borderRadius: 8,
-        transition: "color .15s, background .15s",
-        animation: `fadeUp .45s ease ${(0.35 + i * 0.08).toFixed(2)}s both`
-      },
-      onMouseOver: e => {
-        e.currentTarget.style.color = T.cyan;
-        e.currentTarget.style.background = T.cyanLo;
-      },
-      onMouseOut: e => {
-        e.currentTarget.style.color = T.textMid;
-        e.currentTarget.style.background = "transparent";
-      }
-    }, React.createElement("span", {
-      style: {
-        color: T.green,
-        flexShrink: 0,
-        fontSize: 14,
-        lineHeight: 1.3
-      }
-    }, "\u2713"), t(`g.${i}.label`)))), React.createElement("div", {
-      style: {
-        fontFamily: T.mono,
-        fontSize: 10,
-        color: T.textDim,
-        marginTop: 12,
-        paddingLeft: 10,
-        lineHeight: 1.5
-      }
-    }, t("rail.foot")))
-  );
 }
 const CATEGORY_META = {
   exchange: {
@@ -7947,6 +7746,7 @@ function Landing({
   }, []);
   const [input, setInput] = useState("");
   const [error, setError] = useState("");
+  const [formatsOpen, setFormatsOpen] = useState(false);
   const [spInfo, setSpInfo] = useState(null);
   const [lnInvoice, setLnInvoice] = useState(null);
   const [lnPay, setLnPay] = useState(null);
@@ -8103,6 +7903,7 @@ function Landing({
           return;
         } catch {}
       }
+      setFormatsOpen(true);
       setError(t("err.invalid"));
       return;
     }
@@ -8171,7 +7972,7 @@ function Landing({
       color: T.textDim,
       letterSpacing: 1.5
     }
-  }, "\xB7 ", t("umbrella.label"))), !isMobile && React.createElement(React.Fragment, null, React.createElement("span", {
+  }, "\xB7 ", t("umbrella.label"))), React.createElement("span", {
     style: {
       color: T.borderLo,
       flexShrink: 0
@@ -8181,21 +7982,26 @@ function Landing({
       display: "flex",
       alignItems: "center",
       gap: 9,
-      flexShrink: 0
+      flex: "1 1 auto",
+      minWidth: 0,
+      overflowX: "auto",
+      scrollbarWidth: "none"
     }
-  }, React.createElement("span", {
+  }, !isMobile && React.createElement(React.Fragment, null, React.createElement("span", {
     style: {
       fontFamily: T.mono,
       fontSize: 10,
       color: T.opn,
       fontWeight: 700,
-      letterSpacing: 0.5
+      letterSpacing: 0.5,
+      whiteSpace: "nowrap",
+      flexShrink: 0
     }
   }, t("umbrella.privacy")), React.createElement("span", {
     style: {
       color: T.borderLo
     }
-  }, "\xB7"), React.createElement("a", {
+  }, "\xB7")), React.createElement("a", {
     href: "https://dcabutler.com",
     target: "_blank",
     rel: "noopener noreferrer",
@@ -8205,6 +8011,8 @@ function Landing({
       color: T.textMid,
       textDecoration: "none",
       letterSpacing: 0.5,
+      whiteSpace: "nowrap",
+      flexShrink: 0,
       transition: "color .15s"
     },
     onMouseOver: e => e.currentTarget.style.color = T.opn,
@@ -8223,6 +8031,8 @@ function Landing({
       color: T.textMid,
       textDecoration: "none",
       letterSpacing: 0.5,
+      whiteSpace: "nowrap",
+      flexShrink: 0,
       transition: "color .15s"
     },
     onMouseOver: e => e.currentTarget.style.color = T.opn,
@@ -8241,11 +8051,13 @@ function Landing({
       color: T.textMid,
       textDecoration: "none",
       letterSpacing: 0.5,
+      whiteSpace: "nowrap",
+      flexShrink: 0,
       transition: "color .15s"
     },
     onMouseOver: e => e.currentTarget.style.color = T.opn,
     onMouseOut: e => e.currentTarget.style.color = T.textMid
-  }, t("umbrella.hub"), " \u2197")))), React.createElement("div", {
+  }, t("umbrella.hub"), " \u2197"))), React.createElement("div", {
     role: "main",
     "aria-label": "AnonScore \u2014 Bitcoin & Lightning privacy audit",
     style: {
@@ -8257,16 +8069,17 @@ function Landing({
   }, React.createElement("nav", {
     style: {
       display: "grid",
-      gridTemplateColumns: "1fr auto 1fr",
+      gridTemplateColumns: navWide ? "1fr auto 1fr" : "1fr auto",
       alignItems: "center",
-      padding: isMobile ? "14px 20px" : "14px 48px",
+      gap: 8,
+      padding: isMobile ? "12px 16px" : "14px 48px",
       borderBottom: `1px solid ${T.border}`,
       background: T.bg,
       position: "sticky",
       top: 0,
       zIndex: 100
     }
-  }, React.createElement("div", {
+  }, navWide && React.createElement("div", {
     style: {
       display: "flex",
       alignItems: "center",
@@ -8274,7 +8087,7 @@ function Landing({
       minWidth: 0,
       justifySelf: "start"
     }
-  }, navWide && NAV_LINKS.map(l => React.createElement("a", {
+  }, NAV_LINKS.map(l => React.createElement("a", {
     key: l.page,
     href: l.href,
     onClick: l.page === "cases" ? e => {
@@ -8300,7 +8113,7 @@ function Landing({
       display: "flex",
       alignItems: "center",
       gap: 8,
-      justifySelf: "center"
+      justifySelf: navWide ? "center" : "start"
     }
   }, React.createElement("span", {
     style: {
@@ -8335,18 +8148,19 @@ function Landing({
     href: "https://github.com/netasset/anonscore",
     target: "_blank",
     rel: "noopener noreferrer",
+    "aria-label": "AnonScore on GitHub",
     style: {
+      ...ui.ghost,
       display: "flex",
       alignItems: "center",
       gap: 5,
       padding: "5px 10px",
       background: T.surface,
-      border: `1px solid ${T.border}`,
       borderRadius: 7,
-      color: T.textMid,
       textDecoration: "none",
       fontSize: 11,
       fontFamily: T.mono,
+      whiteSpace: "nowrap",
       transition: "border-color .15s"
     },
     onMouseOver: e => e.currentTarget.style.borderColor = T.cyan,
@@ -8356,106 +8170,6 @@ function Landing({
     color: T.green,
     size: 10
   }), React.createElement(LangSwitcher, null))), React.createElement("div", {
-    style: {
-      background: T.surface,
-      borderBottom: `1px solid ${T.border}`,
-      borderTop: `2px solid ${T.btc}`,
-      overflowX: "auto",
-      WebkitOverflowScrolling: "touch",
-      scrollbarWidth: "none"
-    }
-  }, React.createElement("div", {
-    style: {
-      display: "flex",
-      alignItems: "center",
-      gap: 0,
-      minWidth: "max-content",
-      padding: "0 20px"
-    }
-  }, React.createElement("div", {
-    style: {
-      display: "flex",
-      alignItems: "center",
-      gap: 6,
-      padding: "9px 14px 9px 0",
-      borderRight: `1px solid ${T.border}`,
-      marginRight: 14,
-      flexShrink: 0
-    }
-  }, React.createElement("span", {
-    style: {
-      fontFamily: T.mono,
-      fontSize: 9,
-      color: T.btc,
-      letterSpacing: 2,
-      fontWeight: 700
-    }
-  }, "\uD83D\uDCC1 CASE FILES"), React.createElement("span", {
-    style: {
-      fontFamily: T.mono,
-      fontSize: 9,
-      color: T.textDim,
-      whiteSpace: "nowrap"
-    }
-  }, "\u2014 this audit, run on famous wallets")), CASE_FILES.map((c, i) => {
-    const cat = CATEGORY_META[c.category];
-    return React.createElement("button", {
-      key: c.id,
-      onClick: () => onCases(c),
-      style: {
-        display: "flex",
-        alignItems: "center",
-        gap: 7,
-        padding: "9px 14px",
-        background: "transparent",
-        border: "none",
-        borderRight: `1px solid ${T.borderLo}`,
-        color: T.textMid,
-        fontFamily: T.sans,
-        fontSize: 12,
-        cursor: "pointer",
-        whiteSpace: "nowrap",
-        transition: "all .15s",
-        flexShrink: 0
-      },
-      onMouseEnter: e => {
-        e.currentTarget.style.background = T.card;
-        e.currentTarget.style.color = T.text;
-      },
-      onMouseLeave: e => {
-        e.currentTarget.style.background = "transparent";
-        e.currentTarget.style.color = T.textMid;
-      }
-    }, React.createElement("span", {
-      style: {
-        fontFamily: T.mono,
-        fontSize: 9,
-        color: cat.color,
-        fontWeight: 700
-      }
-    }, "#", c.id), c.title);
-  }), React.createElement("button", {
-    onClick: () => onCases(null),
-    style: {
-      display: "flex",
-      alignItems: "center",
-      gap: 5,
-      padding: "9px 16px",
-      background: "transparent",
-      border: "none",
-      color: T.btc,
-      fontFamily: T.mono,
-      fontSize: 9,
-      cursor: "pointer",
-      letterSpacing: 1,
-      whiteSpace: "nowrap",
-      flexShrink: 0,
-      transition: "color .15s",
-      fontWeight: 700
-    },
-    onMouseEnter: e => e.currentTarget.style.color = T.text,
-    onMouseLeave: e => e.currentTarget.style.color = T.btc
-  }, "VIEW ALL \u2192"))), React.createElement("div", {
     ref: heroRef,
     style: {
       position: "relative",
@@ -8506,10 +8220,10 @@ function Landing({
     }
   }), React.createElement("div", {
     className: "scan-ov"
-  }), React.createElement(GuaranteeRail, null), React.createElement("section", {
+  }), React.createElement("section", {
     style: {
       position: "relative",
-      padding: isMobile ? "34px 20px 40px" : "50px 48px 56px",
+      padding: isMobile ? "18px 16px 28px" : "28px 48px 36px",
       maxWidth: 860,
       margin: "0 auto",
       width: "100%",
@@ -8538,10 +8252,10 @@ function Landing({
   }, t("hero.eyebrow"))), React.createElement("h1", {
     style: {
       fontFamily: T.serif,
-      fontSize: isMobile ? 38 : 56,
+      fontSize: isMobile ? 34 : 52,
       lineHeight: 1.06,
       color: T.text,
-      marginBottom: 20,
+      marginBottom: 12,
       animation: "fadeUp .5s ease .08s both",
       fontWeight: 400
     }
@@ -8553,66 +8267,15 @@ function Landing({
     }
   }, t("hero.h1.em"))), React.createElement("p", {
     style: {
-      fontSize: isMobile ? 15 : 18,
+      fontSize: isMobile ? 15 : 17,
       color: T.textMid,
-      lineHeight: 1.6,
+      lineHeight: 1.55,
       fontWeight: 300,
       animation: "fadeUp .5s ease .14s both",
-      maxWidth: 560,
-      margin: "0 auto 20px"
+      maxWidth: 520,
+      margin: "0 auto 14px"
     }
-  }, t("hero.sub")), !isLn && React.createElement("div", {
-    style: {
-      maxWidth: HERO_COL,
-      margin: "0 auto 16px",
-      animation: "fadeUp .5s ease .16s both"
-    }
-  }, React.createElement("div", {
-    style: {
-      position: "relative",
-      height: 6,
-      borderRadius: 6,
-      background: `linear-gradient(90deg, ${T.red} 0%, ${T.btc} 40%, ${T.amber} 60%, ${T.green} 100%)`,
-      marginBottom: 6
-    }
-  }, React.createElement("div", {
-    style: {
-      position: "absolute",
-      top: "50%",
-      left: "38%",
-      transform: "translate(-50%,-50%)",
-      width: 12,
-      height: 12,
-      borderRadius: "50%",
-      background: T.bg,
-      border: `2px solid ${T.btc}`,
-      boxShadow: `0 0 8px ${T.btc}`,
-      animation: "dotPulse 2.4s ease-out infinite"
-    }
-  })), React.createElement("div", {
-    style: {
-      display: "flex",
-      justifyContent: "space-between"
-    }
-  }, React.createElement("span", {
-    style: {
-      fontFamily: T.mono,
-      fontSize: 9,
-      color: T.red
-    }
-  }, t("spectrum.low")), React.createElement("span", {
-    style: {
-      fontFamily: T.mono,
-      fontSize: 9,
-      color: T.btc
-    }
-  }, t("spectrum.avg")), React.createElement("span", {
-    style: {
-      fontFamily: T.mono,
-      fontSize: 9,
-      color: T.green
-    }
-  }, t("spectrum.high")))), RELAY_URL ? React.createElement(RelayToggle, {
+  }, t("hero.sub")), RELAY_URL ? React.createElement(RelayToggle, {
     trustLine: isLn ? t("trust.ln") : t("trust.btc")
   }) : React.createElement("div", {
     style: {
@@ -8633,14 +8296,14 @@ function Landing({
     style: {
       display: "flex",
       flexDirection: "column",
-      gap: 12,
+      gap: 10,
       maxWidth: HERO_WIDE,
       margin: "4px auto 0",
-      animation: "fadeUp .5s ease .22s both, breathe 5s ease-in-out 1.2s infinite",
+      animation: "fadeUp .5s ease .22s both",
       background: T.card,
       border: `1px solid ${T.cyan}44`,
       borderRadius: 18,
-      padding: isMobile ? "18px 16px" : "26px 30px",
+      padding: isMobile ? "14px 14px" : "18px 22px",
       boxShadow: `0 0 60px -14px ${T.cyan}4d`
     }
   }, React.createElement("div", null, inputType && React.createElement("div", {
@@ -8667,19 +8330,52 @@ function Landing({
     }
   }, inputType === "ln_pubkey" ? "⚡ Lightning node pubkey detected" : inputType === "ln_address" ? "⚡ Lightning address — paste your node's pubkey instead" : "₿ Bitcoin address detected")), React.createElement("div", {
     style: {
+      display: "flex",
+      alignItems: "baseline",
+      justifyContent: "space-between",
+      gap: 8,
+      marginBottom: 7
+    }
+  }, React.createElement("div", {
+    style: {
       fontFamily: T.mono,
       fontSize: 9,
       letterSpacing: 1.5,
       color: T.textDim,
-      marginBottom: 7,
       textAlign: "left"
     }
-  }, isLn ? "NODE PUBKEY" : "ADDRESS · NODE PUBKEY · INVOICE · OFFER · XPUB · PSBT · ECASH"), React.createElement("div", {
+  }, isLn ? "NODE PUBKEY" : "BITCOIN ADDRESS OR LIGHTNING NODE"), React.createElement("button", {
+    type: "button",
+    onClick: () => setFormatsOpen(o => !o),
+    "aria-expanded": formatsOpen,
+    style: {
+      background: "none",
+      border: "none",
+      padding: 0,
+      fontFamily: T.mono,
+      fontSize: 9,
+      letterSpacing: 0.4,
+      color: T.cyan,
+      cursor: "pointer",
+      flexShrink: 0
+    }
+  }, formatsOpen ? "Hide other formats" : "Other formats")), formatsOpen && React.createElement("div", {
+    style: {
+      fontSize: 12,
+      color: T.textMid,
+      lineHeight: 1.55,
+      textAlign: "left",
+      marginBottom: 8,
+      animation: "slideDown .2s ease"
+    }
+  }, "This box also reads a BOLT11 invoice, a BOLT12 offer, an LNURL or Lightning address, a Silent Payment address (sp1\u2026), an xpub, ypub or zpub, a PSBT or raw transaction, and a Cashu token. Paste one and it stays on this page."), React.createElement("div", {
     style: {
       display: "flex",
       gap: 8
     }
   }, isMobile && React.createElement("button", {
+    type: "button",
+    "aria-label": "Paste from clipboard",
     onClick: async () => {
       try {
         const t = await navigator.clipboard.readText();
@@ -8688,17 +8384,14 @@ function Landing({
       } catch {}
     },
     style: {
+      ...ui.ghost,
       background: T.surface,
-      border: `1.5px solid ${T.border}`,
       borderRadius: 14,
-      padding: "16px 15px",
-      color: T.textMid,
+      padding: "12px 14px",
       fontSize: 18,
-      cursor: "pointer",
       flexShrink: 0,
       alignSelf: "stretch"
-    },
-    title: "Paste"
+    }
   }, "\uD83D\uDCCB"), React.createElement("div", {
     style: {
       position: "relative",
@@ -8753,10 +8446,10 @@ function Landing({
       background: "#070910",
       border: `2px solid ${error ? T.red : inputType ? isLn ? T.ln : T.btc : T.cyan + "77"}`,
       borderRadius: 14,
-      padding: "22px 18px 22px 50px",
+      padding: "16px 16px 16px 48px",
       color: T.text,
       fontFamily: T.mono,
-      fontSize: 17,
+      fontSize: 16,
       letterSpacing: 0.3,
       outline: "none",
       transition: "border .18s, box-shadow .25s",
@@ -8776,19 +8469,14 @@ function Landing({
     onClick: () => submit(null, !isLn),
     className: "sheen",
     style: {
+      ...ui.primary(isLn ? T.ln : T.btc),
       width: "100%",
       marginTop: 10,
-      background: isLn ? T.ln : T.btc,
-      border: "none",
       borderRadius: 14,
-      padding: "18px 26px",
-      color: T.bg,
-      fontFamily: T.sans,
-      fontWeight: 700,
+      padding: "14px 22px",
       fontSize: 16,
-      cursor: "pointer",
       whiteSpace: "nowrap",
-      transition: "all .15s"
+      transition: "opacity .15s"
     },
     onMouseOver: e => e.currentTarget.style.opacity = ".88",
     onMouseOut: e => e.currentTarget.style.opacity = "1"
@@ -9293,24 +8981,71 @@ function Landing({
       e.currentTarget.style.borderColor = T.border;
       e.currentTarget.style.color = T.textMid;
     }
-  }, s.label))), React.createElement("div", {
+  }, s.label))), !isLn && React.createElement("div", {
+    style: {
+      maxWidth: HERO_COL,
+      margin: "2px auto 0",
+      width: "100%"
+    }
+  }, React.createElement("div", {
+    style: {
+      position: "relative",
+      height: 6,
+      borderRadius: 6,
+      background: `linear-gradient(90deg, ${T.red} 0%, ${T.btc} 40%, ${T.amber} 60%, ${T.green} 100%)`,
+      marginBottom: 6
+    }
+  }, React.createElement("div", {
+    style: {
+      position: "absolute",
+      top: "50%",
+      left: "38%",
+      transform: "translate(-50%,-50%)",
+      width: 12,
+      height: 12,
+      borderRadius: "50%",
+      background: T.bg,
+      border: `2px solid ${T.btc}`,
+      boxShadow: `0 0 8px ${T.btc}`
+    }
+  })), React.createElement("div", {
     style: {
       display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-      gap: 6
+      justifyContent: "space-between"
     }
-  }, React.createElement("a", {
-    href: "https://github.com/netasset/anonscore",
-    target: "_blank",
-    rel: "noopener noreferrer",
+  }, React.createElement("span", {
     style: {
       fontFamily: T.mono,
-      fontSize: 10,
-      color: T.cyan,
-      textDecoration: "none"
+      fontSize: 9,
+      color: T.red
     }
-  }, "Open source \u2197"))), history.length > 0 && React.createElement("div", {
+  }, t("spectrum.low")), React.createElement("span", {
+    style: {
+      fontFamily: T.mono,
+      fontSize: 9,
+      color: T.btc
+    }
+  }, t("spectrum.avg")), React.createElement("span", {
+    style: {
+      fontFamily: T.mono,
+      fontSize: 9,
+      color: T.green
+    }
+  }, t("spectrum.high")))), React.createElement("button", {
+    type: "button",
+    onClick: () => onCases(null),
+    style: {
+      background: "none",
+      border: "none",
+      padding: 0,
+      fontFamily: T.mono,
+      fontSize: 11,
+      color: T.textMid,
+      cursor: "pointer",
+      textDecoration: "underline",
+      textUnderlineOffset: 3
+    }
+  }, "See this audit on famous wallets \u2192")), history.length > 0 && React.createElement("div", {
     style: {
       maxWidth: HERO_COL,
       margin: "14px auto 0",
@@ -9434,6 +9169,7 @@ function Landing({
       }
     }, h.isXpub ? "→" : "↺")), React.createElement("button", {
       onClick: () => deleteHistory(h.addr),
+      "aria-label": "Remove " + (h.addr || "scan") + " from recent scans",
       style: {
         background: "none",
         border: "none",
@@ -9476,18 +9212,18 @@ function Landing({
   }, [{
     n: "01",
     icon: "📋",
-    title: "Paste an address or pubkey",
-    desc: "Bitcoin address (bc1…, 1…, 3…) or Lightning node pubkey (66-char hex). No account, no email, nothing saved."
+    title: "Paste an address",
+    desc: "A Bitcoin address or a Lightning node pubkey. No account. The result stays in this browser."
   }, {
     n: "02",
     icon: "🔍",
-    title: "We run the checks",
-    desc: "Bitcoin: 11 on-chain heuristics. Lightning: 8 node privacy checks. Same patterns surveillance firms use — runs in your browser."
+    title: "The checks run here",
+    desc: "Eleven on-chain heuristics, or eight Lightning checks. The same patterns surveillance firms use — nothing is uploaded to score it."
   }, {
     n: "03",
     icon: "🎯",
-    title: "Score + fix plan",
-    desc: "A score from 0–100, every issue explained, fixes ranked by impact. Bitcoin scan also has a 💬 Plain English mode."
+    title: "Score, then the first fix",
+    desc: "0–100, every issue explained, fixes ranked by the points they return. Plain English is one toggle."
   }].map((s, i) => React.createElement("div", {
     key: i,
     style: {
@@ -9561,106 +9297,7 @@ function Landing({
       color: T.cyan,
       fontStyle: "italic"
     }
-  }, t("open.h2.em"))), React.createElement(TrustBox, null))), !isMobile && React.createElement("div", {
-    style: {
-      padding: "48px 48px 0",
-      maxWidth: 860,
-      margin: "0 auto",
-      width: "100%"
-    }
-  }, React.createElement("div", {
-    style: {
-      fontFamily: T.mono,
-      fontSize: 9,
-      color: T.textDim,
-      letterSpacing: 2,
-      marginBottom: 14,
-      textAlign: "center"
-    }
-  }, "LIVE EXAMPLE \u2014 WHAT YOUR RESULTS LOOK LIKE"), React.createElement(DemoPreview, null)), isMobile && React.createElement("div", {
-    style: {
-      padding: "32px 20px 0"
-    }
-  }, React.createElement("div", {
-    style: {
-      fontFamily: T.mono,
-      fontSize: 9,
-      color: T.textDim,
-      letterSpacing: 2,
-      marginBottom: 14,
-      textAlign: "center"
-    }
-  }, "EXAMPLE SCORES"), React.createElement("div", {
-    style: {
-      display: "flex",
-      gap: 10,
-      overflowX: "auto",
-      paddingBottom: 8,
-      scrollbarWidth: "none"
-    }
-  }, DEMO_EXAMPLES.map((ex, i) => React.createElement("div", {
-    key: i,
-    onClick: () => onAnalyze("DEMO", false, "btc"),
-    style: {
-      flexShrink: 0,
-      background: T.card,
-      border: `1px solid ${ex.color}33`,
-      borderRadius: 14,
-      padding: "16px 18px",
-      cursor: "pointer",
-      minWidth: 140
-    }
-  }, React.createElement("div", {
-    style: {
-      height: 2,
-      background: `linear-gradient(90deg,transparent,${ex.color},transparent)`,
-      margin: "0 -18px 12px",
-      marginTop: -16,
-      borderRadius: "14px 14px 0 0"
-    }
-  }), React.createElement("div", {
-    style: {
-      fontFamily: T.serif,
-      fontSize: 38,
-      color: ex.color,
-      lineHeight: 1
-    }
-  }, ex.grade), React.createElement("div", {
-    style: {
-      fontFamily: T.mono,
-      fontSize: 10,
-      color: ex.color,
-      marginTop: 2
-    }
-  }, ex.label), React.createElement("div", {
-    style: {
-      fontFamily: T.mono,
-      fontSize: 16,
-      color: T.text,
-      marginTop: 6,
-      fontWeight: 600
-    }
-  }, ex.score, React.createElement("span", {
-    style: {
-      fontSize: 9,
-      color: T.textDim
-    }
-  }, "/100")), React.createElement("div", {
-    style: {
-      fontFamily: T.mono,
-      fontSize: 8,
-      color: T.textDim,
-      marginTop: 8
-    }
-  }, ex.issues[0])))), React.createElement("div", {
-    style: {
-      fontFamily: T.mono,
-      fontSize: 9,
-      color: T.textDim,
-      textAlign: "center",
-      marginTop: 8
-    }
-  }, "tap to try the demo \u2192")), React.createElement(Divider, null), React.createElement("section", {
+  }, t("open.h2.em"))), React.createElement(TrustBox, null))), React.createElement(Divider, null), React.createElement("section", {
     className: "reveal",
     style: {
       background: T.surface,
@@ -10076,82 +9713,7 @@ function Landing({
       cursor: "pointer",
       letterSpacing: 0.5
     }
-  }, tipCopied === "nostr" ? "Copied!" : "Zap on Nostr")), React.createElement("span", {
-    style: {
-      display: "inline-flex",
-      alignItems: "center",
-      gap: 8,
-      flexWrap: "wrap"
-    }
-  }, React.createElement("span", {
-    style: {
-      width: 6,
-      height: 6,
-      borderRadius: "50%",
-      background: T.opn,
-      boxShadow: `0 0 6px ${T.opn}`,
-      flexShrink: 0
-    }
-  }), React.createElement("span", {
-    style: {
-      fontFamily: T.mono,
-      fontSize: 10,
-      color: T.opn,
-      letterSpacing: 0.5,
-      fontWeight: 700
-    }
-  }, t("umbrella.privacy")), React.createElement("span", {
-    style: {
-      color: T.borderLo
-    }
-  }, "\xB7"), React.createElement("a", {
-    href: "https://dcabutler.com",
-    target: "_blank",
-    rel: "noopener noreferrer",
-    style: {
-      fontFamily: T.mono,
-      fontSize: 10,
-      color: T.textDim,
-      textDecoration: "none",
-      transition: "color .15s"
-    },
-    onMouseOver: e => e.currentTarget.style.color = T.opn,
-    onMouseOut: e => e.currentTarget.style.color = T.textDim
-  }, t("umbrella.dca"), " \u2197"), React.createElement("span", {
-    style: {
-      color: T.borderLo
-    }
-  }, "\xB7"), React.createElement("a", {
-    href: `${BTCHUB_URL}/?from=anonscore`,
-    target: "_blank",
-    rel: "noopener noreferrer",
-    style: {
-      fontFamily: T.mono,
-      fontSize: 10,
-      color: T.textDim,
-      textDecoration: "none",
-      transition: "color .15s"
-    },
-    onMouseOver: e => e.currentTarget.style.color = T.opn,
-    onMouseOut: e => e.currentTarget.style.color = T.textDim
-  }, t("umbrella.intel"), " \u2197"), React.createElement("span", {
-    style: {
-      color: T.borderLo
-    }
-  }, "\xB7"), React.createElement("a", {
-    href: "https://opnorange.com",
-    target: "_blank",
-    rel: "noopener noreferrer",
-    style: {
-      fontFamily: T.mono,
-      fontSize: 10,
-      color: T.textDim,
-      textDecoration: "none",
-      transition: "color .15s"
-    },
-    onMouseOver: e => e.currentTarget.style.color = T.opn,
-    onMouseOut: e => e.currentTarget.style.color = T.textDim
-  }, t("umbrella.hub"), " \u2197")))), showFunding && React.createElement(FundingDisclosure, {
+  }, tipCopied === "nostr" ? "Copied!" : "Zap on Nostr")))), showFunding && React.createElement(FundingDisclosure, {
     onClose: () => setShowFunding(false)
   })));
 }
@@ -12693,7 +12255,8 @@ function XpubScan({
         }
       }, React.createElement(ScoreRing, {
         score: r.score,
-        size: isMobile ? 96 : 118
+        size: isMobile ? 96 : 118,
+        animate: false
       })), React.createElement("div", {
         style: {
           flex: 1,
@@ -14336,6 +13899,8 @@ function ConfirmScanModal({
   onConfirm
 }) {
   const dialogRef = useDialog(onCancel);
+  const relay = useRelay() && !!RELAY_URL;
+  const exp = explorer();
   const kind = pendingScan.inputType === "btc" ? "Bitcoin address" : pendingScan.inputType === "ln_address" ? "Lightning address" : "Lightning node";
   return React.createElement("div", {
     style: {
@@ -14378,7 +13943,7 @@ function ConfirmScanModal({
       marginBottom: 10,
       fontWeight: 400
     }
-  }, "You were linked to scan this ", kind), React.createElement("div", {
+  }, "You were linked to analyze this ", kind), React.createElement("div", {
     style: {
       fontFamily: T.mono,
       fontSize: 11,
@@ -14397,7 +13962,7 @@ function ConfirmScanModal({
       lineHeight: 1.65,
       marginBottom: 20
     }
-  }, "This queries a public block explorer directly from your browser. The address is public data \u2014 but the explorer sees your IP alongside it. On Tor or your own node, even that link stays private."), React.createElement("div", {
+  }, relay ? React.createElement(React.Fragment, null, "The privacy relay is on, so ", exp.label, " sees the address and not your IP. Nothing is stored. Turn the relay off under the address box if you would rather the lookup never touch AnonScore.") : React.createElement(React.Fragment, null, "The privacy relay is off, so this queries ", exp.label, " directly and that explorer sees your IP next to the address. Turn the relay on under the address box to hide it.")), React.createElement("div", {
     style: {
       display: "flex",
       gap: 10
@@ -14427,7 +13992,7 @@ function ConfirmScanModal({
       fontWeight: 700,
       cursor: "pointer"
     }
-  }, "Scan it \u2192"))));
+  }, "Analyze \u2192"))));
 }
 function AiAssistant({
   checks,
@@ -16375,6 +15940,7 @@ function Dashboard({
 }) {
   const [tab, setTab] = useState("Fix It");
   const [threat, setThreat] = useState(null);
+  const [threatOpen, setThreatOpen] = useState(false);
   const clusterN = useMemo(() => computeCluster(txs, address).linked.length, [txs, address]);
   const poison = useMemo(() => computePoisoning(txs, address), [txs, address]);
   const caseHit = CASE_FILES.find(c => c.address === address);
@@ -16394,7 +15960,6 @@ function Dashboard({
     return next;
   });
   const [aiStage, setAiStage] = useState(null);
-  const [aiWidgetMin, setAiWidgetMin] = useState(false);
   const openAi = () => setAiStage("consent");
   const txCount = addrInfo?.chain_stats?.tx_count || txs.length;
   const receiveCount = addrInfo?.chain_stats?.funded_txo_count ?? null;
@@ -16766,7 +16331,8 @@ function Dashboard({
     }
   }, React.createElement(ScoreRing, {
     score: score,
-    size: 52
+    size: 52,
+    animate: false
   }), React.createElement("div", null, React.createElement("div", {
     style: {
       fontFamily: T.serif,
@@ -17189,215 +16755,28 @@ function Dashboard({
     const weight = r => tm ? tm.w[r.key] || 0 : 0;
     const shownRecs = tm ? [...recommendations].sort((a, b) => weight(b) - weight(a) || b.impact - a.impact) : recommendations;
     return React.createElement("div", {
+      key: tab,
       style: {
         display: "flex",
         flexDirection: "column",
-        gap: 10
-      }
-    }, React.createElement("div", {
-      style: {
-        background: T.card,
-        border: `1px solid ${tm ? T.cyan + "44" : T.border}`,
-        borderRadius: 14,
-        padding: "12px 16px",
-        marginBottom: 2
-      }
-    }, React.createElement("div", {
-      style: {
-        display: "flex",
-        alignItems: "center",
         gap: 10,
-        flexWrap: "wrap"
+        animation: "fadeIn .22s ease both"
       }
-    }, React.createElement("span", {
+    }, React.createElement("div", {
       style: {
-        fontFamily: T.mono,
-        fontSize: 9,
-        color: T.textDim,
-        letterSpacing: 1.5,
-        flexShrink: 0
-      }
-    }, "WHO ARE YOU HIDING FROM?"), React.createElement("div", {
-      style: {
-        display: "flex",
-        gap: 6,
-        flexWrap: "wrap"
-      }
-    }, React.createElement(Pill, {
-      active: !tm,
-      onClick: () => setThreat(null)
-    }, "Everyone"), THREAT_MODELS.map(m => React.createElement(Pill, {
-      key: m.id,
-      active: threat === m.id,
-      onClick: () => setThreat(threat === m.id ? null : m.id)
-    }, m.icon, " ", m.label)))), tm && React.createElement("div", {
-      style: {
-        fontSize: 12.5,
+        fontSize: 14,
         color: T.textMid,
-        lineHeight: 1.6,
-        marginTop: 10,
-        borderTop: `1px solid ${T.borderLo}`,
-        paddingTop: 10
-      }
-    }, tm.sees)), React.createElement("div", {
-      style: {
-        fontSize: 13,
-        color: T.textMid,
-        marginBottom: 4
+        lineHeight: 1.5
       }
     }, tm ? React.createElement(React.Fragment, null, "Re-ranked for ", React.createElement("strong", {
       style: {
         color: T.cyan
       }
-    }, tm.label.toLowerCase()), ". Impact points are unchanged \u2014 only the priorities shift with the adversary.") : React.createElement(React.Fragment, null, "Sorted by impact. Fixing the top 3 alone could raise your score by ", React.createElement("strong", {
+    }, tm.label.toLowerCase()), ". The points do not change \u2014 only the order does.") : React.createElement(React.Fragment, null, "Sorted by impact. The top 3 could add ", React.createElement("strong", {
       style: {
         color: T.cyan
       }
-    }, recommendations.slice(0, 3).reduce((a, r) => a + r.impact, 0), " points"), ".")), React.createElement("div", {
-      style: {
-        background: T.card,
-        border: `1px solid ${T.cyan}33`,
-        borderRadius: 16,
-        overflow: "hidden",
-        marginBottom: 2
-      }
-    }, React.createElement("div", {
-      style: {
-        display: "flex",
-        gap: 0,
-        borderBottom: `1px solid ${T.borderLo}`
-      }
-    }, [{
-      icon: "✕",
-      label: "Address never sent"
-    }, {
-      icon: "✕",
-      label: "No data stored"
-    }, {
-      icon: "✕",
-      label: "Not used for training"
-    }].map((badge, i) => React.createElement("div", {
-      key: i,
-      style: {
-        flex: 1,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        gap: 5,
-        padding: "7px 8px",
-        borderRight: i < 2 ? `1px solid ${T.borderLo}` : undefined,
-        background: T.greenLo
-      }
-    }, React.createElement("span", {
-      style: {
-        fontFamily: T.mono,
-        fontSize: 9,
-        color: T.green,
-        fontWeight: 700
-      }
-    }, badge.icon), React.createElement("span", {
-      style: {
-        fontFamily: T.mono,
-        fontSize: 9,
-        color: T.green,
-        letterSpacing: 0.3,
-        whiteSpace: "nowrap"
-      }
-    }, badge.label)))), React.createElement("button", {
-      onClick: openAi,
-      style: {
-        display: "flex",
-        alignItems: "center",
-        gap: 14,
-        padding: "16px 18px",
-        cursor: "pointer",
-        textAlign: "left",
-        width: "100%",
-        background: "transparent",
-        border: "none",
-        transition: "background .15s"
-      },
-      onMouseOver: e => e.currentTarget.style.background = T.cyan + "0a",
-      onMouseOut: e => e.currentTarget.style.background = "transparent"
-    }, React.createElement("div", {
-      style: {
-        width: 36,
-        height: 36,
-        background: T.cyan + "18",
-        border: `1px solid ${T.cyan}33`,
-        borderRadius: 10,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        fontSize: 16,
-        flexShrink: 0
-      }
-    }, "\u2726"), React.createElement("div", {
-      style: {
-        flex: 1
-      }
-    }, React.createElement("div", {
-      style: {
-        fontSize: 14,
-        fontWeight: 700,
-        color: T.text,
-        marginBottom: 3
-      }
-    }, "Ask the Privacy Assistant"), React.createElement("div", {
-      style: {
-        fontSize: 12,
-        color: T.textMid,
-        lineHeight: 1.55
-      }
-    }, "Get step-by-step guidance for your ", checks.filter(c => c.status !== "pass").length, " specific issues. Only your score and issue names are shared \u2014 never your address. ", React.createElement("span", {
-      style: {
-        color: T.textDim
-      }
-    }, "5 questions per session."))), React.createElement("div", {
-      style: {
-        flexShrink: 0,
-        textAlign: "center"
-      }
-    }, React.createElement("div", {
-      style: {
-        background: T.cyan,
-        borderRadius: 8,
-        padding: "7px 14px",
-        color: T.bg,
-        fontSize: 12,
-        fontWeight: 700,
-        whiteSpace: "nowrap"
-      }
-    }, "Ask now \u2192"))), onCoach && React.createElement("div", {
-      style: {
-        borderTop: `1px solid ${T.borderLo}`,
-        padding: "8px 18px",
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "center",
-        gap: 8,
-        flexWrap: "wrap"
-      }
-    }, React.createElement("span", {
-      style: {
-        fontFamily: T.mono,
-        fontSize: 10,
-        color: T.textDim
-      }
-    }, "Hit the 5-question cap?"), React.createElement("button", {
-      onClick: onCoach,
-      style: {
-        background: "none",
-        border: "none",
-        padding: 0,
-        fontFamily: T.mono,
-        fontSize: 10,
-        color: T.cyan,
-        cursor: "pointer",
-        textDecoration: "underline",
-        textUnderlineOffset: 3
-      }
-    }, "Join the Coach early-access waitlist \u2192"))), shownRecs.map((r, i) => {
+    }, recommendations.slice(0, 3).reduce((a, r) => a + r.impact, 0), " points"), ".")), shownRecs.map((r, i) => {
       const done = doneFixes.has(r.key);
       const w = weight(r);
       const simple = SIMPLE.recs[r.key];
@@ -17590,7 +16969,222 @@ function Dashboard({
           marginTop: 4
         }
       }, "Estimated: 1\u20133 weeks, depending on CoinJoin wait times. The ceiling is 97, not 100 \u2014 what's already on-chain can't be erased, only diluted going forward.")));
-    })(), onNav && React.createElement("div", {
+    })(), React.createElement("div", {
+      style: {
+        background: T.card,
+        border: `1px solid ${threatOpen || tm ? T.cyan + "44" : T.border}`,
+        borderRadius: 14,
+        padding: "12px 16px"
+      }
+    }, !threatOpen ? React.createElement("button", {
+      type: "button",
+      onClick: () => setThreatOpen(true),
+      "aria-expanded": false,
+      style: {
+        background: "none",
+        border: "none",
+        padding: 0,
+        cursor: "pointer",
+        fontFamily: T.mono,
+        fontSize: 11,
+        color: T.cyan,
+        letterSpacing: 0.4
+      }
+    }, "Rank these for a specific adversary \u2192") : React.createElement(React.Fragment, null, React.createElement("div", {
+      style: {
+        display: "flex",
+        alignItems: "center",
+        gap: 10,
+        flexWrap: "wrap"
+      }
+    }, React.createElement("span", {
+      style: {
+        fontFamily: T.mono,
+        fontSize: 9,
+        color: T.textDim,
+        letterSpacing: 1.5,
+        flexShrink: 0
+      }
+    }, "WHO ARE YOU HIDING FROM?"), React.createElement("div", {
+      style: {
+        display: "flex",
+        gap: 6,
+        flexWrap: "wrap"
+      }
+    }, React.createElement(Pill, {
+      active: !tm,
+      onClick: () => setThreat(null)
+    }, "Everyone"), THREAT_MODELS.map(m => React.createElement(Pill, {
+      key: m.id,
+      active: threat === m.id,
+      onClick: () => setThreat(threat === m.id ? null : m.id)
+    }, m.icon, " ", m.label))), React.createElement("button", {
+      type: "button",
+      onClick: () => setThreatOpen(false),
+      "aria-expanded": true,
+      style: {
+        marginLeft: "auto",
+        background: "none",
+        border: "none",
+        padding: 0,
+        cursor: "pointer",
+        fontFamily: T.mono,
+        fontSize: 10,
+        color: T.textDim
+      }
+    }, "Hide")), tm && React.createElement("div", {
+      style: {
+        fontSize: 12.5,
+        color: T.textMid,
+        lineHeight: 1.6,
+        marginTop: 10,
+        borderTop: `1px solid ${T.borderLo}`,
+        paddingTop: 10
+      }
+    }, tm.sees))), React.createElement("div", {
+      style: {
+        background: T.card,
+        border: `1px solid ${T.cyan}33`,
+        borderRadius: 16,
+        overflow: "hidden"
+      }
+    }, React.createElement("div", {
+      style: {
+        display: "flex",
+        gap: 0,
+        borderBottom: `1px solid ${T.borderLo}`
+      }
+    }, [{
+      icon: "✕",
+      label: "Address never sent"
+    }, {
+      icon: "✕",
+      label: "No data stored"
+    }, {
+      icon: "✕",
+      label: "Not used for training"
+    }].map((badge, i) => React.createElement("div", {
+      key: i,
+      style: {
+        flex: 1,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 5,
+        padding: "7px 8px",
+        borderRight: i < 2 ? `1px solid ${T.borderLo}` : undefined,
+        background: T.greenLo
+      }
+    }, React.createElement("span", {
+      style: {
+        fontFamily: T.mono,
+        fontSize: 9,
+        color: T.green,
+        fontWeight: 700
+      }
+    }, badge.icon), React.createElement("span", {
+      style: {
+        fontFamily: T.mono,
+        fontSize: 9,
+        color: T.green,
+        letterSpacing: 0.3,
+        whiteSpace: "nowrap"
+      }
+    }, badge.label)))), React.createElement("button", {
+      onClick: openAi,
+      style: {
+        display: "flex",
+        alignItems: "center",
+        gap: 14,
+        padding: "16px 18px",
+        cursor: "pointer",
+        textAlign: "left",
+        width: "100%",
+        background: "transparent",
+        border: "none",
+        transition: "background .15s"
+      },
+      onMouseOver: e => e.currentTarget.style.background = T.cyan + "0a",
+      onMouseOut: e => e.currentTarget.style.background = "transparent"
+    }, React.createElement("div", {
+      style: {
+        width: 36,
+        height: 36,
+        background: T.cyan + "18",
+        border: `1px solid ${T.cyan}33`,
+        borderRadius: 10,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        fontSize: 16,
+        flexShrink: 0
+      }
+    }, "\u2726"), React.createElement("div", {
+      style: {
+        flex: 1
+      }
+    }, React.createElement("div", {
+      style: {
+        fontSize: 14,
+        fontWeight: 700,
+        color: T.text,
+        marginBottom: 3
+      }
+    }, "Ask the Privacy Assistant"), React.createElement("div", {
+      style: {
+        fontSize: 12,
+        color: T.textMid,
+        lineHeight: 1.55
+      }
+    }, "A walkthrough for your ", checks.filter(c => c.status !== "pass").length, " issues. You'll see the exact text first \u2014 the score and these findings, never your address. ", React.createElement("span", {
+      style: {
+        color: T.textDim
+      }
+    }, "5 questions per session."))), React.createElement("div", {
+      style: {
+        flexShrink: 0,
+        textAlign: "center"
+      }
+    }, React.createElement("div", {
+      style: {
+        background: T.cyan,
+        borderRadius: 8,
+        padding: "7px 14px",
+        color: T.bg,
+        fontSize: 12,
+        fontWeight: 700,
+        whiteSpace: "nowrap"
+      }
+    }, "Ask now \u2192"))), onCoach && React.createElement("div", {
+      style: {
+        borderTop: `1px solid ${T.borderLo}`,
+        padding: "8px 18px",
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+        gap: 8,
+        flexWrap: "wrap"
+      }
+    }, React.createElement("span", {
+      style: {
+        fontFamily: T.mono,
+        fontSize: 10,
+        color: T.textDim
+      }
+    }, "Hit the 5-question cap?"), React.createElement("button", {
+      onClick: onCoach,
+      style: {
+        background: "none",
+        border: "none",
+        padding: 0,
+        fontFamily: T.mono,
+        fontSize: 10,
+        color: T.cyan,
+        cursor: "pointer",
+        textDecoration: "underline",
+        textUnderlineOffset: 3
+      }
+    }, "Join the Coach early-access waitlist \u2192"))), onNav && React.createElement("div", {
       style: {
         background: T.card,
         border: `1px solid ${T.cyan}2e`,
@@ -18081,7 +17675,7 @@ function Dashboard({
         color,
         lineHeight: 1
       }
-    }, fmt.btc(u.value)), React.createElement("div", {
+    }, fmt.btcRow(u.value)), React.createElement("div", {
       style: {
         fontFamily: T.mono,
         fontSize: 10,
@@ -18529,41 +18123,7 @@ function Dashboard({
     style: {
       color: T.cyan
     }
-  }, "github.com/netasset/anonscore"), "."))), isMobile && React.createElement("div", {
-    style: {
-      position: "fixed",
-      bottom: 0,
-      left: 0,
-      right: 0,
-      background: T.card,
-      borderTop: `1px solid ${T.border}`,
-      display: "flex",
-      zIndex: 200
-    }
-  }, ["Fix It", "Overview", "Flow", "UTXOs", "Transactions"].map(t => React.createElement("button", {
-    key: t,
-    onClick: () => setTab(t),
-    style: {
-      flex: 1,
-      padding: "10px 0 8px",
-      background: "transparent",
-      border: "none",
-      borderTop: `2px solid ${tab === t ? T.cyan : "transparent"}`,
-      color: tab === t ? T.cyan : T.textDim,
-      fontFamily: T.mono,
-      fontSize: 8,
-      letterSpacing: .5,
-      cursor: "pointer",
-      display: "flex",
-      flexDirection: "column",
-      alignItems: "center",
-      gap: 3
-    }
-  }, React.createElement("span", {
-    style: {
-      fontSize: 15
-    }
-  }, t === "Fix It" ? "★" : t === "Overview" ? "◎" : t === "Flow" ? "⋔" : t === "Transactions" ? "↔" : "⬡"), t))), shareOpen && React.createElement(ShareCard, {
+  }, "github.com/netasset/anonscore"), "."))), shareOpen && React.createElement(ShareCard, {
     score: score,
     grade: grade,
     checks: checks,
@@ -18597,183 +18157,7 @@ function Dashboard({
       walletMeta: walletMeta,
       onClose: () => setAiStage(null)
     }));
-  })(), aiStage === null && React.createElement("div", {
-    style: {
-      position: "fixed",
-      bottom: isMobile ? 72 : 28,
-      right: isMobile ? 12 : 28,
-      zIndex: 500,
-      width: aiWidgetMin ? "auto" : "min(340px, calc(100vw - 24px))",
-      animation: "fadeUp .4s ease both",
-      filter: "drop-shadow(0 8px 32px #000000aa)"
-    }
-  }, aiWidgetMin ? React.createElement("button", {
-    onClick: () => setAiWidgetMin(false),
-    style: {
-      display: "flex",
-      alignItems: "center",
-      gap: 10,
-      background: T.card,
-      border: `1.5px solid ${T.cyan}55`,
-      borderRadius: 99,
-      padding: "10px 18px 10px 14px",
-      cursor: "pointer",
-      transition: "all .2s",
-      boxShadow: `0 0 24px ${T.cyan}22`
-    },
-    onMouseOver: e => e.currentTarget.style.borderColor = T.cyan,
-    onMouseOut: e => e.currentTarget.style.borderColor = T.cyan + "55"
-  }, React.createElement("div", {
-    style: {
-      width: 28,
-      height: 28,
-      background: T.cyan + "22",
-      border: `1px solid ${T.cyan}44`,
-      borderRadius: "50%",
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-      fontSize: 14,
-      flexShrink: 0
-    }
-  }, "\u2726"), React.createElement("div", null, React.createElement("div", {
-    style: {
-      fontSize: 13,
-      fontWeight: 700,
-      color: T.text,
-      lineHeight: 1
-    }
-  }, "Privacy Assistant"), React.createElement("div", {
-    style: {
-      fontSize: 11,
-      color: T.cyan,
-      marginTop: 2
-    }
-  }, "Ask about your ", issueCount, " issues \u2192"))) : React.createElement("div", {
-    style: {
-      background: T.card,
-      border: `1.5px solid ${T.cyan}44`,
-      borderRadius: 20,
-      overflow: "hidden",
-      boxShadow: `0 0 0 1px ${T.cyan}11, 0 24px 64px #000000bb`
-    }
-  }, React.createElement("div", {
-    style: {
-      display: "flex",
-      borderBottom: `1px solid ${T.borderLo}`,
-      background: T.greenLo
-    }
-  }, ["✕ Address never sent", "✕ Nothing stored", "✕ Not for training"].map((t, i) => React.createElement("div", {
-    key: i,
-    style: {
-      flex: 1,
-      textAlign: "center",
-      padding: "6px 4px",
-      borderRight: i < 2 ? `1px solid ${T.borderLo}` : undefined
-    }
-  }, React.createElement("span", {
-    style: {
-      fontFamily: T.mono,
-      fontSize: 9,
-      color: T.green,
-      letterSpacing: 0.2
-    }
-  }, t)))), React.createElement("div", {
-    style: {
-      padding: "20px 22px 22px"
-    }
-  }, React.createElement("div", {
-    style: {
-      display: "flex",
-      alignItems: "flex-start",
-      justifyContent: "space-between",
-      marginBottom: 14
-    }
-  }, React.createElement("div", {
-    style: {
-      display: "flex",
-      alignItems: "center",
-      gap: 12
-    }
-  }, React.createElement("div", {
-    style: {
-      width: 44,
-      height: 44,
-      background: T.cyan + "18",
-      border: `1.5px solid ${T.cyan}44`,
-      borderRadius: 13,
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-      fontSize: 20,
-      flexShrink: 0,
-      boxShadow: `0 0 16px ${T.cyan}22`
-    }
-  }, "\u2726"), React.createElement("div", null, React.createElement("div", {
-    style: {
-      fontSize: 15,
-      fontWeight: 700,
-      color: T.text,
-      lineHeight: 1
-    }
-  }, "Privacy Assistant"), React.createElement("div", {
-    style: {
-      fontFamily: T.mono,
-      fontSize: 9,
-      color: T.textDim,
-      letterSpacing: 1,
-      marginTop: 3
-    }
-  }, "POWERED BY CLAUDE \xB7 FREE"))), React.createElement("button", {
-    onClick: () => setAiWidgetMin(true),
-    style: {
-      background: "transparent",
-      border: `1px solid #ffffff44`,
-      borderRadius: 7,
-      padding: "4px 9px",
-      color: "#ffffff",
-      fontSize: 12,
-      cursor: "pointer",
-      lineHeight: 1,
-      transition: "all .15s",
-      flexShrink: 0
-    },
-    onMouseOver: e => e.currentTarget.style.borderColor = "#ffffff88",
-    onMouseOut: e => e.currentTarget.style.borderColor = "#ffffff44"
-  }, "\u2014 minimize")), React.createElement("div", {
-    style: {
-      fontSize: 13,
-      color: T.textMid,
-      lineHeight: 1.6,
-      marginBottom: 16
-    }
-  }, "Get step-by-step instructions for your ", React.createElement("strong", {
-    style: {
-      color: T.text
-    }
-  }, issueCount, " specific issue", issueCount !== 1 ? "s" : ""), " \u2014 which wallet to use, what to click, in plain English."), React.createElement("button", {
-    onClick: openAi,
-    style: {
-      width: "100%",
-      padding: "14px 20px",
-      background: `linear-gradient(135deg, ${T.cyan}, #0ea5e9)`,
-      border: "none",
-      borderRadius: 12,
-      color: T.bg,
-      fontFamily: T.sans,
-      fontWeight: 700,
-      fontSize: 15,
-      cursor: "pointer",
-      transition: "opacity .15s",
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-      gap: 10,
-      boxShadow: `0 4px 20px ${T.cyan}44`
-    },
-    onMouseOver: e => e.currentTarget.style.opacity = ".88",
-    onMouseOut: e => e.currentTarget.style.opacity = "1"
-  }, React.createElement("span", null, "\u2726"), React.createElement("span", null, "Ask about your ", issueCount, " issues \u2192"))))), isMobile && React.createElement("nav", {
+  })(), isMobile && React.createElement("nav", {
     style: {
       position: "fixed",
       bottom: 0,
@@ -18790,6 +18174,7 @@ function Dashboard({
     const icons = {
       "Fix It": "★",
       "Overview": "◎",
+      "Flow": "⋔",
       "UTXOs": "⬡",
       "Transactions": "⇄",
       "Methodology": "≡"
@@ -18797,6 +18182,7 @@ function Dashboard({
     return React.createElement("button", {
       key: t,
       onClick: () => setTab(t),
+      "aria-current": tab === t ? "page" : undefined,
       style: {
         flex: 1,
         display: "flex",
@@ -18818,11 +18204,11 @@ function Dashboard({
     }, icons[t]), React.createElement("span", {
       style: {
         fontFamily: T.mono,
-        fontSize: 8,
+        fontSize: 9,
         color: tab === t ? T.cyan : T.textDim,
-        letterSpacing: 0.5
+        letterSpacing: 0.2
       }
-    }, t.toUpperCase()));
+    }, t));
   })));
 }
 function LightningDashboard({
@@ -18880,6 +18266,16 @@ function LightningDashboard({
     address: nodeId,
     isLightning: true,
     onClose: () => setShareOpen(false)
+  }), aiStage === "consent" && React.createElement(AiConsentGate, {
+    score: score,
+    grade: grade,
+    checks: checks,
+    recommendations: recommendations,
+    walletMeta: {
+      isPublic: false
+    },
+    onAccept: () => setAiStage("chat"),
+    onDecline: () => setAiStage(null)
   }), React.createElement("nav", {
     style: {
       display: "flex",
@@ -19030,7 +18426,8 @@ function LightningDashboard({
     }
   }, React.createElement(ScoreRing, {
     score: score,
-    size: 52
+    size: 52,
+    animate: false
   }), React.createElement("div", null, React.createElement("div", {
     style: {
       fontFamily: T.serif,
@@ -19263,7 +18660,88 @@ function LightningDashboard({
       color: T.textMid,
       padding: "12px 0"
     }
-  }, "No specific fixes generated. Check the Checks tab for detail."), aiStage !== "chat" && React.createElement("div", {
+  }, "No specific fixes generated. Check the Checks tab for detail."), recommendations.map((r, i) => {
+    const done = doneFixes.has(r.key);
+    return React.createElement("div", {
+      key: r.key,
+      style: {
+        background: done ? T.greenLo : T.card,
+        border: `1px solid ${done ? T.green + "44" : T.border}`,
+        borderRadius: 14,
+        overflow: "hidden",
+        transition: "all .2s"
+      }
+    }, React.createElement("div", {
+      style: {
+        display: "flex",
+        alignItems: "flex-start",
+        gap: 14,
+        padding: "18px 20px"
+      }
+    }, React.createElement("div", {
+      style: {
+        fontFamily: T.mono,
+        fontSize: 11,
+        color: done ? T.green : T.ln,
+        minWidth: 24,
+        marginTop: 2
+      }
+    }, String(i + 1).padStart(2, "0")), React.createElement("div", {
+      style: {
+        flex: 1
+      }
+    }, React.createElement("div", {
+      style: {
+        display: "flex",
+        alignItems: "center",
+        gap: 10,
+        marginBottom: 6
+      }
+    }, React.createElement("div", {
+      style: {
+        fontSize: 14,
+        fontWeight: 700,
+        color: done ? T.textDim : T.text,
+        textDecoration: done ? "line-through" : "none"
+      }
+    }, r.action), React.createElement("span", {
+      style: {
+        fontFamily: T.mono,
+        fontSize: 10,
+        color: T.green,
+        background: T.greenLo,
+        padding: "3px 8px",
+        borderRadius: 5
+      }
+    }, "+", r.impact, " pts"), React.createElement(Tag, {
+      label: r.effort,
+      color: r.effort === "Easy" ? T.green : r.effort === "Medium" ? T.amber : T.red,
+      size: 9
+    })), React.createElement("div", {
+      style: {
+        fontSize: 13,
+        color: T.textMid,
+        lineHeight: 1.6,
+        marginBottom: r.tools?.length ? 12 : 0
+      }
+    }, r.detail), React.createElement(FixToolChips, {
+      tools: r.tools,
+      onReview: onOpenWalletReview
+    })), React.createElement("button", {
+      onClick: () => toggleDone(r.key),
+      style: {
+        background: done ? T.green : "transparent",
+        border: `1.5px solid ${done ? T.green : T.border}`,
+        borderRadius: 8,
+        padding: "6px 10px",
+        color: done ? T.bg : T.textDim,
+        fontSize: 11,
+        cursor: "pointer",
+        transition: "all .2s",
+        whiteSpace: "nowrap"
+      }
+    }, done ? "✓ Done" : "Mark done")));
+  }), aiStage !== "chat" && React.createElement("div", {
     style: {
       background: T.card,
       border: `1px solid ${T.ln}33`,
@@ -19359,7 +18837,7 @@ function LightningDashboard({
       color: T.textMid,
       lineHeight: 1.55
     }
-  }, "Get step-by-step guidance for your ", checks.filter(c => c.status !== "pass").length, " Lightning issues. Only your score and issue names are shared \u2014 never your node ID. ", React.createElement("span", {
+  }, "A walkthrough for your ", checks.filter(c => c.status !== "pass").length, " Lightning issues. You'll see the exact text first \u2014 the score and these findings, never your node pubkey. ", React.createElement("span", {
     style: {
       color: T.textDim
     }
@@ -19377,137 +18855,13 @@ function LightningDashboard({
       fontWeight: 700,
       whiteSpace: "nowrap"
     }
-  }, "Ask now \u2192"))), aiStage === "consent" && React.createElement("div", {
-    style: {
-      padding: "14px 18px",
-      borderTop: `1px solid ${T.borderLo}`,
-      background: T.lnLo
-    }
-  }, React.createElement("div", {
-    style: {
-      fontSize: 13,
-      color: T.textMid,
-      marginBottom: 12,
-      lineHeight: 1.6
-    }
-  }, "The assistant will receive your score (", score, "/100) and issue names only. No node ID, no channel data, no on-chain info. Powered by Claude."), React.createElement("div", {
-    style: {
-      display: "flex",
-      gap: 8
-    }
-  }, React.createElement("button", {
-    onClick: () => setAiStage("chat"),
-    style: {
-      flex: 1,
-      background: T.ln,
-      border: "none",
-      borderRadius: 8,
-      padding: "10px",
-      color: T.bg,
-      fontFamily: T.sans,
-      fontWeight: 700,
-      fontSize: 13,
-      cursor: "pointer"
-    }
-  }, "I understand \u2014 open assistant"), React.createElement("button", {
-    onClick: () => setAiStage(null),
-    style: {
-      background: "transparent",
-      border: `1.5px solid ${T.border}`,
-      borderRadius: 8,
-      padding: "10px 14px",
-      color: T.textDim,
-      fontSize: 12,
-      cursor: "pointer"
-    }
-  }, "Cancel")))), aiStage === "chat" && React.createElement(AiAssistant, {
+  }, "Ask now \u2192")))), aiStage === "chat" && React.createElement(AiAssistant, {
     checks: checks,
     recommendations: recommendations,
     score: score,
     grade: grade,
     onClose: () => setAiStage(null),
     starters: [`Which of my ${checks.filter(c => c.status !== "pass").length} issues should I fix first?`, "How do I switch my node to Tor-only?", "What's the actual risk of peering with a KYC exchange?", "How do I set a pseudonymous node alias?"]
-  }), recommendations.map((r, i) => {
-    const done = doneFixes.has(r.key);
-    return React.createElement("div", {
-      key: r.key,
-      style: {
-        background: done ? T.greenLo : T.card,
-        border: `1px solid ${done ? T.green + "44" : T.border}`,
-        borderRadius: 14,
-        overflow: "hidden",
-        transition: "all .2s"
-      }
-    }, React.createElement("div", {
-      style: {
-        display: "flex",
-        alignItems: "flex-start",
-        gap: 14,
-        padding: "18px 20px"
-      }
-    }, React.createElement("div", {
-      style: {
-        fontFamily: T.mono,
-        fontSize: 11,
-        color: done ? T.green : T.ln,
-        minWidth: 24,
-        marginTop: 2
-      }
-    }, String(i + 1).padStart(2, "0")), React.createElement("div", {
-      style: {
-        flex: 1
-      }
-    }, React.createElement("div", {
-      style: {
-        display: "flex",
-        alignItems: "center",
-        gap: 10,
-        marginBottom: 6
-      }
-    }, React.createElement("div", {
-      style: {
-        fontSize: 14,
-        fontWeight: 700,
-        color: done ? T.textDim : T.text,
-        textDecoration: done ? "line-through" : "none"
-      }
-    }, r.action), React.createElement("span", {
-      style: {
-        fontFamily: T.mono,
-        fontSize: 10,
-        color: T.green,
-        background: T.greenLo,
-        padding: "3px 8px",
-        borderRadius: 5
-      }
-    }, "+", r.impact, " pts"), React.createElement(Tag, {
-      label: r.effort,
-      color: r.effort === "Easy" ? T.green : r.effort === "Medium" ? T.amber : T.red,
-      size: 9
-    })), React.createElement("div", {
-      style: {
-        fontSize: 13,
-        color: T.textMid,
-        lineHeight: 1.6,
-        marginBottom: r.tools?.length ? 12 : 0
-      }
-    }, r.detail), React.createElement(FixToolChips, {
-      tools: r.tools,
-      onReview: onOpenWalletReview
-    })), React.createElement("button", {
-      onClick: () => toggleDone(r.key),
-      style: {
-        background: done ? T.green : "transparent",
-        border: `1.5px solid ${done ? T.green : T.border}`,
-        borderRadius: 8,
-        padding: "6px 10px",
-        color: done ? T.bg : T.textDim,
-        fontSize: 11,
-        cursor: "pointer",
-        transition: "all .2s",
-        whiteSpace: "nowrap"
-      }
-    }, done ? "✓ Done" : "Mark done")));
   }), onNav && React.createElement("div", {
     style: {
       background: T.card,

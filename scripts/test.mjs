@@ -116,6 +116,16 @@ if (/mutinywallet\.com/i.test(jsxSrc) || /Mutiny Wallet/.test(jsxSrc))
   fail("Mutiny Wallet is still recommended — the project shut down and mutinywallet.com is dead");
 else pass("Mutiny Wallet recommendation removed (project shut down)");
 
+if (/RUNNING 10 CHECKS|EJECUTANDO 10 VERIFICACIONES/.test(jsxSrc))
+  fail("scanning screen still says 10 Bitcoin checks — the engine runs 11");
+else if (!jsxSrc.includes("RUNNING 11 CHECKS"))
+  fail("scanning screen is missing RUNNING 11 CHECKS");
+else pass("scanning screen says 11 Bitcoin checks");
+
+if (!/"Ginger Wallet":\s*"https:\/\/gingerwallet\.io"/.test(jsxSrc))
+  fail("Ginger Wallet has no canonical URL — the directory card would be a dead end");
+else pass("Ginger Wallet links to gingerwallet.io");
+
 // PWA manifest must be valid JSON with the keys browsers require for "installable".
 try {
   const m = JSON.parse(readFileSync(join(ROOT, "manifest.webmanifest"), "utf8"));
@@ -523,6 +533,61 @@ else {
   }
 }
 
+// The primary action has to be on screen at a laptop height and a phone height,
+// and a shared ?scan= link must describe the relay honestly.
+{
+  for (const [w, h] of [[1280, 800], [390, 844]]) {
+    const fold = await ctx.newPage();
+    await fold.setViewportSize({ width: w, height: h });
+    try {
+      await fold.goto(`http://127.0.0.1:${PORT}/`, { waitUntil: "load" });
+      await fold.waitForFunction(() => document.getElementById("root")?.childElementCount > 0, { timeout: 15000 });
+      await fold.waitForTimeout(400);
+      const box = await fold.getByRole("button", { name: "Analyze →" }).first().boundingBox();
+      const ticker = await fold.getByText("this audit, run on famous wallets").count();
+      if (!box) fail(`fold ${w}x${h}: Analyze button has no box`);
+      else if (box.y + box.height > h - 4) fail(`fold ${w}x${h}: Analyze button ends at ${Math.round(box.y + box.height)}px, below the ${h}px viewport`);
+      else if (ticker) fail(`fold ${w}x${h}: case-file ticker is still above the scan box`);
+      else pass(`fold ${w}x${h}: Analyze button is on screen (ends at ${Math.round(box.y + box.height)}px)`);
+    } catch (e) {
+      fail(`fold ${w}x${h}: ` + e.message.slice(0, 140));
+    } finally {
+      await fold.close();
+    }
+  }
+  const confirm = await ctx.newPage();
+  try {
+    await confirm.goto(`http://127.0.0.1:${PORT}/?scan=bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4`, { waitUntil: "load" });
+    await confirm.waitForFunction(() => document.getElementById("root")?.childElementCount > 0, { timeout: 15000 });
+    await confirm.waitForTimeout(400);
+    const copy = await confirm.getByRole("dialog", { name: /Confirm shared scan link/i }).innerText();
+    if (/sees your IP/.test(copy)) fail("confirm scan: dialog still says the explorer sees your IP while the relay defaults on");
+    else if (!/privacy relay is on/i.test(copy)) fail("confirm scan: dialog doesn't mention the relay");
+    else pass("confirm scan: shared-link dialog matches the relay-on default");
+  } catch (e) {
+    fail("confirm scan: " + e.message.slice(0, 140));
+  } finally {
+    await confirm.close();
+  }
+  const bad = await ctx.newPage();
+  try {
+    await bad.goto(`http://127.0.0.1:${PORT}/`, { waitUntil: "load" });
+    await bad.waitForFunction(() => document.getElementById("root")?.childElementCount > 0, { timeout: 15000 });
+    await bad.waitForTimeout(300);
+    await bad.locator('input[aria-label*="Paste a Bitcoin address"]').fill("not-a-thing");
+    await bad.getByRole("button", { name: "Analyze →" }).click();
+    await bad.waitForTimeout(250);
+    const shown = await bad.evaluate(() => document.body.innerText);
+    if (!/isn't a Bitcoin address/.test(shown)) fail("invalid input: short error missing");
+    else if (!/xpub/.test(shown)) fail("invalid input: other-formats list didn't open");
+    else pass("invalid input: short error, and the other formats are one disclosure away");
+  } catch (e) {
+    fail("invalid input: " + e.message.slice(0, 140));
+  } finally {
+    await bad.close();
+  }
+}
+
 // Wallet directory page: deep-linkable at /?page=wallets, renders ≥10 reviews.
 {
   const dirPage = await ctx.newPage();
@@ -532,9 +597,11 @@ else {
     await dirPage.waitForTimeout(800);
     const heroOk = await dirPage.getByText(/Bitcoin wallet directory/i).count();
     const visitLinks = await dirPage.locator('a:has-text("Visit")').count();
+    const gingerVisit = await dirPage.locator("article", { hasText: "Ginger Wallet" }).locator('a:has-text("Visit")').count();
     if (heroOk === 0) fail("wallet directory: hero not rendered");
     else if (visitLinks < 10) fail(`wallet directory: only ${visitLinks} outbound links (expected ≥10)`);
-    else pass(`wallet directory renders at /?page=wallets (${visitLinks} outbound links)`);
+    else if (!gingerVisit) fail("wallet directory: Ginger Wallet card has no Visit link");
+    else pass(`wallet directory renders at /?page=wallets (${visitLinks} outbound links, including Ginger)`);
   } catch (e) {
     fail("wallet directory: " + e.message.slice(0, 120));
   } finally {
@@ -1603,6 +1670,20 @@ await page.waitForTimeout(3500);
 const dashText = await page.evaluate(() => document.body.innerText);
 if (!dashText.includes("Grade")) fail("Dashboard didn't render after demo scan");
 else pass("Dashboard renders after demo scan");
+if (await page.getByRole("button", { name: /minimize/i }).count())
+  fail("dashboard: a floating assistant opens on its own and covers the fixes");
+else pass("dashboard: assistant does not cover the fix list on arrival");
+if (/WHO ARE YOU HIDING FROM/.test(dashText))
+  fail("dashboard: adversary ranking is expanded before the user asks");
+else if (!/Rank these for a specific adversary/.test(dashText))
+  fail("dashboard: adversary ranking is not reachable from Fix It");
+else {
+  await page.getByRole("button", { name: "Rank these for a specific adversary →" }).click();
+  await page.waitForTimeout(200);
+  const ranked = await page.evaluate(() => /WHO ARE YOU HIDING FROM/.test(document.body.innerText) && /Surveillance firms/.test(document.body.innerText));
+  if (!ranked) fail("dashboard: adversary ranking didn't open");
+  else pass("dashboard: adversary ranking stays behind one disclosure");
+}
 for (const tab of ["Fix It", "Overview", "Flow", "UTXOs", "Transactions", "Methodology"]) {
   const el = page.getByText(tab, { exact: true }).first();
   if (await el.count() === 0) { fail(`Dashboard tab missing: ${tab}`); continue; }
