@@ -2251,6 +2251,116 @@ function checkBeforeSend(tx, opts) {
     : "Don't broadcast yet: change " + (n === 1 ? "this one thing" : "these " + n + " things") + ".";
   return { ok: n === 0, headline, changes, stays, coinjoin: !!coinjoin };
 }
+function coinName(v) {
+  if (v >= 1e6) return "₿" + (v / 1e8).toFixed(2);
+  return v.toLocaleString() + " sats";
+}
+function labelCoin(u, utxos) {
+  const list = utxos || [];
+  const others = list.filter(x => x !== u);
+  const spendable = list.filter(x => !isDustSat(x.value));
+  const privateCoins = spendable.filter(x => !isRoundSat(x.value));
+  const biggestPrivate = privateCoins.slice().sort((a, b) => b.value - a.value)[0];
+  const biggestOther = others.filter(x => !isDustSat(x.value)).sort((a, b) => b.value - a.value)[0];
+  const typeCount = {};
+  spendable.forEach(x => { const t = x.scriptpubkey_type; if (t) typeCount[t] = (typeCount[t] || 0) + 1; });
+  let majority = null, majorityN = 0;
+  Object.keys(typeCount).forEach(t => { if (typeCount[t] > majorityN) { majority = t; majorityN = typeCount[t]; } });
+  if (isDustSat(u.value)) {
+    return {
+      id: "freeze", label: "freeze", bucket: "dust",
+      reason: "Spending this tells the sender where the rest of the wallet went.",
+      sparrow: "Open View, then Coins. Right-click this coin, then Freeze.",
+      also: "In Electrum, right-click the coin and choose Freeze. In Bitcoin Core it is lockunspent.",
+    };
+  }
+  if (isRoundSat(u.value) && biggestPrivate) {
+    const other = coinName(biggestPrivate.value);
+    return {
+      id: "merge", label: "don't merge with " + other, bucket: "exchange",
+      reason: "This amount looks like an exchange withdrawal. Spending it with the " + other + " coin ties them as one owner.",
+      sparrow: "Open View, then Coins. Leave this coin unchecked when you select the " + other + " coin. Right-click it and Freeze if you are not moving it on its own.",
+      also: "In Electrum, open View, then Coins, and do not select this coin together with the private one.",
+    };
+  }
+  if (isRoundSat(u.value)) {
+    return {
+      id: "alone", label: "spend alone", bucket: "exchange",
+      reason: "This amount looks like an exchange withdrawal. Spend it by itself so it never joins a private coin.",
+      sparrow: "Open View, then Coins. Select only this coin, then Send.",
+      also: "In Electrum, select only this coin on the Coins tab before you send.",
+    };
+  }
+  if (u.scriptpubkey_type && majority && u.scriptpubkey_type !== majority && biggestOther) {
+    const other = coinName(biggestOther.value);
+    return {
+      id: "merge", label: "don't merge with " + other, bucket: "script",
+      reason: "This coin uses a different address type from the rest. Spending them together is a link and a fingerprint.",
+      sparrow: "Open View, then Coins. Do not select this coin in the same send as the " + other + " coin.",
+      also: "In Electrum, leave it unchecked on the Coins tab.",
+    };
+  }
+  const total = spendable.reduce((s, x) => s + x.value, 0);
+  if (total > 0 && spendable.length > 1 && u.value / total > 0.8) {
+    return {
+      id: "alone", label: "spend alone", bucket: "private",
+      reason: "This coin is most of the balance. Spending it shows the recipient almost everything you hold.",
+      sparrow: "On Send, select only this coin. Send the amount you owe so the change is a new coin.",
+      also: "In Electrum, select only this coin, and turn on Use change addresses.",
+    };
+  }
+  return {
+    id: "safe", label: "safe to spend", bucket: "private",
+    reason: "Nothing in this coin's amount or address type ties it to a different source.",
+    sparrow: "Open View, then Coins, and select this coin. Leave dust and exchange-shaped coins unchecked.",
+    also: "In Electrum, select it on the Coins tab and leave the others unchecked.",
+  };
+}
+function groupCoins(utxos) {
+  const coins = (utxos || []).map((u, i) => ({ i, utxo: u, ...labelCoin(u, utxos) }));
+  const titles = { dust: "Freeze these", exchange: "Exchange-shaped", script: "Different address type", private: "Private coins" };
+  const buckets = ["dust", "exchange", "script", "private"].map(id => ({
+    id, title: titles[id], coins: coins.filter(c => c.bucket === id),
+  })).filter(b => b.coins.length);
+  const spendGroups = buckets.filter(b => b.id !== "dust");
+  return { coins, buckets, separate: spendGroups.length >= 2 };
+}
+function previewCoinSpend(selected) {
+  const coins = selected || [];
+  if (!coins.length) return null;
+  const sum = coins.reduce((s, c) => s + c.utxo.value, 0);
+  const fee = Math.min(1500, Math.max(200, Math.floor(sum / 50)));
+  const notes = coins.map(c => ({
+    cluster: c.bucket,
+    reused: false,
+    toxic: c.bucket === "dust" || c.bucket === "exchange",
+    kyc: c.bucket === "exchange",
+    exchange: c.bucket === "exchange",
+  }));
+  const vin = coins.map((c, i) => ({
+    txid: String(c.utxo.txid || "coin") + ":" + i,
+    vout: c.utxo.vout || 0,
+    sequence: 0xfffffffd,
+    prevout: {
+      value: c.utxo.value,
+      scriptpubkey_type: c.utxo.scriptpubkey_type || "v0_p2wpkh",
+      scriptpubkey_address: "coin-" + c.bucket + "-" + i,
+    },
+  }));
+  const type = (coins[0].utxo.scriptpubkey_type) || "v0_p2wpkh";
+  let pay = Math.max(8000, Math.floor((sum - fee) * 0.45));
+  if (isRoundSat(pay)) pay += 137;
+  let change = sum - pay - fee;
+  if (change < 800) { pay = Math.max(800, sum - fee - 1000); change = sum - pay - fee; }
+  let vout = change >= 546
+    ? [
+        { value: pay, scriptpubkey_type: type, scriptpubkey_address: "payee-fresh" },
+        { value: change, scriptpubkey_type: type, scriptpubkey_address: "change-fresh" },
+      ]
+    : [{ value: Math.max(0, sum - fee), scriptpubkey_type: type, scriptpubkey_address: "payee-fresh" }];
+  if (vout.length === 2 && vout[0].value < vout[1].value) vout = [vout[1], vout[0]];
+  return checkBeforeSend({ version: 2, locktime: 840000, fee, vin, vout }, { notes });
+}
 function runSendCheck(raw) {
   const s = (raw || "").trim();
   if (!s) return { error: "Paste an unsigned PSBT, or describe the inputs and outputs." };
@@ -8227,6 +8337,7 @@ function Dashboard({ address, addrInfo, utxos, txs, txSample, isMobile, onBack, 
   const setSimpleModeSync = (val) => { setSimpleMode(val); onSimpleModeChange && onSimpleModeChange(val); };
   const [shareOpen, setShareOpen] = useState(false);
   const [selectedUtxo, setSelectedUtxo] = useState(null);
+  const [pickedCoins, setPickedCoins] = useState([]);
   const [doneFixes, setDoneFixes] = useState(() => getDoneFixes(address));
   const [statsOpen, setStatsOpen] = useState(false);
   const [moreFixes, setMoreFixes] = useState(false);
@@ -8789,61 +8900,97 @@ function Dashboard({ address, addrInfo, utxos, txs, txSample, isMobile, onBack, 
         )}
 
         {/* ── UTXOs ── */}
-        {tab === "UTXOs" && (
+        {tab === "UTXOs" && (() => {
+          const plan = groupCoins(utxos);
+          const picked = plan.coins.filter(c => pickedCoins.includes(c.i));
+          const preview = picked.length ? previewCoinSpend(picked) : null;
+          const toggleCoin = (i) => setPickedCoins(prev => prev.includes(i) ? prev.filter(x => x !== i) : [...prev, i]);
+          return (
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             <div style={{ fontSize: 13, color: T.textMid, marginBottom: 6 }}>
-              <strong style={{ color: T.text }}>{utxos.length}</strong> unspent outputs — each is a separate chunk of Bitcoin. Click any row to expand.
+              <strong style={{ color: T.text }}>{utxos.length}</strong> unspent outputs — each is a separate chunk of Bitcoin. Click any row to expand. Select coins to see what spending them together would reveal.
             </div>
+            {plan.separate && (
+              <div style={{ background: T.card, border: `1px solid ${T.amber}55`, borderRadius: 14, padding: isMobile ? "12px 14px" : "14px 16px" }}>
+                <div style={{ fontSize: 15, fontWeight: 700, color: T.text }}>Coins that must never be spent together</div>
+                <p style={{ fontSize: 14, color: T.text, lineHeight: 1.45, margin: "4px 0 8px" }}>An observer learns they are one wallet the moment one transaction spends a coin from each group.</p>
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  {plan.buckets.map(b => (
+                    <div key={b.id} style={{ fontSize: 14, color: T.textMid, lineHeight: 1.4 }}>
+                      <span style={{ color: T.text, fontWeight: 700 }}>{b.title}. </span>
+                      {b.coins.map(c => coinName(c.utxo.value)).join(", ")}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            {preview && (
+              <div style={{ background: preview.ok ? T.greenLo : T.card, border: `1px solid ${preview.ok ? T.green : T.amber}66`, borderRadius: 14, padding: isMobile ? "12px 14px" : "14px 16px" }}>
+                <div style={{ fontSize: 13, color: T.textMid }}>If you spend these {picked.length} together</div>
+                <div style={{ fontFamily: T.serif, fontSize: isMobile ? 18 : 20, color: T.text, marginTop: 4 }}>{preview.headline}</div>
+                <p style={{ fontSize: 14, color: T.text, lineHeight: 1.45, margin: "6px 0 0" }}>{preview.ok ? "An observer learns about as much as they would from a normal payment." : preview.changes[0].learns}</p>
+                {!preview.ok && preview.changes[0] && (
+                  <p style={{ fontSize: 14, color: T.textMid, lineHeight: 1.45, margin: "6px 0 0" }}>How, in {preview.changes[0].where}: {preview.changes[0].steps[0]}</p>
+                )}
+              </div>
+            )}
             {utxos.length === 0 && (
               <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 14, padding: 40, textAlign: "center", fontSize: 14, color: T.textMid }}>
                 No unspent outputs. This address has been fully spent.
               </div>
             )}
-            {utxos.map((u, i) => {
+            {plan.coins.map((c) => {
+              const u = c.utxo;
+              const i = c.i;
               const risk = classifyUtxo(u);
               const { color } = RISK_META[risk];
-              const flags = [];
-              if (isDustSat(u.value)) flags.push({ t: "Dust — freeze this", c: T.red });
-              if (isRoundSat(u.value)) flags.push({ t: "Round amount", c: T.btc });
               const open = selectedUtxo === i;
+              const on = pickedCoins.includes(i);
               return (
                 <div key={u.txid + i} onClick={() => setSelectedUtxo(open ? null : i)}
-                  style={{ background: T.card, border: `1.5px solid ${open ? color : T.border}`, borderRadius: 14, padding: isMobile ? "14px" : "16px 20px", cursor: "pointer", transition: "all .15s", animation: `fadeUp .3s ease ${i * .05}s both`, opacity: 0 }}
+                  style={{ background: T.card, border: `1.5px solid ${on ? T.cyan : open ? color : T.border}`, borderRadius: 14, padding: isMobile ? "14px" : "16px 20px", cursor: "pointer", transition: "all .15s", animation: `fadeUp .3s ease ${i * .05}s both`, opacity: 0 }}
                   onMouseEnter={e => !open && (e.currentTarget.style.borderColor = T.cyan + "44")}
-                  onMouseLeave={e => !open && (e.currentTarget.style.borderColor = T.border)}>
-                  <div style={{ display: "flex", alignItems: isMobile ? "flex-start" : "center", flexDirection: isMobile ? "column" : "row", gap: isMobile ? 8 : 18 }}>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontFamily: T.serif, fontSize: isMobile ? 20 : 26, color, lineHeight: 1 }}>{fmt.btcRow(u.value)}</div>
-                      <div style={{ fontFamily: T.mono, fontSize: 10, color: T.textDim, marginTop: 4 }}>{fmt.txid(u.txid)} · {u.status?.block_time ? fmt.age(u.status.block_time) : "unconfirmed"}</div>
-                    </div>
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                      {flags.length === 0 ? <Tag label="Clean" color={T.green} size={9} /> : flags.map((f, fi) => <Tag key={fi} label={f.t} color={f.c} size={9} />)}
-                      <Tag label={RISK_META[risk].label} color={color} size={9} />
-                    </div>
+                  onMouseLeave={e => !open && !on && (e.currentTarget.style.borderColor = T.border)}>
+                  <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
+                    <label onClick={e => e.stopPropagation()} style={{ display: "flex", alignItems: "flex-start", gap: 10, flex: 1, minWidth: 0, cursor: "pointer" }}>
+                      <input type="checkbox" checked={on} onChange={() => toggleCoin(i)}
+                        style={{ width: 18, height: 18, marginTop: 4, flexShrink: 0, accentColor: T.cyan }} />
+                      <span style={{ minWidth: 0 }}>
+                        <span style={{ display: "block", fontFamily: T.serif, fontSize: isMobile ? 20 : 26, color, lineHeight: 1 }}>{fmt.btcRow(u.value)}</span>
+                        <span style={{ display: "block", fontSize: 15, fontWeight: 700, color: T.text, marginTop: 6 }}>{c.label}</span>
+                        <span style={{ display: "block", fontSize: 14, color: T.textMid, lineHeight: 1.45, marginTop: 2 }}>{c.reason}</span>
+                        <span style={{ display: "block", fontSize: 14, color: T.text, lineHeight: 1.45, marginTop: 4 }}>In Sparrow: {c.sparrow}</span>
+                        {c.also && <span style={{ display: "block", fontSize: 13, color: T.textMid, lineHeight: 1.45, marginTop: 2 }}>{c.also}</span>}
+                        <span style={{ display: "block", fontFamily: T.mono, fontSize: 12, color: T.textDim, marginTop: 4 }}>{fmt.txid(u.txid)} · {u.status?.block_time ? fmt.age(u.status.block_time) : "unconfirmed"}</span>
+                      </span>
+                    </label>
                   </div>
                   {open && (
-                    <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${T.borderLo}`, display: "flex", flexWrap: "wrap", gap: 20, alignItems: "flex-end" }}>
-                      <div><div style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim, marginBottom: 4 }}>TXID</div><div style={{ fontFamily: T.mono, fontSize: 11, color: T.textMid, wordBreak: "break-all" }}>{u.txid}</div></div>
-                      <div><div style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim, marginBottom: 4 }}>SATOSHIS</div><div style={{ fontFamily: T.mono, fontSize: 11, color: T.textMid }}>{u.value.toLocaleString()}</div></div>
-                      <div><div style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim, marginBottom: 4 }}>CONFIRMED</div><div style={{ fontFamily: T.mono, fontSize: 11, color: u.status?.confirmed ? T.green : T.btc }}>{u.status?.confirmed ? "Yes" : "Pending"}</div></div>
-                      {u.scriptpubkey_type && <div><div style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim, marginBottom: 4 }}>SCRIPT TYPE</div><div style={{ fontFamily: T.mono, fontSize: 11, color: T.textMid }}>{u.scriptpubkey_type}</div></div>}
-                      {onInspectTx && /^[0-9a-fA-F]{64}$/.test(u.txid) && (
-                        <button onClick={e => { e.stopPropagation(); const full = txs.find(t => t.txid === u.txid); if (full) onInspectTx(full); else if (onInspectTxid) onInspectTxid(u.txid); }}
-                          aria-label={"Deep-inspect the transaction that created this UTXO: " + u.txid}
-                          title="Full forensics on the transaction that created this coin — entropy, deterministic links, fingerprint (uses already-loaded data when available)"
-                          style={{ background: "transparent", border: `1px solid ${T.cyan}44`, borderRadius: 6, padding: "4px 8px", color: T.cyan, fontFamily: T.mono, fontSize: 9, cursor: "pointer", letterSpacing: 0.5, whiteSpace: "nowrap", marginLeft: "auto", transition: "all .15s" }}
-                          onMouseOver={e => { e.currentTarget.style.background = T.cyan; e.currentTarget.style.color = T.bg; }}
-                          onMouseOut={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = T.cyan; }}>
-                          Inspect funding tx →
-                        </button>
-                      )}
+                    <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${T.borderLo}` }}>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 20, alignItems: "flex-end" }}>
+                        <div><div style={{ fontFamily: T.mono, fontSize: 11, color: T.textDim, marginBottom: 4 }}>TXID</div><div style={{ fontFamily: T.mono, fontSize: 12, color: T.textMid, wordBreak: "break-all" }}>{u.txid}</div></div>
+                        <div><div style={{ fontFamily: T.mono, fontSize: 11, color: T.textDim, marginBottom: 4 }}>SATOSHIS</div><div style={{ fontFamily: T.mono, fontSize: 12, color: T.textMid }}>{u.value.toLocaleString()}</div></div>
+                        <div><div style={{ fontFamily: T.mono, fontSize: 11, color: T.textDim, marginBottom: 4 }}>CONFIRMED</div><div style={{ fontFamily: T.mono, fontSize: 12, color: u.status?.confirmed ? T.green : T.btc }}>{u.status?.confirmed ? "Yes" : "Pending"}</div></div>
+                        {u.scriptpubkey_type && <div><div style={{ fontFamily: T.mono, fontSize: 11, color: T.textDim, marginBottom: 4 }}>SCRIPT TYPE</div><div style={{ fontFamily: T.mono, fontSize: 12, color: T.textMid }}>{u.scriptpubkey_type}</div></div>}
+                        {onInspectTx && /^[0-9a-fA-F]{64}$/.test(u.txid) && (
+                          <button onClick={e => { e.stopPropagation(); const full = txs.find(t => t.txid === u.txid); if (full) onInspectTx(full); else if (onInspectTxid) onInspectTxid(u.txid); }}
+                            aria-label={"Deep-inspect the transaction that created this UTXO: " + u.txid}
+                            title="Full forensics on the transaction that created this coin — entropy, deterministic links, fingerprint (uses already-loaded data when available)"
+                            style={{ background: "transparent", border: `1px solid ${T.cyan}44`, borderRadius: 6, padding: "4px 8px", color: T.cyan, fontFamily: T.mono, fontSize: 11, cursor: "pointer", letterSpacing: 0.5, whiteSpace: "nowrap", marginLeft: "auto", transition: "all .15s" }}
+                            onMouseOver={e => { e.currentTarget.style.background = T.cyan; e.currentTarget.style.color = T.bg; }}
+                            onMouseOut={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = T.cyan; }}>
+                            Inspect funding tx →
+                          </button>
+                        )}
+                      </div>
                     </div>
                   )}
                 </div>
               );
             })}
           </div>
-        )}
+          );
+        })()}
 
         {/* ── TRANSACTIONS ── */}
         {tab === "Transactions" && (
@@ -9592,6 +9739,7 @@ window.__ANONSCORE_TEST__ = Object.freeze({
   parsePsbt, parseRawTx, classifyScript, parseTransactionInput, detectTxInput, normalizeEsploraTx,
   analyzeTx, guessChange, clusterUnification, feeRate, DEMO_PSBT,
   parseSendDescription, checkBeforeSend, runSendCheck,
+  labelCoin, groupCoins, previewCoinSpend, coinName,
   // transaction entropy / linkability (Boltzmann · validated vs LaurentMT vectors)
   txInterpretations, txLinkability, isCoinJoinShape, classifyCoinjoin,
   // wallet fingerprint (structural tells: version/locktime/RBF/BIP69/script-mix/low-r)

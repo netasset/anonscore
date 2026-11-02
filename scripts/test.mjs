@@ -1773,6 +1773,40 @@ console.log("[5c] Before-you-send check");
   if (!badSend.length) pass(`before-you-send: ${send.length}/${send.length} passed`);
 }
 
+// Per-coin labels. Separate from the engine block.
+console.log("[5d] Coin control");
+{
+  const coins = await page.evaluate(() => {
+    const E = window.__ANONSCORE_TEST__;
+    const r = [];
+    const t = (name, cond) => r.push({ name, ok: !!cond });
+    const dust = { value: 500, scriptpubkey_type: "v0_p2wpkh" };
+    const round = { value: 5000000, scriptpubkey_type: "v0_p2wpkh" };
+    const priv = { value: 84700000, scriptpubkey_type: "v0_p2wpkh" };
+    const set = [round, priv, dust];
+    t("coin: dust is freeze", E.labelCoin(dust, set).id === "freeze" && E.labelCoin(dust, set).label === "freeze");
+    const roundLab = E.labelCoin(round, set);
+    t("coin: a round coin must not merge with the private one", roundLab.label === "don't merge with ₿0.85" && /View, then Coins/.test(roundLab.sparrow) && /Electrum/.test(roundLab.also));
+    t("coin: a private coin that is most of the balance is spend alone", E.labelCoin(priv, set).label === "spend alone");
+    const evenA = { value: 30000001, scriptpubkey_type: "v0_p2wpkh" };
+    const evenB = { value: 28000003, scriptpubkey_type: "v0_p2wpkh" };
+    t("coin: two similar private coins are safe to spend", E.labelCoin(evenA, [evenA, evenB]).label === "safe to spend" && E.labelCoin(evenB, [evenA, evenB]).label === "safe to spend");
+    const onlyRound = E.labelCoin({ value: 1000000, scriptpubkey_type: "v0_p2wpkh" }, [{ value: 1000000, scriptpubkey_type: "v0_p2wpkh" }]);
+    t("coin: a round coin with nothing private is spend alone", onlyRound.label === "spend alone");
+    const g = E.groupCoins(set);
+    t("coin: exchange and private are groups that must stay apart", g.separate === true && g.buckets.some(b => b.id === "exchange") && g.buckets.some(b => b.id === "dust"));
+    const both = g.coins.filter(c => c.bucket === "exchange" || c.bucket === "private");
+    const prev = E.previewCoinSpend(both);
+    t("coin: spending the two groups together is not safe", !!prev && prev.ok === false && /^Don't broadcast yet/.test(prev.headline) && prev.changes.some(c => c.id === "merge"));
+    const alone = E.previewCoinSpend(g.coins.filter(c => c.bucket === "private"));
+    t("coin: the private coin alone is safe to send", !!alone && alone.ok === true && alone.headline === "Safe to send.");
+    return r;
+  });
+  const badCoins = coins.filter(u => !u.ok);
+  badCoins.forEach(u => fail("coin: " + u.name));
+  if (!badCoins.length) pass(`coin control: ${coins.length}/${coins.length} passed`);
+}
+
 // Run a demo scan end-to-end
 console.log("[6/7] Demo scan flow");
 // Re-navigate to a clean landing (earlier blocks switched language / visited
@@ -1882,6 +1916,26 @@ async function axeRun(label, pg) {
   else pass(`a11y ${label}: 0 critical/serious`);
 }
 await axeRun("Dashboard", page);
+{
+  try {
+    await page.getByText("UTXOs", { exact: true }).first().click();
+    await page.waitForTimeout(400);
+    const labels = await page.evaluate(() => {
+      const t = document.body.innerText;
+      return /don't merge with/.test(t) && /safe to spend/.test(t) && /must never be spent together/.test(t) && /In Sparrow:/.test(t);
+    });
+    if (!labels) fail("coin control: UTXO labels or the do-not-merge groups are missing");
+    else pass("coin control: each coin has a plain label, and mixed groups are named");
+    const boxes = page.getByRole("checkbox");
+    await boxes.nth(0).check();
+    await boxes.nth(1).check();
+    await page.waitForTimeout(200);
+    const together = await page.evaluate(() => /If you spend these 2 together/.test(document.body.innerText) && /Don't broadcast yet/.test(document.body.innerText));
+    if (!together) fail("coin control: spending a mixed pair did not show the send verdict");
+    else pass("coin control: a mixed selection shows the before-you-send verdict");
+    await axeRun("Coin control", page);
+  } catch (e) { fail("coin control: " + e.message.slice(0, 160)); }
+}
 // a11y on the Transaction Inspector with a full report on screen
 {
   const axePage = await ctx.newPage();
