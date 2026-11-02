@@ -14640,6 +14640,329 @@ function computeCounterparties(txs, address, exclude) {
     kind: e.paid && e.received ? "both" : e.paid ? "paid" : "received"
   })).sort((a, b) => b.count - a.count);
 }
+const LINK_DRAW_CAP = 7;
+const LINK_COLOR = {
+  "common-input": T.red,
+  "address reuse": T.btc,
+  "change detection": T.amber,
+  "round amount": T.ln
+};
+function linkShort(s, head, tail) {
+  if (!s) return "";
+  if (s === "DEMO" || s === "DEMO_A") return "this address";
+  if (s.length <= head + tail + 1) return s;
+  return s.slice(0, head) + "…" + s.slice(-tail);
+}
+function linkSat(v) {
+  if (v == null) return "";
+  if (v >= 1e8) return "₿" + (v / 1e8).toFixed(2);
+  if (v >= 1e6) return (v / 1e6).toFixed(2) + "M sats";
+  return v.toLocaleString() + " sats";
+}
+function buildLinkageMap(txs, address, opts) {
+  const opt = opts || {};
+  const list = txs || [];
+  const items = [];
+  const seen = new Set();
+  const push = item => {
+    if (!item || !item.id || seen.has(item.id)) return;
+    seen.add(item.id);
+    items.push(item);
+  };
+  const cluster = computeCluster(list, address);
+  const txFor = new Map();
+  list.forEach(tx => {
+    const vin = tx.vin || [],
+      vout = tx.vout || [];
+    if (isCoinJoinShape(vin, vout)) return;
+    const inAddrs = vin.map(v => v.prevout && v.prevout.scriptpubkey_address).filter(Boolean);
+    if (!inAddrs.includes(address)) return;
+    inAddrs.forEach(a => {
+      if (a !== address && !txFor.has(a)) txFor.set(a, tx.txid);
+    });
+  });
+  cluster.linked.forEach(n => {
+    push({
+      id: "addr:" + n.addr,
+      kind: "address",
+      heuristic: "common-input",
+      label: linkShort(n.addr, 8, 4),
+      full: n.addr,
+      detail: "Spent together" + (n.count > 1 ? " " + n.count + " times" : "") + ". An observer treats this as the same wallet."
+    });
+  });
+  [...new Set(cluster.linked.map(n => txFor.get(n.addr)).filter(Boolean))].forEach(txid => {
+    push({
+      id: "tx:" + txid,
+      kind: "tx",
+      heuristic: "common-input",
+      label: linkShort(txid, 8, 4),
+      full: txid,
+      detail: "This transaction is the link. It spends your address together with the others."
+    });
+  });
+  const rc = opt.receiveCount != null ? opt.receiveCount : null;
+  if (rc != null && rc >= 2) {
+    push({
+      id: "reuse:self",
+      kind: "address",
+      heuristic: "address reuse",
+      label: rc + " receives",
+      full: address || "",
+      detail: "This address received " + rc + " times. Every payment on it is one trail."
+    });
+  }
+  list.forEach(tx => {
+    const vin = tx.vin || [],
+      vout = tx.vout || [];
+    if (isCoinJoinShape(vin, vout)) return;
+    const inAddrs = vin.map(v => v.prevout && v.prevout.scriptpubkey_address).filter(Boolean);
+    const inSet = new Set(inAddrs);
+    const youIn = inAddrs.includes(address);
+    vout.forEach((o, i) => {
+      if (!o.scriptpubkey_address || !inSet.has(o.scriptpubkey_address)) return;
+      if (!youIn && o.scriptpubkey_address !== address) return;
+      push({
+        id: "reuse:" + (tx.txid || "tx") + ":" + i,
+        kind: "address",
+        heuristic: "address reuse",
+        label: linkShort(o.scriptpubkey_address, 8, 4),
+        full: o.scriptpubkey_address,
+        detail: "An output pays an address that also spent here, so the balance is visible."
+      });
+    });
+    const g = guessChange(tx);
+    if (g && g.confidence !== "Low") {
+      const o = vout[g.index] || {};
+      const why = g.confidence === "High" ? "It pays an address that already spent in this transaction." : "Only one output matches the input address type, so that one is the change.";
+      push({
+        id: "chg:" + (tx.txid || "tx") + ":" + g.index,
+        kind: "change",
+        heuristic: "change detection",
+        label: "change " + (o.value != null ? linkSat(o.value) : ""),
+        full: (tx.txid || "") + "#" + g.index,
+        detail: why
+      });
+    }
+    vout.forEach((o, i) => {
+      if (o.scriptpubkey_type === "op_return" || !isRoundSat(o.value)) return;
+      push({
+        id: "round:" + (tx.txid || "tx") + ":" + i,
+        kind: "output",
+        heuristic: "round amount",
+        label: linkSat(o.value),
+        full: String(o.value),
+        detail: "A round amount. Observers read that as an exchange withdrawal."
+      });
+    });
+  });
+  const picked = [];
+  const have = new Set();
+  const take = (pred, n) => {
+    let k = 0;
+    for (const it of items) {
+      if (k >= n) break;
+      if (have.has(it.id) || !pred(it)) continue;
+      have.add(it.id);
+      picked.push(it);
+      k++;
+    }
+  };
+  take(i => i.kind === "address" && i.heuristic === "common-input", 4);
+  take(i => i.kind === "tx", 1);
+  take(i => i.heuristic === "address reuse", 1);
+  take(i => i.heuristic === "change detection", 1);
+  take(i => i.heuristic === "round amount", 1);
+  for (const it of items) {
+    if (!have.has(it.id)) {
+      have.add(it.id);
+      picked.push(it);
+    }
+  }
+  const shown = picked.slice(0, LINK_DRAW_CAP);
+  const hidden = picked.length - shown.length;
+  return {
+    items: shown,
+    total: picked.length,
+    hidden,
+    more: hidden > 0 ? "+" + hidden + " more" : "",
+    cluster: cluster.linked.length
+  };
+}
+function LinkageMap({
+  map
+}) {
+  const items = map && map.items || [];
+  const [sel, setSel] = useState(null);
+  if (!map || !map.total) {
+    return React.createElement("p", {
+      style: {
+        fontSize: 14,
+        color: T.textMid,
+        lineHeight: 1.5,
+        margin: "12px 0 0"
+      }
+    }, "From the transactions loaded, an observer cannot tie another address, transaction, or change output to this one.");
+  }
+  const rows = items.length + (map.hidden > 0 ? 1 : 0);
+  const rowH = 34;
+  const W = 360;
+  const H = rows * rowH + 10;
+  const yOf = i => 6 + i * rowH + rowH / 2;
+  const hubY = H / 2;
+  return React.createElement("figure", {
+    style: {
+      margin: "14px 0 0"
+    }
+  }, React.createElement("figcaption", {
+    style: {
+      fontSize: 14,
+      fontWeight: 700,
+      color: T.text,
+      lineHeight: 1.4
+    }
+  }, "What an observer can already link"), React.createElement("p", {
+    style: {
+      fontSize: 13,
+      color: T.textMid,
+      lineHeight: 1.45,
+      margin: "4px 0 8px"
+    }
+  }, "You are the hub. Each line is a link the chain already gives an observer."), React.createElement("svg", {
+    viewBox: `0 0 ${W} ${H}`,
+    role: "img",
+    "aria-hidden": "true",
+    focusable: "false",
+    style: {
+      display: "block",
+      width: "100%",
+      maxWidth: 560,
+      height: "auto"
+    }
+  }, React.createElement("line", {
+    x1: "60",
+    y1: hubY,
+    x2: "74",
+    y2: hubY,
+    stroke: T.cyan,
+    strokeWidth: "2"
+  }), rows > 1 && React.createElement("line", {
+    x1: "74",
+    y1: yOf(0),
+    x2: "74",
+    y2: yOf(rows - 1),
+    stroke: T.border,
+    strokeWidth: "1.5"
+  }), React.createElement("circle", {
+    cx: "34",
+    cy: hubY,
+    r: "22",
+    fill: T.bg,
+    stroke: T.cyan,
+    strokeWidth: "2"
+  }), React.createElement("text", {
+    x: "34",
+    y: hubY + 4,
+    textAnchor: "middle",
+    fontFamily: T.sans,
+    fontSize: "13",
+    fontWeight: "700",
+    fill: T.cyan
+  }, "You"), items.map((item, i) => {
+    const y = yOf(i);
+    const col = LINK_COLOR[item.heuristic] || T.text;
+    const on = sel === item.id;
+    return React.createElement("g", {
+      key: item.id
+    }, React.createElement("line", {
+      x1: "74",
+      y1: y,
+      x2: "90",
+      y2: y,
+      stroke: col,
+      strokeWidth: on ? 3 : 2
+    }), React.createElement("text", {
+      x: "96",
+      y: y + 4,
+      fontFamily: T.mono,
+      fontSize: "12",
+      fill: col
+    }, item.heuristic), React.createElement("text", {
+      x: "228",
+      y: y + 4,
+      fontFamily: T.mono,
+      fontSize: "12",
+      fill: on ? T.cyan : T.text
+    }, item.label));
+  }), map.hidden > 0 && React.createElement("g", null, React.createElement("line", {
+    x1: "74",
+    y1: yOf(items.length),
+    x2: "90",
+    y2: yOf(items.length),
+    stroke: T.textDim,
+    strokeWidth: "1.5",
+    strokeDasharray: "3 3"
+  }), React.createElement("text", {
+    x: "96",
+    y: yOf(items.length) + 4,
+    fontFamily: T.mono,
+    fontSize: "12",
+    fill: T.textMid
+  }, map.more))), React.createElement("ul", {
+    "aria-label": "Links an observer can already make",
+    style: {
+      listStyle: "none",
+      margin: "8px 0 0",
+      padding: 0,
+      display: "flex",
+      flexDirection: "column",
+      gap: 6
+    }
+  }, items.map(item => {
+    const on = sel === item.id;
+    return React.createElement("li", {
+      key: item.id
+    }, React.createElement("button", {
+      type: "button",
+      "aria-pressed": on,
+      onClick: () => setSel(item.id),
+      onFocus: () => setSel(item.id),
+      style: {
+        display: "block",
+        width: "100%",
+        textAlign: "left",
+        background: on ? T.cyanLo : T.surface,
+        border: `1px solid ${on ? T.cyan : T.border}`,
+        borderLeft: `3px solid ${LINK_COLOR[item.heuristic] || T.cyan}`,
+        borderRadius: 10,
+        padding: "7px 10px",
+        cursor: "pointer",
+        fontFamily: T.sans
+      }
+    }, React.createElement("span", {
+      style: {
+        fontFamily: T.mono,
+        fontSize: 12,
+        color: T.text
+      }
+    }, item.heuristic), React.createElement("span", {
+      style: {
+        display: "block",
+        fontSize: 14,
+        color: T.text,
+        lineHeight: 1.45,
+        marginTop: 2
+      }
+    }, item.label, ". ", item.detail)));
+  }), map.hidden > 0 && React.createElement("li", {
+    style: {
+      fontSize: 14,
+      color: T.textMid,
+      lineHeight: 1.4,
+      paddingLeft: 2
+    }
+  }, map.more)));
+}
 function isLookalikeAddress(a, b) {
   if (!a || !b || a === b) return false;
   const pfx = s => s.startsWith("bc1q") || s.startsWith("bc1p") ? 4 : s[0] === "1" || s[0] === "3" ? 1 : 0;
@@ -16098,6 +16421,7 @@ function ResultHero({
   riskLabel,
   riskColor,
   verdict,
+  linkage,
   fail,
   warn,
   pass,
@@ -16161,7 +16485,9 @@ function ResultHero({
       lineHeight: 1.55,
       margin: "10px 0 0"
     }
-  }, verdict))), React.createElement("div", {
+  }, verdict))), linkage && React.createElement(LinkageMap, {
+    map: linkage
+  }), React.createElement("div", {
     style: {
       display: "flex",
       alignItems: "center",
@@ -16315,6 +16641,9 @@ function Dashboard({
   const txCount = addrInfo?.chain_stats?.tx_count || txs.length;
   const receiveCount = addrInfo?.chain_stats?.funded_txo_count ?? null;
   const analysis = useMemo(() => runEngine(utxos, txs, txCount, receiveCount), [utxos, txs, txCount, receiveCount]);
+  const linkage = useMemo(() => buildLinkageMap(txs, address, {
+    receiveCount: receiveCount != null ? receiveCount : txCount
+  }), [txs, address, receiveCount, txCount]);
   const {
     score,
     grade,
@@ -16671,6 +17000,7 @@ function Dashboard({
       kind: "btc",
       clusterN
     }),
+    linkage: linkage,
     fail: checks.filter(c => c.status === "fail").length,
     warn: checks.filter(c => c.status === "warn").length,
     pass: checks.filter(c => c.status === "pass").length,
@@ -19651,6 +19981,7 @@ window.__ANONSCORE_TEST__ = Object.freeze({
   computePoisoning,
   isLookalikeAddress,
   computeActivityClock,
+  buildLinkageMap,
   isValidBitcoinAddress,
   isValidLightningPubkey,
   detectInputType,

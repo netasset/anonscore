@@ -1658,6 +1658,48 @@ else {
   if (!bad.length) pass(`engine unit tests: ${unit.results.length}/${unit.results.length} passed (cluster, poisoning, clock, engine, tx-inspector, xpub+wallet)`);
 }
 
+// Linkage map — new analysis on top of the cluster / change / round checks.
+// Kept out of the engine block above so those tests stay unmodified.
+console.log("[5b] Linkage map");
+{
+  const link = await page.evaluate(() => {
+    const E = window.__ANONSCORE_TEST__;
+    const r = [];
+    const t = (name, cond) => r.push({ name, ok: !!cond });
+    const pv = a => ({ prevout: { scriptpubkey_address: a, scriptpubkey_type: "v0_p2wpkh", value: 50000001 } });
+    const me = "bc1qm34lsc65zpw79lxes69zkqmk6ee3ewf0j77s3h";
+    const a = "bc1qaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    const b = "bc1qbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+    const spend = { txid: "tlink", vin: [pv(me), pv(a), pv(b)], vout: [{ value: 90000001, scriptpubkey_address: "bc1qdest000000000000000000000000000000000" }] };
+    const m = E.buildLinkageMap([spend], me, { receiveCount: 1 });
+    t("linkage: common-input draws the other addresses and the transaction",
+      m.cluster === 2 && m.items.some(i => i.heuristic === "common-input" && i.kind === "address" && i.full === a) && m.items.some(i => i.kind === "tx" && i.full === "tlink"));
+    const cj = { txid: "tcj", vin: [pv(me), pv(a), pv(b)], vout: [{ value: 5e6 }, { value: 5e6 }, { value: 5e6 }, { value: 5e6 }, { value: 1e6 }] };
+    const mc = E.buildLinkageMap([cj], me, { receiveCount: 1 });
+    t("linkage: a coinjoin is not drawn as one owner", mc.cluster === 0 && !mc.items.some(i => i.heuristic === "common-input"));
+    const ch = { txid: "tch", vin: [{ prevout: { scriptpubkey_address: me, scriptpubkey_type: "v0_p2wpkh", value: 100000 } }], vout: [
+      { value: 60000, scriptpubkey_type: "p2pkh", scriptpubkey_address: "bc1qpay000000000000000000000000000000000" },
+      { value: 30000, scriptpubkey_type: "v0_p2wpkh", scriptpubkey_address: "bc1qchg000000000000000000000000000000000" },
+    ] };
+    const mh = E.buildLinkageMap([ch], me, { receiveCount: 3 });
+    t("linkage: change detection and address reuse are labeled",
+      mh.items.some(i => i.heuristic === "change detection" && i.kind === "change") && mh.items.some(i => i.heuristic === "address reuse"));
+    const round = { txid: "trnd", vin: [pv(me)], vout: [{ value: 5000000, scriptpubkey_address: "bc1qround00000000000000000000000000000000" }, { value: 1234567, scriptpubkey_address: "bc1qodd0000000000000000000000000000000000" }] };
+    const mr = E.buildLinkageMap([round], me, { receiveCount: 1 });
+    t("linkage: a round output is its own edge", mr.items.some(i => i.heuristic === "round amount" && i.full === "5000000"));
+    const manyIn = [pv(me), ...Array.from({ length: 18 }, (_, i) => pv("bc1q" + String(i).padStart(38, "x")))];
+    const big = { txid: "tbig", vin: manyIn, vout: [{ value: 90000001 }] };
+    const mb = E.buildLinkageMap([big], me, { receiveCount: 1 });
+    t("linkage: a large cluster is capped and summarized", mb.items.length === 7 && mb.hidden === 12 && mb.more === "+12 more");
+    const empty = E.buildLinkageMap([{ txid: "tr", vin: [pv(a)], vout: [{ value: 1000, scriptpubkey_address: me }] }], me, { receiveCount: 1 });
+    t("linkage: a receive with no co-spend draws nothing", empty.total === 0 && empty.more === "");
+    return r;
+  });
+  const badLink = link.filter(u => !u.ok);
+  badLink.forEach(u => fail("linkage: " + u.name));
+  if (!badLink.length) pass(`linkage map: ${link.length}/${link.length} passed`);
+}
+
 // Run a demo scan end-to-end
 console.log("[6/7] Demo scan flow");
 // Re-navigate to a clean landing (earlier blocks switched language / visited
@@ -1670,6 +1712,9 @@ await page.waitForTimeout(3500);
 const dashText = await page.evaluate(() => document.body.innerText);
 if (!dashText.includes("Grade")) fail("Dashboard didn't render after demo scan");
 else pass("Dashboard renders after demo scan");
+if (!dashText.includes("What an observer can already link") || !dashText.includes("common-input"))
+  fail("dashboard: linkage map missing under the verdict");
+else pass("dashboard: linkage map sits under the verdict");
 if (await page.getByRole("button", { name: /minimize/i }).count())
   fail("dashboard: a floating assistant opens on its own and covers the fixes");
 else pass("dashboard: assistant does not cover the fix list on arrival");
