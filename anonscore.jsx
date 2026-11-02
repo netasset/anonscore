@@ -6985,6 +6985,215 @@ function computeCounterparties(txs, address, exclude) {
     .sort((a, b) => b.count - a.count);
 }
 
+/* What an observer can already tie to this address, drawn from the transactions
+   already loaded. Reuses the cluster, change, round, and coinjoin checks.
+   Does not fetch anything and does not move the score. */
+const LINK_DRAW_CAP = 7;
+const LINK_COLOR = {
+  "common-input": T.red,
+  "address reuse": T.btc,
+  "change detection": T.amber,
+  "round amount": T.ln,
+};
+function linkShort(s, head, tail) {
+  if (!s) return "";
+  if (s === "DEMO" || s === "DEMO_A") return "this address";
+  if (s.length <= head + tail + 1) return s;
+  return s.slice(0, head) + "…" + s.slice(-tail);
+}
+function linkSat(v) {
+  if (v == null) return "";
+  if (v >= 1e8) return "₿" + (v / 1e8).toFixed(2);
+  if (v >= 1e6) return (v / 1e6).toFixed(2) + "M sats";
+  return v.toLocaleString() + " sats";
+}
+function buildLinkageMap(txs, address, opts) {
+  const opt = opts || {};
+  const list = txs || [];
+  const items = [];
+  const seen = new Set();
+  const push = (item) => {
+    if (!item || !item.id || seen.has(item.id)) return;
+    seen.add(item.id);
+    items.push(item);
+  };
+  const cluster = computeCluster(list, address);
+  const txFor = new Map();
+  list.forEach(tx => {
+    const vin = tx.vin || [], vout = tx.vout || [];
+    if (isCoinJoinShape(vin, vout)) return;
+    const inAddrs = vin.map(v => v.prevout && v.prevout.scriptpubkey_address).filter(Boolean);
+    if (!inAddrs.includes(address)) return;
+    inAddrs.forEach(a => { if (a !== address && !txFor.has(a)) txFor.set(a, tx.txid); });
+  });
+  cluster.linked.forEach(n => {
+    push({
+      id: "addr:" + n.addr,
+      kind: "address",
+      heuristic: "common-input",
+      label: linkShort(n.addr, 8, 4),
+      full: n.addr,
+      detail: "Spent together" + (n.count > 1 ? " " + n.count + " times" : "") + ". An observer treats this as the same wallet.",
+    });
+  });
+  [...new Set(cluster.linked.map(n => txFor.get(n.addr)).filter(Boolean))].forEach(txid => {
+    push({
+      id: "tx:" + txid,
+      kind: "tx",
+      heuristic: "common-input",
+      label: linkShort(txid, 8, 4),
+      full: txid,
+      detail: "This transaction is the link. It spends your address together with the others.",
+    });
+  });
+  const rc = opt.receiveCount != null ? opt.receiveCount : null;
+  if (rc != null && rc >= 2) {
+    push({
+      id: "reuse:self",
+      kind: "address",
+      heuristic: "address reuse",
+      label: rc + " receives",
+      full: address || "",
+      detail: "This address received " + rc + " times. Every payment on it is one trail.",
+    });
+  }
+  list.forEach(tx => {
+    const vin = tx.vin || [], vout = tx.vout || [];
+    if (isCoinJoinShape(vin, vout)) return;
+    const inAddrs = vin.map(v => v.prevout && v.prevout.scriptpubkey_address).filter(Boolean);
+    const inSet = new Set(inAddrs);
+    const youIn = inAddrs.includes(address);
+    vout.forEach((o, i) => {
+      if (!o.scriptpubkey_address || !inSet.has(o.scriptpubkey_address)) return;
+      if (!youIn && o.scriptpubkey_address !== address) return;
+      push({
+        id: "reuse:" + (tx.txid || "tx") + ":" + i,
+        kind: "address",
+        heuristic: "address reuse",
+        label: linkShort(o.scriptpubkey_address, 8, 4),
+        full: o.scriptpubkey_address,
+        detail: "An output pays an address that also spent here, so the balance is visible.",
+      });
+    });
+    const g = guessChange(tx);
+    if (g && g.confidence !== "Low") {
+      const o = vout[g.index] || {};
+      const why = g.confidence === "High"
+        ? "It pays an address that already spent in this transaction."
+        : "Only one output matches the input address type, so that one is the change.";
+      push({
+        id: "chg:" + (tx.txid || "tx") + ":" + g.index,
+        kind: "change",
+        heuristic: "change detection",
+        label: "change " + (o.value != null ? linkSat(o.value) : ""),
+        full: (tx.txid || "") + "#" + g.index,
+        detail: why,
+      });
+    }
+    vout.forEach((o, i) => {
+      if (o.scriptpubkey_type === "op_return" || !isRoundSat(o.value)) return;
+      push({
+        id: "round:" + (tx.txid || "tx") + ":" + i,
+        kind: "output",
+        heuristic: "round amount",
+        label: linkSat(o.value),
+        full: String(o.value),
+        detail: "A round amount. Observers read that as an exchange withdrawal.",
+      });
+    });
+  });
+  const picked = [];
+  const have = new Set();
+  const take = (pred, n) => {
+    let k = 0;
+    for (const it of items) {
+      if (k >= n) break;
+      if (have.has(it.id) || !pred(it)) continue;
+      have.add(it.id);
+      picked.push(it);
+      k++;
+    }
+  };
+  take(i => i.kind === "address" && i.heuristic === "common-input", 4);
+  take(i => i.kind === "tx", 1);
+  take(i => i.heuristic === "address reuse", 1);
+  take(i => i.heuristic === "change detection", 1);
+  take(i => i.heuristic === "round amount", 1);
+  for (const it of items) { if (!have.has(it.id)) { have.add(it.id); picked.push(it); } }
+  const shown = picked.slice(0, LINK_DRAW_CAP);
+  const hidden = picked.length - shown.length;
+  return {
+    items: shown,
+    total: picked.length,
+    hidden,
+    more: hidden > 0 ? "+" + hidden + " more" : "",
+    cluster: cluster.linked.length,
+  };
+}
+
+function LinkageMap({ map }) {
+  const items = (map && map.items) || [];
+  const [sel, setSel] = useState(null);
+  if (!map || !map.total) {
+    return (
+      <p style={{ fontSize: 14, color: T.textMid, lineHeight: 1.5, margin: "12px 0 0" }}>
+        From the transactions loaded, an observer cannot tie another address, transaction, or change output to this one.
+      </p>
+    );
+  }
+  const rows = items.length + (map.hidden > 0 ? 1 : 0);
+  const rowH = 34;
+  const W = 360;
+  const H = rows * rowH + 10;
+  const yOf = i => 6 + i * rowH + rowH / 2;
+  const hubY = H / 2;
+  return (
+    <figure style={{ margin: "14px 0 0" }}>
+      <figcaption style={{ fontSize: 14, fontWeight: 700, color: T.text, lineHeight: 1.4 }}>What an observer can already link</figcaption>
+      <p style={{ fontSize: 13, color: T.textMid, lineHeight: 1.45, margin: "4px 0 8px" }}>You are the hub. Each line is a link the chain already gives an observer.</p>
+      <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-hidden="true" focusable="false" style={{ display: "block", width: "100%", maxWidth: 560, height: "auto" }}>
+        <line x1="60" y1={hubY} x2="74" y2={hubY} stroke={T.cyan} strokeWidth="2" />
+        {rows > 1 && <line x1="74" y1={yOf(0)} x2="74" y2={yOf(rows - 1)} stroke={T.border} strokeWidth="1.5" />}
+        <circle cx="34" cy={hubY} r="22" fill={T.bg} stroke={T.cyan} strokeWidth="2" />
+        <text x="34" y={hubY + 4} textAnchor="middle" fontFamily={T.sans} fontSize="13" fontWeight="700" fill={T.cyan}>You</text>
+        {items.map((item, i) => {
+          const y = yOf(i);
+          const col = LINK_COLOR[item.heuristic] || T.text;
+          const on = sel === item.id;
+          return (
+            <g key={item.id}>
+              <line x1="74" y1={y} x2="90" y2={y} stroke={col} strokeWidth={on ? 3 : 2} />
+              <text x="96" y={y + 4} fontFamily={T.mono} fontSize="12" fill={col}>{item.heuristic}</text>
+              <text x="228" y={y + 4} fontFamily={T.mono} fontSize="12" fill={on ? T.cyan : T.text}>{item.label}</text>
+            </g>
+          );
+        })}
+        {map.hidden > 0 && (
+          <g>
+            <line x1="74" y1={yOf(items.length)} x2="90" y2={yOf(items.length)} stroke={T.textDim} strokeWidth="1.5" strokeDasharray="3 3" />
+            <text x="96" y={yOf(items.length) + 4} fontFamily={T.mono} fontSize="12" fill={T.textMid}>{map.more}</text>
+          </g>
+        )}
+      </svg>
+      <ul aria-label="Links an observer can already make" style={{ listStyle: "none", margin: "8px 0 0", padding: 0, display: "flex", flexDirection: "column", gap: 6 }}>
+        {items.map(item => {
+          const on = sel === item.id;
+          return (
+            <li key={item.id}>
+              <button type="button" aria-pressed={on} onClick={() => setSel(item.id)} onFocus={() => setSel(item.id)}
+                style={{ display: "block", width: "100%", textAlign: "left", background: on ? T.cyanLo : T.surface, border: `1px solid ${on ? T.cyan : T.border}`, borderLeft: `3px solid ${LINK_COLOR[item.heuristic] || T.cyan}`, borderRadius: 10, padding: "7px 10px", cursor: "pointer", fontFamily: T.sans }}>
+                <span style={{ fontFamily: T.mono, fontSize: 12, color: T.text }}>{item.heuristic}</span>
+                <span style={{ display: "block", fontSize: 14, color: T.text, lineHeight: 1.45, marginTop: 2 }}>{item.label}. {item.detail}</span>
+              </button>
+            </li>
+          );
+        })}
+        {map.hidden > 0 && <li style={{ fontSize: 14, color: T.textMid, lineHeight: 1.4, paddingLeft: 2 }}>{map.more}</li>}
+      </ul>
+    </figure>
+  );
+}
+
 /* ─────────────────────────────────────────────
    ADDRESS-POISONING DETECTOR — scammers vanity-generate an address matching
    the first & last characters of yours, plant it in your history with a tiny
@@ -7635,7 +7844,7 @@ function FixSteps({ rec }) {
   );
 }
 
-function ResultHero({ score, grade, riskLabel, riskColor, verdict, fail, warn, pass, stats, statsOpen, onToggleStats, isMobile }) {
+function ResultHero({ score, grade, riskLabel, riskColor, verdict, linkage, fail, warn, pass, stats, statsOpen, onToggleStats, isMobile }) {
   return (
     <section aria-label="Your score" style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 16, padding: isMobile ? "16px" : "18px 22px", marginBottom: 14 }}>
       <div style={{ display: "flex", gap: isMobile ? 12 : 16, alignItems: "flex-start" }}>
@@ -7649,6 +7858,7 @@ function ResultHero({ score, grade, riskLabel, riskColor, verdict, fail, warn, p
           <p style={{ fontSize: isMobile ? 15 : 16.5, color: T.text, lineHeight: 1.55, margin: "10px 0 0" }}>{verdict}</p>
         </div>
       </div>
+      {linkage && <LinkageMap map={linkage} />}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginTop: 14, flexWrap: "wrap" }}>
         <div style={{ fontSize: 13, color: T.textMid, lineHeight: 1.4 }}>
           <span style={{ color: T.red, fontWeight: 700 }}>{fail}</span> failed
@@ -7716,6 +7926,7 @@ function Dashboard({ address, addrInfo, utxos, txs, txSample, isMobile, onBack, 
   const txCount = addrInfo?.chain_stats?.tx_count || txs.length;
   const receiveCount = addrInfo?.chain_stats?.funded_txo_count ?? null;   // reuse = received >1×
   const analysis = useMemo(() => runEngine(utxos, txs, txCount, receiveCount), [utxos, txs, txCount, receiveCount]);
+  const linkage = useMemo(() => buildLinkageMap(txs, address, { receiveCount: receiveCount != null ? receiveCount : txCount }), [txs, address, receiveCount, txCount]);
   const { score, grade, riskLabel, riskColor, checks, recommendations, isEmpty } = analysis;
   // Use addrInfo aggregate balance (accurate) — falls back to summing sampled UTXOs for demo/edge cases
   const totalSats = useMemo(() => {
@@ -7876,6 +8087,7 @@ function Dashboard({ address, addrInfo, utxos, txs, txSample, isMobile, onBack, 
           riskLabel={riskLabel}
           riskColor={riskColor}
           verdict={plainVerdict({ score, checks, kind: "btc", clusterN })}
+          linkage={linkage}
           fail={checks.filter(c => c.status === "fail").length}
           warn={checks.filter(c => c.status === "warn").length}
           pass={checks.filter(c => c.status === "pass").length}
@@ -9056,6 +9268,7 @@ function App() {
 window.__ANONSCORE_TEST__ = Object.freeze({
   runEngine, runLightningEngine, classifyUtxo, scoreGrade, isRoundSat, isDustSat,
   computeCluster, computeCounterparties, computePoisoning, isLookalikeAddress, computeActivityClock,
+  buildLinkageMap,
   isValidBitcoinAddress, isValidLightningPubkey, detectInputType,
   // Transaction Inspector — parser + analysis (validated against BIP174/173/350)
   parsePsbt, parseRawTx, classifyScript, parseTransactionInput, detectTxInput, normalizeEsploraTx,
