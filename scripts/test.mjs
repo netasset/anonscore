@@ -1700,6 +1700,79 @@ console.log("[5b] Linkage map");
   if (!badLink.length) pass(`linkage map: ${link.length}/${link.length} passed`);
 }
 
+// Before-you-send check. Separate from the engine block.
+console.log("[5c] Before-you-send check");
+{
+  const send = await page.evaluate(() => {
+    const E = window.__ANONSCORE_TEST__;
+    const r = [];
+    const t = (name, cond) => r.push({ name, ok: !!cond, ids: null });
+    const demo = E.runSendCheck(E.DEMO_PSBT);
+    const ids = d => (d.report ? d.report.changes.map(c => c.id) : []);
+    t("send: example PSBT is not safe to broadcast", demo.report && demo.report.ok === false && /^Don't broadcast yet/.test(demo.report.headline));
+    t("send: example PSBT flags a merge and address reuse", ids(demo).includes("merge") && ids(demo).includes("reuse"));
+    t("send: example PSBT names the click in Sparrow", demo.report.changes.every(c => c.where === "Sparrow" && c.steps.length >= 3));
+    const clean = [
+      "in bc1qcleaninput00000000000000000000000000 80000 p2wpkh",
+      "out bc1qpayment000000000000000000000000000000 40000 p2wpkh",
+      "out bc1qchange0000000000000000000000000000000 35000 p2wpkh",
+      "locktime 840000",
+    ].join("\n");
+    const ok = E.runSendCheck(clean);
+    t("send: a plain one-input payment is safe", ok.report && ok.report.ok === true && ok.report.headline === "Safe to send.");
+    const cross = [
+      "in bc1qexchange0000000000000000000000000000 30000001 p2wpkh cluster:exchange",
+      "in bc1qsavings00000000000000000000000000000 30000003 p2wpkh cluster:savings",
+      "out bc1qshop00000000000000000000000000000000 40000001 p2wpkh",
+      "out bc1qchg000000000000000000000000000000000 19000003 p2wpkh",
+      "locktime 840000",
+    ].join("\n");
+    const mx = E.runSendCheck(cross);
+    t("send: inputs from two clusters must not be merged", ids(mx).includes("merge") && /exchange and savings/.test(mx.report.changes.find(c => c.id === "merge").learns));
+    const mismatch = [
+      "in bc1qme0000000000000000000000000000000000 150000 p2wpkh",
+      "out bc1qpay000000000000000000000000000000000 60000 p2pkh",
+      "out bc1qchg000000000000000000000000000000000 80000 p2wpkh",
+      "locktime 840000",
+    ].join("\n");
+    const ch = E.runSendCheck(mismatch);
+    t("send: a script-type mismatch makes the change obvious", ids(ch).includes("change"));
+    const reuse = [
+      "in bc1qreuse0000000000000000000000000000000 80000001 p2wpkh",
+      "out bc1qreuse0000000000000000000000000000000 40000001 p2wpkh",
+      "out bc1qother0000000000000000000000000000000 39000000 p2wpkh",
+      "locktime 840000",
+    ].join("\n");
+    const ru = E.runSendCheck(reuse);
+    t("send: paying an input address is reuse", ids(ru).includes("reuse"));
+    const toxic = [
+      "in bc1qkyc000000000000000000000000000000000 8000000 p2wpkh kyc cluster:exchange",
+      "out bc1qpay000000000000000000000000000000000 3000001 p2wpkh",
+      "out bc1qchg000000000000000000000000000000000 4900000 p2wpkh",
+      "locktime 840000",
+    ].join("\n");
+    const txc = E.runSendCheck(toxic);
+    t("send: toxic change is named", ids(txc).includes("toxic"));
+    const big = [
+      "in bc1qbig000000000000000000000000000000000 90000 p2wpkh",
+      "out bc1qpay000000000000000000000000000000000 15000 p2wpkh",
+      "out bc1qchg000000000000000000000000000000000 70000 p2wpkh",
+      "locktime 840000",
+    ].join("\n");
+    const lg = E.runSendCheck(big);
+    t("send: a much larger output is read as change", ids(lg).includes("change") && /larger output/.test(lg.report.changes.find(c => c.id === "change").learns));
+    const partial = E.checkBeforeSend({ vin: [{ prevout: null }], vout: [{ value: 1000, scriptpubkey_type: "v0_p2wpkh" }] }, { partial: true });
+    t("send: missing input amounts is not called safe", partial.ok === false && partial.headline === "Paste the unsigned PSBT.");
+    const noLock = clean.split("\n").filter(l => !l.startsWith("locktime")).join("\n");
+    const locked = E.runSendCheck(noLock);
+    t("send: locktime 0 on an otherwise clean send is a fingerprint", locked.report && locked.report.ok === false && locked.report.changes.some(c => c.id === "fingerprint"));
+    return r.map(x => ({ name: x.name, ok: x.ok }));
+  });
+  const badSend = send.filter(u => !u.ok);
+  badSend.forEach(u => fail("send-check: " + u.name));
+  if (!badSend.length) pass(`before-you-send: ${send.length}/${send.length} passed`);
+}
+
 // Run a demo scan end-to-end
 console.log("[6/7] Demo scan flow");
 // Re-navigate to a clean landing (earlier blocks switched language / visited
@@ -1853,6 +1926,22 @@ await axeRun("Dashboard", page);
 const back = page.getByText(/← Back/).first();
 if (await back.count()) { await back.click(); await page.waitForTimeout(900); }
 await axeRun("Landing (after demo)", page);
+{
+  const axeS = await ctx.newPage();
+  try {
+    await axeS.goto(`http://127.0.0.1:${PORT}/`, { waitUntil: "load" });
+    await axeS.waitForFunction(() => document.getElementById("root")?.childElementCount > 0, { timeout: 15000 });
+    await axeS.waitForTimeout(400);
+    await axeS.getByRole("button", { name: "Check a send" }).click();
+    await axeS.getByRole("button", { name: "Load example send" }).click();
+    await axeS.waitForFunction(() => /Don't broadcast yet|Safe to send/.test(document.body.innerText), { timeout: 8000 });
+    const offline = await axeS.evaluate(() => /Nothing is broadcast/.test(document.body.innerText) && /Sparrow/.test(document.body.innerText));
+    if (!offline) fail("send-check: example verdict missing the Sparrow steps or the no-broadcast line");
+    else pass("send-check: example PSBT shows a verdict and Sparrow steps, in the page");
+    await axeRun("Send check", axeS);
+  } catch (e) { fail("send-check a11y: " + e.message.slice(0, 160)); }
+  finally { await axeS.close(); }
+}
 
 await browser.close();
 server.close();
