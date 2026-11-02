@@ -93,9 +93,9 @@ const T = {
   cyan: "#22D3EE",
   cyanLo: "#22D3EE14",
   cyanMid: "#22D3EE28",
-  amber: "#E8A730",
-  amberLo: "#E8A73018",
-  amberMid: "#E8A73040",
+  amber: "#E6C229",
+  amberLo: "#E6C22918",
+  amberMid: "#E6C22940",
   btc: "#F7931A",
   btcLo: "#F7931A18",
   btcMid: "#F7931A40",
@@ -108,9 +108,9 @@ const T = {
   greenLo: "#3fb95014",
   blue: "#58a6ff",
   blueLo: "#58a6ff14",
-  ln: "#F59E0B",
-  lnLo: "#F59E0B14",
-  lnMid: "#F59E0B33",
+  ln: "#C4B5FD",
+  lnLo: "#C4B5FD14",
+  lnMid: "#C4B5FD33",
   mono: "'JetBrains Mono',monospace",
   serif: "'Fraunces',serif",
   sans: "'Outfit',sans-serif",
@@ -5060,16 +5060,16 @@ function FixToolChips({
   }, React.createElement("span", {
     style: {
       fontFamily: T.mono,
-      fontSize: 9,
+      fontSize: 11,
       color: T.textDim,
-      letterSpacing: 1
+      letterSpacing: 0.6
     }
   }, "OPTIONS:"), list.map((t, ti) => {
     const href = toolLink(t.name);
     const aff = toolIsAffiliate(t.name);
     const base = {
       fontFamily: T.mono,
-      fontSize: 9,
+      fontSize: 11,
       padding: "3px 8px",
       borderRadius: 4,
       background: T.cyan + "18",
@@ -5106,7 +5106,7 @@ function FixToolChips({
         border: "none",
         padding: 0,
         fontFamily: T.mono,
-        fontSize: 9,
+        fontSize: 11,
         color: T.textMid,
         cursor: "pointer",
         textDecoration: "underline dotted",
@@ -5522,9 +5522,9 @@ function ScoreRing({
   }, cur), React.createElement("span", {
     style: {
       fontFamily: T.mono,
-      fontSize: size * .075,
+      fontSize: Math.max(11, size * .075),
       color: T.textDim,
-      letterSpacing: 1,
+      letterSpacing: 0.4,
       marginTop: 2
     }
   }, "/100")));
@@ -6730,7 +6730,7 @@ const CATEGORY_META = {
   },
   darknet: {
     label: "Darknet",
-    color: "#E8A730"
+    color: "#E6C229"
   },
   miner: {
     label: "Miner",
@@ -6748,7 +6748,7 @@ const STATUS_META = {
   },
   liquidating: {
     label: "Liquidating",
-    color: "#E8A730"
+    color: "#E6C229"
   },
   liquidated: {
     label: "Liquidated",
@@ -10133,7 +10133,8 @@ function ScoreBreakdown({
   checks,
   score,
   isMobile,
-  simpleMode
+  simpleMode,
+  recover = "see the fixes on this page"
 }) {
   const movers = checks.filter(c => typeof c.pts === "number" && c.pts !== 0).sort((a, b) => a.pts - b.pts);
   const penalties = movers.filter(c => c.pts < 0);
@@ -10290,7 +10291,7 @@ function ScoreBreakdown({
       marginTop: 8,
       lineHeight: 1.5
     }
-  }, "100 ", lost ? React.createElement(React.Fragment, null, "\u2212 ", Math.abs(lost), " lost ") : "", gained ? React.createElement(React.Fragment, null, "+ ", gained, " earned ") : "", "= ", raw, raw !== score ? ` → ${score} (${raw < 0 ? "floored at 0" : "capped at 100"})` : "", ". Each penalty is recoverable \u2014 see the Fix It tab."));
+  }, "100 ", lost ? React.createElement(React.Fragment, null, "\u2212 ", Math.abs(lost), " lost ") : "", gained ? React.createElement(React.Fragment, null, "+ ", gained, " earned ") : "", "= ", raw, raw !== score ? ` → ${score} (${raw < 0 ? "floored at 0" : "capped at 100"})` : "", ". Each penalty is recoverable \u2014 ", recover, "."));
 }
 function RadarChart({
   checks,
@@ -11221,7 +11222,7 @@ function TransactionInspector({
         fontWeight: 400,
         marginBottom: a.findings.length ? 12 : 0
       }
-    }, tx.confirmed ? a.leaky ? "This transaction leaked — what follows is what every analyst already reads from it." : "Clean — this transaction gives an analyst little to work with." : a.leaky ? "This transaction leaks — you can still fix it before broadcasting." : "Clean — nothing in this transaction obviously links or identifies you."), a.findings.length > 0 && React.createElement("ul", {
+    }, tx.confirmed ? a.leaky ? "This transaction leaked. What follows is what every analyst already reads from it." : link && link.available && link.entropy === 0 ? "An ordinary payment. An analyst can follow the coins, which is true of almost every payment, and nothing here adds reuse, a round amount, or a merge." : "Nothing in this transaction adds a special fingerprint. The readings below are what is already public." : a.leaky ? "This transaction leaks. You can still fix it before broadcasting." : link && link.available && link.entropy === 0 ? "An ordinary payment. An analyst could follow the coins, which is true of almost every payment, and nothing here adds reuse, a round amount, or a merge. You can still change it before you broadcast." : "Nothing here adds a special fingerprint. You can still change it before you broadcast."), a.findings.length > 0 && React.createElement("ul", {
       style: {
         listStyle: "none",
         display: "flex",
@@ -12269,14 +12270,25 @@ function XpubScan({
           color: r.riskColor,
           fontWeight: 400
         }
-      }, "Grade ", r.grade, " \xB7 ", r.riskLabel), React.createElement("div", {
+      }, "Grade ", r.grade, " \xB7 ", r.riskLabel), React.createElement("p", {
+        style: {
+          fontSize: 15,
+          color: T.text,
+          lineHeight: 1.55,
+          margin: "8px 0 0"
+        }
+      }, plainVerdict({
+        score: r.score,
+        checks: r.checks,
+        kind: "wallet"
+      })), React.createElement("div", {
         style: {
           fontSize: 13,
           color: T.textMid,
           lineHeight: 1.6,
-          marginTop: 4
+          marginTop: 6
         }
-      }, "Wallet-level privacy across ", r.stats.used, " used address", r.stats.used !== 1 ? "es" : "", " (", r.stats.addresses, " derived & checked)."), React.createElement("div", {
+      }, "Across ", r.stats.used, " used address", r.stats.used !== 1 ? "es" : "", " (", r.stats.addresses, " derived and checked in this browser)."), React.createElement("div", {
         style: {
           display: "flex",
           gap: 18,
@@ -12288,9 +12300,9 @@ function XpubScan({
       }, React.createElement("div", {
         style: {
           fontFamily: T.mono,
-          fontSize: 8,
+          fontSize: 11,
           color: T.textDim,
-          letterSpacing: 1.5
+          letterSpacing: 0.6
         }
       }, t.k), React.createElement("div", {
         style: {
@@ -12364,12 +12376,14 @@ function XpubScan({
         }
       }, "+", rec.impact)), React.createElement("div", {
         style: {
-          fontSize: 12.5,
+          fontSize: 14,
           color: T.textMid,
           lineHeight: 1.55,
           marginTop: 3
         }
-      }, rec.plain), React.createElement(FixToolChips, {
+      }, rec.plain), i === 0 && React.createElement(FixSteps, {
+        rec: rec
+      }), React.createElement(FixToolChips, {
         tools: rec.tools,
         tool: rec.tool,
         onReview: onOpenWalletReview
@@ -15915,6 +15929,340 @@ function MethodologyPage({
     }
   }, "run it against a wallet"), ".")));
 }
+function firstSentence(s) {
+  if (!s) return "";
+  const m = String(s).trim().match(/^[\s\S]*?[.!?](?:\s|$)/);
+  return (m ? m[0] : s).trim();
+}
+function worstCheck(checks) {
+  const bad = (checks || []).filter(c => c.status !== "pass");
+  const scored = bad.filter(c => typeof c.pts === "number");
+  if (scored.length) return [...scored].sort((a, b) => a.pts - b.pts)[0];
+  return bad[0] || null;
+}
+const LN_WHY = {
+  kyc_peers: "Channels to KYC exchanges can log who this node routes with.",
+  announced: "This node is on the public Lightning map, so peers can see where it connects.",
+  tor: "Peers can see this node's IP address.",
+  channels: "Too few public channels make a payment easier to correlate.",
+  cap_conc: "Almost all of the capacity sits in one channel, so routes are predictable.",
+  alias: "The alias reads like a real name, and the whole network can see it.",
+  age: "A new node has a short history, which is easier to watch.",
+  onchain: "Channel opens on the blockchain can tie this node to an on-chain wallet."
+};
+function whyLine(check) {
+  if (!check) return "";
+  const simple = SIMPLE.checks[check.key];
+  if (simple) {
+    const d = check.status === "fail" ? simple.fail_detail : check.status === "warn" ? simple.warn_detail : simple.pass_detail;
+    if (d) return firstSentence(d);
+  }
+  return firstSentence(check.plain || check.detail || "");
+}
+function plainVerdict({
+  score,
+  checks,
+  kind,
+  clusterN = 0
+}) {
+  const noun = kind === "ln" ? "node" : kind === "wallet" ? "wallet" : "address";
+  const fails = (checks || []).filter(c => c.status === "fail").length;
+  const worst = worstCheck(checks);
+  const why = kind === "ln" && worst && LN_WHY[worst.key] || whyLine(worst);
+  const link = kind === "btc" && clusterN > 0 ? ` The chain already links it to ${clusterN} other address${clusterN === 1 ? "" : "es"}.` : "";
+  if (score >= 80 && fails === 0) {
+    if (worst && worst.status === "warn" && why) {
+      return `The score is high. One warning is left: ${why.charAt(0).toLowerCase()}${why.slice(1)}` + link;
+    }
+    return `An observer has little to connect on this ${noun}. Keep receiving on a fresh address, and don't merge these coins with an exchange withdrawal.` + link;
+  }
+  if (score >= 60) {
+    return (why ? `An observer can still read part of this ${noun}. ${why}` : `An observer can still read part of this ${noun}. The first step below closes the biggest gap.`) + link;
+  }
+  return (why ? `Easy to follow. ${why}` : `This ${noun} is easy to follow. The first step below is the one that matters.`) + link;
+}
+const FIX_HOWTO = {
+  cj: {
+    where: "Ginger Wallet or Wasabi",
+    steps: ["Install Ginger Wallet (it runs a coordinator) or Wasabi, then choose a community coordinator under Change Coordinator.", "Load only the coins you want to mix. Leave any dust frozen so it is not pulled in.", "Start a CoinJoin and wait until the round finishes. Come back here and rescan."]
+  },
+  payjoin: {
+    where: "Cake Wallet",
+    steps: ["Install Cake Wallet and open the wallet you spend from.", "Pay someone who accepts Payjoin the way you normally would. Cake adds one of their coins to the payment.", "If you receive payments, turn Payjoin on so the sender's coins mix with yours."]
+  },
+  reuse: {
+    where: "Sparrow, Cake, or the wallet you already use",
+    steps: ["Tap Receive and copy the new address. Send that one. Do not paste an address you have already used.", "If you must publish one address, use a Silent Payment (it starts with sp1) in Sparrow or Cake. Each payer still lands on a fresh on-chain address.", "After the next payment arrives, rescan the new address."]
+  },
+  lightning: {
+    where: "Phoenix Wallet",
+    steps: ["Install Phoenix or Breez. Both are self-custodial.", "Send a small amount in from a coin that is not dust and not an exchange withdrawal you want to keep separate.", "Pay everyday amounts over Lightning. Those payments do not appear on the blockchain."]
+  },
+  cons: {
+    where: "Sparrow Wallet",
+    steps: ["Keep exchange coins and private coins in two wallets. Do not send from one to the other.", "Open the Coins tab. Before you send, select only the coins that belong together.", "Label each coin (exchange, private, mixed) so the next spend does not merge them."]
+  },
+  dust: {
+    where: "Sparrow Wallet",
+    steps: ["Open the coin list and find outputs under 546 sats.", "Right-click each one and choose Freeze. In Electrum that is Freeze coin. In Bitcoin Core it is lockunspent.", "Leave them frozen. Spending one tells the sender where the rest of the wallet went."]
+  },
+  round: {
+    where: "the exchange withdrawal screen",
+    steps: ["Do not withdraw a round number such as 0.1. Change the last digits, for example 0.10381.", "Send it to a fresh address, and keep those coins out of your private stack.", "When you can, buy without KYC (Bisq, RoboSats, or Peach) so there is no exchange trail."]
+  },
+  change: {
+    where: "Sparrow or Electrum",
+    steps: ["In Sparrow, use a Native SegWit wallet. Change already goes to a new address.", "In Electrum, open Preferences and turn on Use change addresses.", "Send a small payment to yourself and confirm the change is a new address, then rescan."]
+  },
+  node: {
+    where: "Umbrel, Start9, or Bitcoin Core",
+    steps: ["Run your own node: Umbrel or Start9 on a small computer, or Bitcoin Core on a machine you leave on.", "In the wallet's server settings, point it at that node and turn off public Electrum servers.", "Lookups then stay on your machine. A public explorer never sees your addresses next to your IP."]
+  },
+  fee: {
+    where: "Sparrow Wallet",
+    steps: ["Before you send, check the fee on mempool.space.", "Set the fee yourself instead of accepting the wallet default.", "Change it a little every time. The same sat/vB on every payment is a fingerprint."]
+  },
+  conc: {
+    where: "Sparrow Wallet",
+    steps: ["Open coin control and send part of the large coin to a new address of your own.", "Do it when fees are low, and do not combine it with coins from another source.", "A CoinJoin also splits the balance into several pieces."]
+  },
+  changeid: {
+    where: "Bitcoin Core or Sparrow",
+    steps: ["Use a wallet that makes the change the same address type as the person you pay. Bitcoin Core does this on its own.", "In Sparrow, set the change address type to match the payment before you broadcast.", "Keeping the whole wallet on Native SegWit removes the tell."]
+  },
+  kyc_peers: {
+    where: "Amboss, then your node",
+    steps: ["On Amboss, pick Tor-only nodes with no real-name alias and enough capacity.", "In Umbrel, Thunderhub, or RTL, close the channels to exchanges such as Bitfinex, Kraken, Binance, and OKX.", "Open replacement channels to the nodes you picked, then rescan."]
+  },
+  announced: {
+    where: "Core Lightning or LND",
+    steps: ["New channels can stay unannounced. They still work. They are just not on the public map.", "In Core Lightning, open the channel as unannounced. In LND, do not advertise it.", "Channels that are already public stay public until you close them."]
+  },
+  tor: {
+    where: "Umbrel, Start9, or RaspiBlitz",
+    steps: ["Umbrel: Settings, then Tor, then force Tor. Start9: System, then Tor, then enforce Tor. RaspiBlitz: CONNECT, then TOR.", "Turn off clearnet listening so the node has no public IP.", "Restart and rescan. The address list should be onion-only."]
+  },
+  onchain: {
+    where: "Sparrow, then your node",
+    steps: ["Do not open a channel straight from an exchange withdrawal.", "In Sparrow, pick a coin that did not come from an exchange and send it to the node's on-chain wallet.", "Open the channel from that coin."]
+  }
+};
+function howtoFor(rec) {
+  if (!rec) return null;
+  if (rec.key && FIX_HOWTO[rec.key]) return FIX_HOWTO[rec.key];
+  const blob = `${rec.action || ""} ${rec.plain || ""}`;
+  if (/CoinJoin/i.test(blob)) return FIX_HOWTO.cj;
+  if (/fresh address|new address|reuse/i.test(blob)) return FIX_HOWTO.reuse;
+  if (/coin control|merge|different sources/i.test(blob)) return FIX_HOWTO.cons;
+  if (/dust|Freeze/i.test(blob)) return FIX_HOWTO.dust;
+  if (/Payjoin/i.test(blob)) return FIX_HOWTO.payjoin;
+  if (/Lightning/i.test(blob)) return FIX_HOWTO.lightning;
+  return null;
+}
+function FixSteps({
+  rec
+}) {
+  const how = howtoFor(rec);
+  if (!how) return null;
+  return React.createElement("div", {
+    style: {
+      marginTop: 10
+    }
+  }, React.createElement("div", {
+    style: {
+      fontSize: 13,
+      fontWeight: 700,
+      color: T.text,
+      marginBottom: 6
+    }
+  }, "How, in ", how.where), React.createElement("ol", {
+    style: {
+      margin: 0,
+      paddingLeft: 18,
+      display: "flex",
+      flexDirection: "column",
+      gap: 5
+    }
+  }, how.steps.map((s, n) => React.createElement("li", {
+    key: n,
+    style: {
+      fontSize: 14,
+      color: T.textMid,
+      lineHeight: 1.5
+    }
+  }, s))));
+}
+function ResultHero({
+  score,
+  grade,
+  riskLabel,
+  riskColor,
+  verdict,
+  fail,
+  warn,
+  pass,
+  stats,
+  statsOpen,
+  onToggleStats,
+  isMobile
+}) {
+  return React.createElement("section", {
+    "aria-label": "Your score",
+    style: {
+      background: T.card,
+      border: `1px solid ${T.border}`,
+      borderRadius: 16,
+      padding: isMobile ? "16px" : "18px 22px",
+      marginBottom: 14
+    }
+  }, React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: isMobile ? 12 : 16,
+      alignItems: "flex-start"
+    }
+  }, React.createElement(ScoreRing, {
+    score: score,
+    size: isMobile ? 76 : 88,
+    animate: false
+  }), React.createElement("div", {
+    style: {
+      flex: 1,
+      minWidth: 0
+    }
+  }, React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: 8,
+      flexWrap: "wrap"
+    }
+  }, React.createElement("span", {
+    style: {
+      fontFamily: T.serif,
+      fontSize: isMobile ? 26 : 32,
+      color: riskColor,
+      lineHeight: 1
+    }
+  }, "Grade ", grade), React.createElement("span", {
+    style: {
+      fontFamily: T.mono,
+      fontSize: 13,
+      color: T.textMid
+    }
+  }, score, "/100"), React.createElement(Tag, {
+    label: riskLabel,
+    color: riskColor,
+    size: 12
+  })), React.createElement("p", {
+    style: {
+      fontSize: isMobile ? 15 : 16.5,
+      color: T.text,
+      lineHeight: 1.55,
+      margin: "10px 0 0"
+    }
+  }, verdict))), React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: 10,
+      marginTop: 14,
+      flexWrap: "wrap"
+    }
+  }, React.createElement("div", {
+    style: {
+      fontSize: 13,
+      color: T.textMid,
+      lineHeight: 1.4
+    }
+  }, React.createElement("span", {
+    style: {
+      color: T.red,
+      fontWeight: 700
+    }
+  }, fail), " failed", React.createElement("span", {
+    style: {
+      color: T.textDim
+    }
+  }, " \xB7 "), React.createElement("span", {
+    style: {
+      color: T.amber,
+      fontWeight: 700
+    }
+  }, warn), " ", warn === 1 ? "warning" : "warnings", React.createElement("span", {
+    style: {
+      color: T.textDim
+    }
+  }, " \xB7 "), React.createElement("span", {
+    style: {
+      color: T.green,
+      fontWeight: 700
+    }
+  }, pass), " passed"), stats && stats.length > 0 && React.createElement("button", {
+    type: "button",
+    onClick: onToggleStats,
+    "aria-expanded": !!statsOpen,
+    style: {
+      background: "none",
+      border: "none",
+      padding: 0,
+      cursor: "pointer",
+      fontFamily: T.sans,
+      fontSize: 13,
+      fontWeight: 600,
+      color: T.cyan
+    }
+  }, statsOpen ? "Hide balance and comparison" : "Balance and comparison")), statsOpen && stats && React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: isMobile ? 16 : 28,
+      flexWrap: "wrap",
+      marginTop: 12,
+      paddingTop: 12,
+      borderTop: `1px solid ${T.border}`
+    }
+  }, stats.map(s => {
+    const body = React.createElement(React.Fragment, null, React.createElement("div", {
+      style: {
+        fontFamily: T.mono,
+        fontSize: 11,
+        color: T.textDim,
+        letterSpacing: 0.6,
+        marginBottom: 3
+      }
+    }, s.label), React.createElement("div", {
+      style: {
+        fontFamily: T.serif,
+        fontSize: 18,
+        color: s.color,
+        lineHeight: 1
+      }
+    }, s.val), s.sub && React.createElement("div", {
+      style: {
+        fontSize: 12,
+        color: s.onClick ? T.cyan : T.textDim,
+        marginTop: 3
+      }
+    }, s.sub, s.onClick ? " →" : ""));
+    return s.onClick ? React.createElement("button", {
+      key: s.label,
+      type: "button",
+      onClick: s.onClick,
+      title: s.title || s.sub,
+      style: {
+        background: "none",
+        border: "none",
+        padding: 0,
+        textAlign: "left",
+        cursor: "pointer",
+        fontFamily: "inherit"
+      }
+    }, body) : React.createElement("div", {
+      key: s.label
+    }, body);
+  })));
+}
 function Dashboard({
   address,
   addrInfo,
@@ -15953,6 +16301,9 @@ function Dashboard({
   const [shareOpen, setShareOpen] = useState(false);
   const [selectedUtxo, setSelectedUtxo] = useState(null);
   const [doneFixes, setDoneFixes] = useState(() => getDoneFixes(address));
+  const [statsOpen, setStatsOpen] = useState(false);
+  const [moreFixes, setMoreFixes] = useState(false);
+  const [whyKey, setWhyKey] = useState(null);
   const toggleDone = key => setDoneFixes(prev => {
     const next = new Set(prev);
     next.has(key) ? next.delete(key) : next.add(key);
@@ -15980,7 +16331,7 @@ function Dashboard({
     return utxos.reduce((s, u) => s + u.value, 0);
   }, [addrInfo, utxos]);
   const issueCount = checks.filter(c => c.status !== "pass").length;
-  const TABS = isMobile ? ["Fix It", "Overview", "Flow", "UTXOs", "Transactions"] : ["Fix It", "Overview", "Flow", "UTXOs", "Transactions", "Methodology"];
+  const TABS = ["Fix It", "Overview", "Flow", "UTXOs", "Transactions"];
   useEffect(() => {
     if (!autoShare) return;
     const t = setTimeout(() => {
@@ -16185,7 +16536,7 @@ function Dashboard({
   }, address === "DEMO" || address === "DEMO_A" ? "Demo Wallet" : fmt.addr(address)), scanAt && React.createElement("div", {
     style: {
       fontFamily: T.mono,
-      fontSize: 9,
+      fontSize: 11,
       color: T.textDim,
       marginTop: 2
     }
@@ -16309,262 +16660,52 @@ function Dashboard({
       margin: "0 auto",
       width: "100%"
     }
-  }, React.createElement("div", {
-    style: {
-      background: T.card,
-      border: `1px solid ${T.border}`,
-      borderRadius: 14,
-      padding: isMobile ? "12px 14px" : "12px 20px",
-      marginBottom: 12,
-      display: "flex",
-      alignItems: "center",
-      gap: isMobile ? 12 : 20,
-      flexWrap: "wrap",
-      animation: "fadeUp .35s ease both"
-    }
-  }, React.createElement("div", {
-    style: {
-      display: "flex",
-      alignItems: "center",
-      gap: 10,
-      flexShrink: 0
-    }
-  }, React.createElement(ScoreRing, {
+  }, React.createElement(ResultHero, {
     score: score,
-    size: 52,
-    animate: false
-  }), React.createElement("div", null, React.createElement("div", {
-    style: {
-      fontFamily: T.serif,
-      fontSize: 20,
-      color: riskColor,
-      lineHeight: 1,
-      animation: `popIn .55s cubic-bezier(.34,1.56,.64,1) .85s both${score < 30 ? ", shake .5s ease 2s" : ""}`,
-      transformOrigin: "left center"
-    }
-  }, "Grade ", grade), React.createElement("div", {
-    style: {
-      fontFamily: T.mono,
-      fontSize: 9,
-      color: T.textDim,
-      letterSpacing: 1,
-      marginTop: 2,
-      animation: "fadeIn .35s ease 1.4s both"
-    }
-  }, score, "/100"))), React.createElement("div", {
-    style: {
-      width: 1,
-      height: 36,
-      background: T.border,
-      flexShrink: 0
-    }
-  }), React.createElement("div", {
-    style: {
-      display: "flex",
-      alignItems: "center",
-      gap: 8,
-      flexShrink: 0
-    }
-  }, React.createElement("div", {
-    style: {
-      background: T.red + "18",
-      border: `1px solid ${T.red}44`,
-      borderRadius: 8,
-      padding: "4px 10px",
-      display: "flex",
-      alignItems: "center",
-      gap: 5
-    }
-  }, React.createElement("span", {
-    style: {
-      fontFamily: T.mono,
-      fontSize: 16,
-      fontWeight: 700,
+    grade: grade,
+    riskLabel: riskLabel,
+    riskColor: riskColor,
+    verdict: plainVerdict({
+      score,
+      checks,
+      kind: "btc",
+      clusterN
+    }),
+    fail: checks.filter(c => c.status === "fail").length,
+    warn: checks.filter(c => c.status === "warn").length,
+    pass: checks.filter(c => c.status === "pass").length,
+    statsOpen: statsOpen,
+    onToggleStats: () => setStatsOpen(o => !o),
+    isMobile: isMobile,
+    stats: [{
+      label: "BALANCE",
+      val: `₿${(totalSats / 1e8).toFixed(4)}`,
+      sub: `${addrInfo?.chain_stats?.funded_txo_count != null ? addrInfo.chain_stats.funded_txo_count - (addrInfo.chain_stats.spent_txo_count || 0) : utxos.length} UTXOs`,
+      color: T.blue
+    }, {
+      label: "TRANSACTIONS",
+      val: txCount,
+      sub: txSample?.capped ? `latest ${txSample.fetched}` : "total",
+      color: T.cyan
+    }, {
+      label: "VS TYPICAL",
+      val: score > 38 ? `+${score - 38}` : `${score - 38}`,
+      sub: "typical ~38",
+      color: score > 38 ? T.green : T.red
+    }, ...(clusterN > 0 ? [{
+      label: "CLUSTER",
+      val: clusterN,
+      sub: "linked addresses",
       color: T.red,
-      lineHeight: 1
-    }
-  }, checks.filter(c => c.status === "fail").length), React.createElement("span", {
-    style: {
-      fontFamily: T.mono,
-      fontSize: 9,
-      color: T.red,
-      letterSpacing: 0.5
-    }
-  }, "FAIL")), React.createElement("div", {
-    style: {
-      background: T.amber + "18",
-      border: `1px solid ${T.amber}44`,
-      borderRadius: 8,
-      padding: "4px 10px",
-      display: "flex",
-      alignItems: "center",
-      gap: 5
-    }
-  }, React.createElement("span", {
-    style: {
-      fontFamily: T.mono,
-      fontSize: 16,
-      fontWeight: 700,
-      color: T.amber,
-      lineHeight: 1
-    }
-  }, checks.filter(c => c.status === "warn").length), React.createElement("span", {
-    style: {
-      fontFamily: T.mono,
-      fontSize: 9,
-      color: T.amber,
-      letterSpacing: 0.5
-    }
-  }, "WARN")), React.createElement("div", {
-    style: {
-      background: T.green + "18",
-      border: `1px solid ${T.green}44`,
-      borderRadius: 8,
-      padding: "4px 10px",
-      display: "flex",
-      alignItems: "center",
-      gap: 5
-    }
-  }, React.createElement("span", {
-    style: {
-      fontFamily: T.mono,
-      fontSize: 16,
-      fontWeight: 700,
-      color: T.green,
-      lineHeight: 1
-    }
-  }, checks.filter(c => c.status === "pass").length), React.createElement("span", {
-    style: {
-      fontFamily: T.mono,
-      fontSize: 9,
-      color: T.green,
-      letterSpacing: 0.5
-    }
-  }, "PASS"))), React.createElement("div", {
-    style: {
-      width: 1,
-      height: 36,
-      background: T.border,
-      flexShrink: 0
-    }
-  }), React.createElement("div", {
-    style: {
-      display: "flex",
-      gap: isMobile ? 14 : 24,
-      flexWrap: "wrap"
-    }
-  }, [{
-    label: "BALANCE",
-    val: `₿${(totalSats / 1e8).toFixed(4)}`,
-    sub: `${addrInfo?.chain_stats?.funded_txo_count != null ? addrInfo.chain_stats.funded_txo_count - (addrInfo.chain_stats.spent_txo_count || 0) : utxos.length} UTXOs`,
-    color: T.blue
-  }, {
-    label: "TXS",
-    val: txCount,
-    sub: txSample?.capped ? `latest ${txSample.fetched}` : "total",
-    color: T.cyan
-  }, {
-    label: "VS TYPICAL",
-    val: score > 38 ? `+${score - 38}` : `${score - 38}`,
-    sub: "typical ~38",
-    color: score > 38 ? T.green : T.red
-  }, ...(clusterN > 0 ? [{
-    label: "CLUSTER",
-    val: clusterN,
-    sub: "linked addrs",
-    color: T.red,
-    onClick: () => setTab("Flow")
-  }] : []), ...(delta != null && delta !== 0 ? [{
-    label: "PROGRESS",
-    val: delta > 0 ? `+${delta}` : `${delta}`,
-    sub: "vs your last scan",
-    color: delta > 0 ? T.green : T.red
-  }] : [])].map(s => s.onClick ? React.createElement("button", {
-    key: s.label,
-    onClick: s.onClick,
-    title: "See the cluster on the Flow tab",
-    style: {
-      background: "none",
-      border: "none",
-      padding: 0,
-      textAlign: "left",
-      cursor: "pointer",
-      fontFamily: "inherit"
-    }
-  }, React.createElement("div", {
-    style: {
-      fontFamily: T.mono,
-      fontSize: 8,
-      color: T.textDim,
-      letterSpacing: 1.5,
-      marginBottom: 2
-    }
-  }, s.label), React.createElement("div", {
-    style: {
-      fontFamily: T.serif,
-      fontSize: 18,
-      color: s.color,
-      lineHeight: 1
-    }
-  }, s.val), React.createElement("div", {
-    style: {
-      fontSize: 10,
-      color: T.cyan,
-      marginTop: 1,
-      textDecoration: "underline",
-      textUnderlineOffset: 2
-    }
-  }, s.sub, " \u2192")) : React.createElement("div", {
-    key: s.label
-  }, React.createElement("div", {
-    style: {
-      fontFamily: T.mono,
-      fontSize: 8,
-      color: T.textDim,
-      letterSpacing: 1.5,
-      marginBottom: 2
-    }
-  }, s.label), React.createElement("div", {
-    style: {
-      fontFamily: T.serif,
-      fontSize: 18,
-      color: s.color,
-      lineHeight: 1
-    }
-  }, s.val), React.createElement("div", {
-    style: {
-      fontSize: 10,
-      color: T.textDim,
-      marginTop: 1
-    }
-  }, s.sub)))), React.createElement("div", {
-    style: {
-      marginLeft: "auto",
-      flexShrink: 0,
-      textAlign: "right"
-    }
-  }, React.createElement("div", {
-    style: {
-      fontFamily: T.mono,
-      fontSize: 8,
-      color: T.textDim,
-      letterSpacing: 1.5,
-      marginBottom: 2
-    }
-  }, "TOP 3 FIXES"), React.createElement("div", {
-    style: {
-      fontFamily: T.serif,
-      fontSize: 18,
-      color: T.green,
-      lineHeight: 1
-    }
-  }, "+", recommendations.slice(0, 3).reduce((a, r) => a + r.impact, 0), " pts"), React.createElement("div", {
-    style: {
-      fontSize: 10,
-      color: T.textDim,
-      marginTop: 1
-    }
-  }, "potential gain"))), txSample?.capped && txSample.total != null && React.createElement("div", {
+      onClick: () => setTab("Flow"),
+      title: "See the cluster on the Flow tab"
+    }] : []), ...(delta != null && delta !== 0 ? [{
+      label: "PROGRESS",
+      val: delta > 0 ? `+${delta}` : `${delta}`,
+      sub: "vs your last scan",
+      color: delta > 0 ? T.green : T.red
+    }] : [])]
+  }), txSample?.capped && txSample.total != null && React.createElement("div", {
     style: {
       fontFamily: T.mono,
       fontSize: 11,
@@ -16709,13 +16850,28 @@ function Dashboard({
       display: "flex",
       gap: 8,
       overflowX: "auto",
-      paddingBottom: 2
+      paddingBottom: 2,
+      alignItems: "center"
     }
   }, TABS.map(t => React.createElement(Pill, {
     key: t,
     active: tab === t,
     onClick: () => setTab(t)
-  }, t))), React.createElement("button", {
+  }, t)), onNav && React.createElement("button", {
+    type: "button",
+    onClick: () => onNav("methodology"),
+    style: {
+      background: "none",
+      border: "none",
+      fontFamily: T.sans,
+      fontSize: 13,
+      color: T.textMid,
+      cursor: "pointer",
+      textDecoration: "underline",
+      textUnderlineOffset: 3,
+      whiteSpace: "nowrap"
+    }
+  }, "How scoring works")), React.createElement("button", {
     onClick: () => setSimpleModeSync(!simpleMode),
     style: {
       flexShrink: 0,
@@ -16762,21 +16918,26 @@ function Dashboard({
         gap: 10,
         animation: "fadeIn .22s ease both"
       }
-    }, React.createElement("div", {
+    }, React.createElement("div", null, React.createElement("h2", {
+      style: {
+        fontFamily: T.serif,
+        fontSize: isMobile ? 20 : 22,
+        color: T.text,
+        fontWeight: 400,
+        margin: "2px 0 4px"
+      }
+    }, checks.some(c => c.status === "fail") || score < 60 ? "Do these first" : checks.some(c => c.status === "warn") ? "The one thing left" : "If you want to go further"), React.createElement("div", {
       style: {
         fontSize: 14,
         color: T.textMid,
-        lineHeight: 1.5
+        lineHeight: 1.5,
+        marginBottom: 4
       }
     }, tm ? React.createElement(React.Fragment, null, "Re-ranked for ", React.createElement("strong", {
       style: {
         color: T.cyan
       }
-    }, tm.label.toLowerCase()), ". The points do not change \u2014 only the order does.") : React.createElement(React.Fragment, null, "Sorted by impact. The top 3 could add ", React.createElement("strong", {
-      style: {
-        color: T.cyan
-      }
-    }, recommendations.slice(0, 3).reduce((a, r) => a + r.impact, 0), " points"), ".")), shownRecs.map((r, i) => {
+    }, tm.label.toLowerCase()), ". The points do not change \u2014 only the order does.") : React.createElement(React.Fragment, null, "Start with the first one. It returns the most points. The rest can wait."))), shownRecs.slice(0, moreFixes ? shownRecs.length : 3).map((r, i) => {
       const done = doneFixes.has(r.key);
       const w = weight(r);
       const simple = SIMPLE.recs[r.key];
@@ -16850,40 +17011,50 @@ function Dashboard({
         style: {
           fontSize: 14,
           color: T.textMid,
-          lineHeight: 1.7,
-          marginBottom: 10
+          lineHeight: 1.65
         }
-      }, displayPlain), !simpleMode && React.createElement("div", {
-        style: {
-          fontSize: 12,
-          color: T.textDim,
-          lineHeight: 1.6,
-          background: T.surface,
-          borderRadius: 8,
-          padding: "10px 14px"
-        }
-      }, React.createElement("strong", {
-        style: {
-          color: T.textMid
-        }
-      }, "How:"), " ", r.detail), React.createElement(FixToolChips, {
+      }, displayPlain), i < 3 && React.createElement(FixSteps, {
+        rec: r
+      }), React.createElement(FixToolChips, {
         tools: r.tools,
         tool: r.tool,
         onReview: onOpenWalletReview
-      }), !simpleMode && (r.tools || []).length > 0 && React.createElement("div", {
+      }), r.detail && r.detail !== displayPlain && React.createElement("div", {
         style: {
-          marginTop: 6,
-          fontSize: 11,
-          color: T.textDim,
-          lineHeight: 1.55
+          marginTop: 8
         }
-      }, (r.tools || []).map((t, ti) => t.note ? React.createElement("span", {
+      }, React.createElement("button", {
+        type: "button",
+        onClick: () => setWhyKey(whyKey === r.key ? null : r.key),
+        "aria-expanded": whyKey === r.key,
+        style: {
+          background: "none",
+          border: "none",
+          padding: 0,
+          cursor: "pointer",
+          fontFamily: T.sans,
+          fontSize: 13,
+          fontWeight: 600,
+          color: T.cyan
+        }
+      }, whyKey === r.key ? "Hide the background" : "Why this works"), whyKey === r.key && React.createElement("div", {
+        style: {
+          fontSize: 13,
+          color: T.textMid,
+          lineHeight: 1.6,
+          marginTop: 8
+        }
+      }, r.detail, (r.tools || []).some(t => t.note) && React.createElement("div", {
+        style: {
+          marginTop: 8
+        }
+      }, (r.tools || []).map((t, ti) => t.note ? React.createElement("div", {
         key: ti
       }, React.createElement("span", {
         style: {
-          color: T.textMid
+          color: T.text
         }
-      }, t.name), " \u2014 ", t.note, ti < r.tools.length - 1 ? " · " : "") : null)))), React.createElement("div", {
+      }, t.name, "."), " ", t.note) : null)))))), React.createElement("div", {
         style: {
           display: "flex",
           flexDirection: "column",
@@ -16905,22 +17076,22 @@ function Dashboard({
         title: "Your grade if you complete just this one fix",
         style: {
           fontFamily: T.mono,
-          fontSize: 9,
+          fontSize: 11,
           color: T.green,
           marginTop: 1
         }
       }, "\u2192 grade ", scoreGrade(Math.min(score + r.impact, 97)))), tm && !done && w === 3 && React.createElement(Tag, {
         label: "front line",
         color: T.cyan,
-        size: 9
+        size: 11
       }), tm && !done && w === 0 && React.createElement(Tag, {
         label: "lower priority here",
         color: T.textDim,
-        size: 9
+        size: 11
       }), React.createElement(Tag, {
         label: r.effort,
         color: r.effort === "Easy" ? T.green : r.effort === "Medium" ? T.amber : T.textMid,
-        size: 9
+        size: 11
       }), React.createElement("button", {
         onClick: () => toggleDone(r.key),
         style: {
@@ -16935,7 +17106,23 @@ function Dashboard({
           whiteSpace: "nowrap"
         }
       }, done ? "✓ Done" : "Mark done")));
-    }), (() => {
+    }), shownRecs.length > 3 && React.createElement("button", {
+      type: "button",
+      onClick: () => setMoreFixes(v => !v),
+      "aria-expanded": moreFixes,
+      style: {
+        background: "none",
+        border: `1px solid ${T.border}`,
+        borderRadius: 10,
+        padding: "10px 14px",
+        cursor: "pointer",
+        fontFamily: T.sans,
+        fontSize: 13,
+        fontWeight: 600,
+        color: T.textMid,
+        textAlign: "left"
+      }
+    }, moreFixes ? "Hide the other fixes" : `Show ${shownRecs.length - 3} more fixes`), (() => {
       const proj = Math.min(score + recommendations.reduce((a, r) => a + r.impact, 0), 97);
       return React.createElement("div", {
         style: {
@@ -17942,188 +18129,7 @@ function Dashboard({
     entity: CASE_FILES.find(c => c.address === address)?.entity,
     address: address,
     onScan: onRescan
-  }), tab === "Methodology" && React.createElement("div", {
-    style: {
-      display: "flex",
-      flexDirection: "column",
-      gap: 12
-    }
-  }, React.createElement("div", {
-    style: {
-      background: T.card,
-      border: `1px solid ${T.border}`,
-      borderRadius: 16,
-      padding: 28
-    }
-  }, React.createElement("div", {
-    style: {
-      fontFamily: T.mono,
-      fontSize: 9,
-      color: T.textDim,
-      letterSpacing: 2,
-      marginBottom: 16
-    }
-  }, "HOW SCORING WORKS"), React.createElement("div", {
-    style: {
-      fontFamily: T.serif,
-      fontSize: 22,
-      color: T.text,
-      marginBottom: 12,
-      fontWeight: 400
-    }
-  }, "11 heuristics, each weighted by severity"), React.createElement("div", {
-    style: {
-      fontSize: 14,
-      color: T.textMid,
-      lineHeight: 1.75,
-      marginBottom: 20
-    }
-  }, "Every wallet starts at 100. Each detected issue deducts points based on its real-world impact on traceability. We use the same heuristics published in open blockchain research \u2014 nothing proprietary."), React.createElement("div", {
-    style: {
-      display: "grid",
-      gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr",
-      gap: 10
-    }
-  }, BTC_METHODOLOGY.map((row, i) => React.createElement("div", {
-    key: i,
-    style: {
-      background: T.surface,
-      borderRadius: 10,
-      padding: "14px 16px",
-      border: `1px solid ${T.borderLo}`
-    }
-  }, React.createElement("div", {
-    style: {
-      display: "flex",
-      justifyContent: "space-between",
-      alignItems: "center",
-      marginBottom: 6
-    }
-  }, React.createElement("div", {
-    style: {
-      fontSize: 13,
-      fontWeight: 600,
-      color: T.text
-    }
-  }, row.check), React.createElement(Tag, {
-    label: row.deduct,
-    color: row.deduct.startsWith("+") ? T.green : RISK_META[row.sev]?.color || T.red,
-    size: 9
-  })), React.createElement("div", {
-    style: {
-      fontSize: 12,
-      color: T.textMid,
-      lineHeight: 1.55
-    }
-  }, row.why))))), React.createElement("div", {
-    style: {
-      background: T.card,
-      border: `1px solid ${T.border}`,
-      borderRadius: 16,
-      padding: 24
-    }
-  }, React.createElement("div", {
-    style: {
-      fontFamily: T.mono,
-      fontSize: 9,
-      color: T.textDim,
-      letterSpacing: 2,
-      marginBottom: 12
-    }
-  }, "NON-SCORING INSIGHTS"), React.createElement("div", {
-    style: {
-      fontSize: 12.5,
-      color: T.textMid,
-      lineHeight: 1.65
-    }
-  }, "Four insights inform without moving the score. The ", React.createElement("strong", {
-    style: {
-      color: T.text
-    }
-  }, "Exposure Map"), " (what each output leaks, per transaction), ", React.createElement("strong", {
-    style: {
-      color: T.text
-    }
-  }, "Cluster Exposure"), " (the common-input heuristic's view of which addresses share one owner), and the ", React.createElement("strong", {
-    style: {
-      color: T.text
-    }
-  }, "Activity Clock"), " (transactions binned by UTC hour; a strong quiet window lets an analyst estimate a timezone) are shown because analysts read them \u2014 scoring them would double-count checks already in the table above. The ", React.createElement("strong", {
-    style: {
-      color: T.text
-    }
-  }, "address-poisoning alert"), " flags lookalike addresses planted in the history as copy-paste bait; it's a safety check, not a privacy metric \u2014 being targeted doesn't make a wallet more traceable, so it never moves the score.")), React.createElement("div", {
-    style: {
-      background: T.card,
-      border: `1px solid ${T.border}`,
-      borderRadius: 16,
-      padding: 24
-    }
-  }, React.createElement("div", {
-    style: {
-      fontFamily: T.mono,
-      fontSize: 9,
-      color: T.textDim,
-      letterSpacing: 2,
-      marginBottom: 12
-    }
-  }, "DATA SOURCES"), React.createElement("div", {
-    style: {
-      display: "flex",
-      flexDirection: "column",
-      gap: 10
-    }
-  }, BTC_DATA_SOURCES.map((s, i) => React.createElement("div", {
-    key: i,
-    style: {
-      display: "flex",
-      gap: 12,
-      paddingBottom: 10,
-      borderBottom: i < 3 ? `1px solid ${T.borderLo}` : undefined
-    }
-  }, React.createElement("div", {
-    style: {
-      width: 4,
-      borderRadius: 2,
-      background: T.cyan,
-      flexShrink: 0,
-      alignSelf: "stretch"
-    }
-  }), React.createElement("div", null, React.createElement("div", {
-    style: {
-      fontSize: 13,
-      fontWeight: 600,
-      color: T.text,
-      marginBottom: 3
-    }
-  }, s.src), React.createElement("div", {
-    style: {
-      fontSize: 12,
-      color: T.textMid,
-      lineHeight: 1.55
-    }
-  }, s.desc)))))), React.createElement("div", {
-    style: {
-      background: T.cyanLo,
-      border: `1px solid ${T.cyanMid}`,
-      borderRadius: 14,
-      padding: "16px 20px",
-      fontSize: 13,
-      color: T.textMid,
-      lineHeight: 1.65
-    }
-  }, React.createElement("strong", {
-    style: {
-      color: T.cyan
-    }
-  }, "Open source:"), " All 11 heuristics are implemented in plain JavaScript in this tool's source. No black box. View and audit the full scoring logic at ", React.createElement("a", {
-    href: "https://github.com/netasset/anonscore",
-    target: "_blank",
-    rel: "noopener noreferrer",
-    style: {
-      color: T.cyan
-    }
-  }, "github.com/netasset/anonscore"), "."))), shareOpen && React.createElement(ShareCard, {
+  })), shareOpen && React.createElement(ShareCard, {
     score: score,
     grade: grade,
     checks: checks,
@@ -18204,9 +18210,9 @@ function Dashboard({
     }, icons[t]), React.createElement("span", {
       style: {
         fontFamily: T.mono,
-        fontSize: 9,
+        fontSize: 11,
         color: tab === t ? T.cyan : T.textDim,
-        letterSpacing: 0.2
+        letterSpacing: 0
       }
     }, t));
   })));
@@ -18237,6 +18243,8 @@ function LightningDashboard({
   const [doneFixes, setDoneFixes] = useState(() => getDoneFixes(nodeId || "ln"));
   const [shareOpen, setShareOpen] = useState(false);
   const [aiStage, setAiStage] = useState(null);
+  const [statsOpen, setStatsOpen] = useState(false);
+  const [moreLn, setMoreLn] = useState(false);
   const toggleDone = k => setDoneFixes(p => {
     const n = new Set(p);
     n.has(k) ? n.delete(k) : n.add(k);
@@ -18246,7 +18254,7 @@ function LightningDashboard({
   const totalCap = channels.reduce((s, c) => s + (c.capacity || 0), 0);
   const alias = (nodeData.alias || "Unknown Node").replace(/[\x00-\x1f\x7f]/g, "").trim().slice(0, 50) || "Unknown Node";
   const pubkeyShort = nodeId ? `${nodeId.slice(0, 10)}…${nodeId.slice(-6)}` : "—";
-  const TABS = isMobile ? ["Fix It", "Checks", "Channels"] : ["Fix It", "Checks", "Channels", "Methodology"];
+  const TABS = ["Fix It", "Checks", "Channels"];
   const handleRescan = () => onRescan && onRescan(nodeId, false, "ln_pubkey");
   return React.createElement("div", {
     role: "main",
@@ -18255,7 +18263,8 @@ function LightningDashboard({
       minHeight: "100vh",
       background: "transparent",
       display: "flex",
-      flexDirection: "column"
+      flexDirection: "column",
+      paddingBottom: isMobile ? 72 : 0
     }
   }, React.createElement("h1", {
     className: "sr-only"
@@ -18279,6 +18288,7 @@ function LightningDashboard({
   }), React.createElement("nav", {
     style: {
       display: "flex",
+      flexWrap: "wrap",
       alignItems: "center",
       gap: 10,
       padding: isMobile ? "12px 16px" : "12px 32px",
@@ -18299,7 +18309,8 @@ function LightningDashboard({
       fontFamily: T.sans,
       fontSize: 13,
       cursor: "pointer",
-      transition: "border .15s"
+      transition: "border .15s",
+      flex: "0 0 auto"
     },
     onMouseOver: e => e.currentTarget.style.borderColor = T.ln,
     onMouseOut: e => e.currentTarget.style.borderColor = T.border
@@ -18308,7 +18319,8 @@ function LightningDashboard({
       fontFamily: T.display,
       fontSize: 15,
       letterSpacing: 4,
-      fontWeight: 700
+      fontWeight: 700,
+      flex: "0 0 auto"
     }
   }, "ANON", React.createElement("span", {
     style: {
@@ -18316,36 +18328,16 @@ function LightningDashboard({
     }
   }, "SCORE")), React.createElement("div", {
     style: {
-      flex: 1,
-      minWidth: 0
-    }
-  }, React.createElement("div", {
-    style: {
-      fontFamily: T.mono,
-      fontSize: 11,
-      color: T.textDim,
-      overflow: "hidden",
-      textOverflow: "ellipsis",
-      whiteSpace: "nowrap"
-    }
-  }, "\u26A1 ", alias !== "Unknown Node" ? alias : nodeId ? `${nodeId.slice(0, 10)}…${nodeId.slice(-6)}` : "Lightning Node"), React.createElement("div", {
-    style: {
-      fontFamily: T.mono,
-      fontSize: 9,
-      color: T.textDim,
-      marginTop: 2
-    }
-  }, "Lightning node audit")), React.createElement("div", {
-    style: {
       display: "flex",
       gap: 8,
-      flexShrink: 0,
+      flex: "0 0 auto",
+      marginLeft: "auto",
       alignItems: "center"
     }
   }, React.createElement(Tag, {
-    label: grade,
+    label: scoreLabel(score),
     color: col,
-    size: 10
+    size: 12
   }), !isMobile && React.createElement(React.Fragment, null, React.createElement("button", {
     onClick: handleRescan,
     style: {
@@ -18387,6 +18379,7 @@ function LightningDashboard({
     }
   }, "Share"), React.createElement("button", {
     onClick: handleRescan,
+    "aria-label": "Re-scan this node",
     style: {
       background: "transparent",
       border: `1.5px solid ${T.border}`,
@@ -18396,7 +18389,29 @@ function LightningDashboard({
       fontSize: 12,
       cursor: "pointer"
     }
-  }, "\u21BB")))), React.createElement("div", {
+  }, "\u21BB"))), React.createElement("div", {
+    style: {
+      flex: "1 0 100%",
+      minWidth: 0
+    }
+  }, React.createElement("div", {
+    title: alias,
+    style: {
+      fontFamily: T.mono,
+      fontSize: 13,
+      color: T.textMid,
+      overflow: "hidden",
+      textOverflow: "ellipsis",
+      whiteSpace: "nowrap"
+    }
+  }, "\u26A1 ", alias !== "Unknown Node" ? alias : nodeId ? `${nodeId.slice(0, 10)}…${nodeId.slice(-6)}` : "Lightning Node"), React.createElement("div", {
+    style: {
+      fontFamily: T.mono,
+      fontSize: 11,
+      color: T.textDim,
+      marginTop: 2
+    }
+  }, "Lightning node audit", nodeId && nodeId.length >= 20 ? ` · ${pubkeyShort}` : ""))), React.createElement("div", {
     style: {
       flex: 1,
       padding: isMobile ? "12px 12px" : "16px 32px",
@@ -18404,213 +18419,39 @@ function LightningDashboard({
       margin: "0 auto",
       width: "100%"
     }
-  }, React.createElement("div", {
-    style: {
-      background: T.card,
-      border: `1px solid ${T.border}`,
-      borderRadius: 14,
-      padding: isMobile ? "12px 14px" : "12px 20px",
-      marginBottom: 12,
-      display: "flex",
-      alignItems: "center",
-      gap: isMobile ? 12 : 20,
-      flexWrap: "wrap",
-      animation: "fadeUp .35s ease both"
-    }
-  }, React.createElement("div", {
-    style: {
-      display: "flex",
-      alignItems: "center",
-      gap: 10,
-      flexShrink: 0
-    }
-  }, React.createElement(ScoreRing, {
+  }, React.createElement(ResultHero, {
     score: score,
-    size: 52,
-    animate: false
-  }), React.createElement("div", null, React.createElement("div", {
-    style: {
-      fontFamily: T.serif,
-      fontSize: 20,
-      color: col,
-      lineHeight: 1
-    }
-  }, "Grade ", grade), React.createElement("div", {
-    style: {
-      fontFamily: T.mono,
-      fontSize: 9,
-      color: T.textDim,
-      letterSpacing: 1,
-      marginTop: 2
-    }
-  }, score, "/100"))), React.createElement("div", {
-    style: {
-      width: 1,
-      height: 36,
-      background: T.border,
-      flexShrink: 0
-    }
-  }), React.createElement("div", {
-    style: {
-      display: "flex",
-      alignItems: "center",
-      gap: 8,
-      flexShrink: 0
-    }
-  }, React.createElement("div", {
-    style: {
-      background: T.red + "18",
-      border: `1px solid ${T.red}44`,
-      borderRadius: 8,
-      padding: "4px 10px",
-      display: "flex",
-      alignItems: "center",
-      gap: 5
-    }
-  }, React.createElement("span", {
-    style: {
-      fontFamily: T.mono,
-      fontSize: 16,
-      fontWeight: 700,
-      color: T.red,
-      lineHeight: 1
-    }
-  }, fails), React.createElement("span", {
-    style: {
-      fontFamily: T.mono,
-      fontSize: 9,
-      color: T.red,
-      letterSpacing: 0.5
-    }
-  }, "FAIL")), React.createElement("div", {
-    style: {
-      background: T.amber + "18",
-      border: `1px solid ${T.amber}44`,
-      borderRadius: 8,
-      padding: "4px 10px",
-      display: "flex",
-      alignItems: "center",
-      gap: 5
-    }
-  }, React.createElement("span", {
-    style: {
-      fontFamily: T.mono,
-      fontSize: 16,
-      fontWeight: 700,
-      color: T.amber,
-      lineHeight: 1
-    }
-  }, warns), React.createElement("span", {
-    style: {
-      fontFamily: T.mono,
-      fontSize: 9,
-      color: T.amber,
-      letterSpacing: 0.5
-    }
-  }, "WARN")), React.createElement("div", {
-    style: {
-      background: T.green + "18",
-      border: `1px solid ${T.green}44`,
-      borderRadius: 8,
-      padding: "4px 10px",
-      display: "flex",
-      alignItems: "center",
-      gap: 5
-    }
-  }, React.createElement("span", {
-    style: {
-      fontFamily: T.mono,
-      fontSize: 16,
-      fontWeight: 700,
-      color: T.green,
-      lineHeight: 1
-    }
-  }, passes), React.createElement("span", {
-    style: {
-      fontFamily: T.mono,
-      fontSize: 9,
-      color: T.green,
-      letterSpacing: 0.5
-    }
-  }, "PASS"))), React.createElement("div", {
-    style: {
-      width: 1,
-      height: 36,
-      background: T.border,
-      flexShrink: 0
-    }
-  }), React.createElement("div", {
-    style: {
-      display: "flex",
-      gap: isMobile ? 14 : 24,
-      flexWrap: "wrap"
-    }
-  }, [{
-    label: "CHANNELS",
-    val: channels.length,
-    sub: "open",
-    color: T.blue
-  }, {
-    label: "CAPACITY",
-    val: `₿${(totalCap / 1e8).toFixed(3)}`,
-    sub: "total",
-    color: T.btc
-  }, {
-    label: "VS TARGET",
-    val: score >= 70 ? `+${score - 70}` : `${score - 70}`,
-    sub: "target: 70+",
-    color: score >= 70 ? T.green : T.red
-  }].map(s => React.createElement("div", {
-    key: s.label
-  }, React.createElement("div", {
-    style: {
-      fontFamily: T.mono,
-      fontSize: 8,
-      color: T.textDim,
-      letterSpacing: 1.5,
-      marginBottom: 2
-    }
-  }, s.label), React.createElement("div", {
-    style: {
-      fontFamily: T.serif,
-      fontSize: 18,
-      color: s.color,
-      lineHeight: 1
-    }
-  }, s.val), React.createElement("div", {
-    style: {
-      fontSize: 10,
-      color: T.textDim,
-      marginTop: 1
-    }
-  }, s.sub)))), React.createElement("div", {
-    style: {
-      marginLeft: "auto",
-      flexShrink: 0,
-      textAlign: "right"
-    }
-  }, React.createElement("div", {
-    style: {
-      fontFamily: T.mono,
-      fontSize: 8,
-      color: T.textDim,
-      letterSpacing: 1.5,
-      marginBottom: 2
-    }
-  }, "TOP FIXES"), React.createElement("div", {
-    style: {
-      fontFamily: T.serif,
-      fontSize: 18,
-      color: T.green,
-      lineHeight: 1
-    }
-  }, "+", recommendations.slice(0, 3).reduce((a, r) => a + r.impact, 0), " pts"), React.createElement("div", {
-    style: {
-      fontSize: 10,
-      color: T.textDim,
-      marginTop: 1
-    }
-  }, "potential gain"))), !isMobile && React.createElement("div", {
+    grade: grade,
+    riskLabel: scoreLabel(score),
+    riskColor: col,
+    verdict: plainVerdict({
+      score,
+      checks,
+      kind: "ln"
+    }),
+    fail: fails,
+    warn: warns,
+    pass: passes,
+    statsOpen: statsOpen,
+    onToggleStats: () => setStatsOpen(o => !o),
+    isMobile: isMobile,
+    stats: [{
+      label: "CHANNELS",
+      val: channels.length,
+      sub: "open",
+      color: T.blue
+    }, {
+      label: "CAPACITY",
+      val: `₿${(totalCap / 1e8).toFixed(3)}`,
+      sub: "total",
+      color: T.btc
+    }, {
+      label: "VS TARGET",
+      val: score >= 70 ? `+${score - 70}` : `${score - 70}`,
+      sub: "target 70+",
+      color: score >= 70 ? T.green : T.red
+    }]
+  }), !isMobile && React.createElement("div", {
     style: {
       display: "flex",
       alignItems: "center",
@@ -18624,7 +18465,21 @@ function LightningDashboard({
     active: tab === t,
     onClick: () => setTab(t),
     color: T.ln
-  }, t))), isMobile && React.createElement("div", {
+  }, t)), onNav && React.createElement("button", {
+    type: "button",
+    onClick: () => onNav("methodology"),
+    style: {
+      background: "none",
+      border: "none",
+      fontFamily: T.sans,
+      fontSize: 13,
+      color: T.textMid,
+      cursor: "pointer",
+      textDecoration: "underline",
+      textUnderlineOffset: 3,
+      whiteSpace: "nowrap"
+    }
+  }, "How scoring works")), isMobile && React.createElement("div", {
     style: {
       marginBottom: 14
     }
@@ -18634,33 +18489,21 @@ function LightningDashboard({
       flexDirection: "column",
       gap: 16
     }
-  }, score >= 80 && React.createElement("div", {
-    style: {
-      background: T.greenLo,
-      border: `1px solid ${T.green}44`,
-      borderRadius: 14,
-      padding: "18px 20px",
-      textAlign: "center"
-    }
-  }, React.createElement("div", {
+  }, recommendations.length > 0 && React.createElement("h2", {
     style: {
       fontFamily: T.serif,
-      fontSize: 22,
-      color: T.green,
-      marginBottom: 4
+      fontSize: isMobile ? 20 : 22,
+      color: T.text,
+      fontWeight: 400,
+      margin: 0
     }
-  }, "Strong privacy posture \u26A1"), React.createElement("div", {
+  }, fails > 0 || score < 60 ? "Do these first" : warns > 0 ? "The one thing left" : "If you want to go further"), recommendations.length === 0 && score < 80 && React.createElement("div", {
     style: {
-      fontSize: 13,
-      color: T.textMid
-    }
-  }, "Your Lightning node is well-configured. Keep monitoring as your channel peers change.")), recommendations.length === 0 && score < 80 && React.createElement("div", {
-    style: {
-      fontSize: 13,
+      fontSize: 14,
       color: T.textMid,
-      padding: "12px 0"
+      padding: "4px 0"
     }
-  }, "No specific fixes generated. Check the Checks tab for detail."), recommendations.map((r, i) => {
+  }, "No specific fix for this node. The Checks tab lists what was looked at."), recommendations.slice(0, moreLn ? recommendations.length : 3).map((r, i) => {
     const done = doneFixes.has(r.key);
     return React.createElement("div", {
       key: r.key,
@@ -18693,38 +18536,42 @@ function LightningDashboard({
     }, React.createElement("div", {
       style: {
         display: "flex",
+        flexWrap: "wrap",
         alignItems: "center",
-        gap: 10,
+        gap: 8,
         marginBottom: 6
       }
     }, React.createElement("div", {
       style: {
-        fontSize: 14,
+        fontSize: 15,
         fontWeight: 700,
         color: done ? T.textDim : T.text,
-        textDecoration: done ? "line-through" : "none"
+        textDecoration: done ? "line-through" : "none",
+        flex: "1 1 200px"
       }
     }, r.action), React.createElement("span", {
       style: {
         fontFamily: T.mono,
-        fontSize: 10,
+        fontSize: 12,
         color: T.green,
         background: T.greenLo,
         padding: "3px 8px",
-        borderRadius: 5
+        borderRadius: 5,
+        flexShrink: 0
       }
     }, "+", r.impact, " pts"), React.createElement(Tag, {
       label: r.effort,
       color: r.effort === "Easy" ? T.green : r.effort === "Medium" ? T.amber : T.red,
-      size: 9
-    })), React.createElement("div", {
+      size: 11
+    })), !done && React.createElement("div", {
       style: {
-        fontSize: 13,
+        fontSize: 14,
         color: T.textMid,
-        lineHeight: 1.6,
-        marginBottom: r.tools?.length ? 12 : 0
+        lineHeight: 1.6
       }
-    }, r.detail), React.createElement(FixToolChips, {
+    }, r.detail), !done && i < 3 && React.createElement(FixSteps, {
+      rec: r
+    }), !done && React.createElement(FixToolChips, {
       tools: r.tools,
       onReview: onOpenWalletReview
     })), React.createElement("button", {
@@ -18741,7 +18588,23 @@ function LightningDashboard({
         whiteSpace: "nowrap"
       }
     }, done ? "✓ Done" : "Mark done")));
-  }), aiStage !== "chat" && React.createElement("div", {
+  }), recommendations.length > 3 && React.createElement("button", {
+    type: "button",
+    onClick: () => setMoreLn(v => !v),
+    "aria-expanded": moreLn,
+    style: {
+      background: "none",
+      border: `1px solid ${T.border}`,
+      borderRadius: 10,
+      padding: "10px 14px",
+      cursor: "pointer",
+      fontFamily: T.sans,
+      fontSize: 13,
+      fontWeight: 600,
+      color: T.textMid,
+      textAlign: "left"
+    }
+  }, moreLn ? "Hide the other fixes" : `Show ${recommendations.length - 3} more fixes`), aiStage !== "chat" && React.createElement("div", {
     style: {
       background: T.card,
       border: `1px solid ${T.ln}33`,
@@ -19183,61 +19046,21 @@ function LightningDashboard({
     }))), React.createElement("div", {
       style: {
         fontFamily: T.mono,
-        fontSize: 10,
+        fontSize: 12,
         color: T.textDim,
-        whiteSpace: "nowrap"
+        whiteSpace: "nowrap",
+        flexShrink: 0
       }
-    }, pct, "% \xB7 ", (ch.capacity / 1e8).toFixed(4), " BTC"), React.createElement(Tag, {
+    }, pct, "% \xB7 ", (ch.capacity / 1e8).toFixed(4), " BTC"), React.createElement("span", {
+      style: {
+        flexShrink: 0
+      }
+    }, React.createElement(Tag, {
       label: riskLabel,
       color: riskColor,
-      size: 9
-    }));
-  })), tab === "Methodology" && React.createElement("div", {
-    style: {
-      display: "flex",
-      flexDirection: "column",
-      gap: 10
-    }
-  }, React.createElement("div", {
-    style: {
-      fontFamily: T.mono,
-      fontSize: 9,
-      color: T.textDim,
-      letterSpacing: 2,
-      marginBottom: 4
-    }
-  }, "8 HEURISTICS \xB7 LIGHTNING NODE PRIVACY SCORING"), LN_METHODOLOGY.map(c => React.createElement("div", {
-    key: c.n,
-    style: {
-      display: "flex",
-      gap: 14,
-      background: T.card,
-      border: `1px solid ${T.border}`,
-      borderRadius: 12,
-      padding: "14px 18px"
-    }
-  }, React.createElement("div", {
-    style: {
-      fontFamily: T.mono,
-      fontSize: 10,
-      color: T.ln,
-      minWidth: 24,
-      marginTop: 1
-    }
-  }, c.n), React.createElement("div", null, React.createElement("div", {
-    style: {
-      fontSize: 13,
-      fontWeight: 600,
-      color: T.text,
-      marginBottom: 4
-    }
-  }, c.label), React.createElement("div", {
-    style: {
-      fontSize: 13,
-      color: T.textMid,
-      lineHeight: 1.6
-    }
-  }, c.desc)))))), isMobile && React.createElement("nav", {
+      size: 11
+    })));
+  }))), isMobile && React.createElement("nav", {
     style: {
       position: "fixed",
       bottom: 0,
@@ -19281,9 +19104,9 @@ function LightningDashboard({
     }, icons[t]), React.createElement("span", {
       style: {
         fontFamily: T.mono,
-        fontSize: 8,
+        fontSize: 11,
         color: tab === t ? T.ln : T.textDim,
-        letterSpacing: 0.5
+        letterSpacing: 0.2
       }
     }, t.toUpperCase()));
   })));

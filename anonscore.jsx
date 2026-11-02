@@ -93,9 +93,9 @@ const T = {
   cyan:     "#22D3EE",
   cyanLo:   "#22D3EE14",
   cyanMid:  "#22D3EE28",
-  amber:    "#E8A730",
-  amberLo:  "#E8A73018",
-  amberMid: "#E8A73040",
+  amber:    "#E6C229",  /* warning yellow — distinct from Bitcoin orange and Lightning violet */
+  amberLo:  "#E6C22918",
+  amberMid: "#E6C22940",
   btc:      "#F7931A",
   btcLo:    "#F7931A18",
   btcMid:   "#F7931A40",
@@ -108,9 +108,9 @@ const T = {
   greenLo:  "#3fb95014",
   blue:     "#58a6ff",
   blueLo:   "#58a6ff14",
-  ln:       "#F59E0B",
-  lnLo:     "#F59E0B14",
-  lnMid:    "#F59E0B33",
+  ln:       "#C4B5FD",  /* Lightning violet — not the orange/gold used for Bitcoin and warnings */
+  lnLo:     "#C4B5FD14",
+  lnMid:    "#C4B5FD33",
   mono:     "'JetBrains Mono',monospace",
   serif:    "'Fraunces',serif",
   sans:     "'Outfit',sans-serif",
@@ -3040,11 +3040,11 @@ function FixToolChips({ tools, tool, onReview }) {
   if (!list.length) return null;
   return (
     <div style={{ marginTop: 10, display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
-      <span style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim, letterSpacing: 1 }}>OPTIONS:</span>
+      <span style={{ fontFamily: T.mono, fontSize: 11, color: T.textDim, letterSpacing: 0.6 }}>OPTIONS:</span>
       {list.map((t, ti) => {
         const href = toolLink(t.name);
         const aff = toolIsAffiliate(t.name);
-        const base = { fontFamily: T.mono, fontSize: 9, padding: "3px 8px", borderRadius: 4, background: T.cyan + "18", color: T.cyan, border: `1px solid ${T.cyan}30`, letterSpacing: 0.3, textDecoration: "none", cursor: href ? "pointer" : (t.note ? "help" : "default") };
+        const base = { fontFamily: T.mono, fontSize: 11, padding: "3px 8px", borderRadius: 4, background: T.cyan + "18", color: T.cyan, border: `1px solid ${T.cyan}30`, letterSpacing: 0.3, textDecoration: "none", cursor: href ? "pointer" : (t.note ? "help" : "default") };
         const label = aff ? `${t.name} · affiliate` : t.name;
         const chip = href
           ? <a href={href} target="_blank" rel="noopener noreferrer nofollow" title={aff ? `${t.note ? t.note + " · " : ""}AnonScore earns a referral when you sign up — see /how-we-get-paid` : t.note} style={base}>{label}</a>
@@ -3055,7 +3055,7 @@ function FixToolChips({ tools, tool, onReview }) {
             {chip}
             {reviewed && (
               <button onClick={() => onReview(t.name)} title={"Our independent review of " + t.name + " — strengths and honest watch-outs"}
-                style={{ background: "none", border: "none", padding: 0, fontFamily: T.mono, fontSize: 9, color: T.textMid, cursor: "pointer", textDecoration: "underline dotted", textUnderlineOffset: 2 }}>
+                style={{ background: "none", border: "none", padding: 0, fontFamily: T.mono, fontSize: 11, color: T.textMid, cursor: "pointer", textDecoration: "underline dotted", textUnderlineOffset: 2 }}>
                 review
               </button>
             )}
@@ -3289,7 +3289,7 @@ function ScoreRing({ score, size = 130, animate = true }) {
         paddingTop: size * 0.06, // nudge up slightly inside the open-bottom arc
       }}>
         <span style={{ fontFamily: T.serif, fontSize: size * .29, color: textCol, lineHeight: 1, fontWeight: 400 }}>{cur}</span>
-        <span style={{ fontFamily: T.mono, fontSize: size * .075, color: T.textDim, letterSpacing: 1, marginTop: 2 }}>/100</span>
+        <span style={{ fontFamily: T.mono, fontSize: Math.max(11, size * .075), color: T.textDim, letterSpacing: 0.4, marginTop: 2 }}>/100</span>
       </div>
     </div>
   );
@@ -3764,13 +3764,13 @@ function TrustBox() {
 const CATEGORY_META = {
   exchange: { label: "Exchange",  color: "#58a6ff" },
   seizure:  { label: "Seizure",   color: "#f85149" },
-  darknet:  { label: "Darknet",   color: "#E8A730" },
+  darknet:  { label: "Darknet",   color: "#E6C229" },
   miner:    { label: "Miner",     color: "#3fb950" },
 };
 const STATUS_META = {
   active:     { label: "Active",      color: "#3fb950" },
   dormant:    { label: "Dormant",     color: "#888fae" },
-  liquidating:{ label: "Liquidating", color: "#E8A730" },
+  liquidating:{ label: "Liquidating", color: "#E6C229" },
   liquidated: { label: "Liquidated",  color: "#58a6ff" },
 };
 
@@ -5035,7 +5035,7 @@ function Sparkline({ history, width = 80, height = 28 }) {
    Renders a waterfall: start at 100, each penalty/bonus, end at the
    final score. Reads check.pts (now persisted by the engines).
 ───────────────────────────────────────────── */
-function ScoreBreakdown({ checks, score, isMobile, simpleMode }) {
+function ScoreBreakdown({ checks, score, isMobile, simpleMode, recover = "see the fixes on this page" }) {
   // Only checks that actually moved the score, worst first.
   const movers = checks.filter(c => typeof c.pts === "number" && c.pts !== 0)
     .sort((a, b) => a.pts - b.pts);
@@ -5086,7 +5086,7 @@ function ScoreBreakdown({ checks, score, isMobile, simpleMode }) {
         <span style={{ fontFamily: T.serif, fontSize: 28, color: col, lineHeight: 1 }}>{score}<span style={{ fontFamily: T.mono, fontSize: 12, color: T.textDim }}>/100</span></span>
       </div>
       <div style={{ fontFamily: T.mono, fontSize: 10, color: T.textDim, marginTop: 8, lineHeight: 1.5 }}>
-        100 {lost ? <>− {Math.abs(lost)} lost </> : ""}{gained ? <>+ {gained} earned </> : ""}= {raw}{raw !== score ? ` → ${score} (${raw < 0 ? "floored at 0" : "capped at 100"})` : ""}. Each penalty is recoverable — see the Fix It tab.
+        100 {lost ? <>− {Math.abs(lost)} lost </> : ""}{gained ? <>+ {gained} earned </> : ""}= {raw}{raw !== score ? ` → ${score} (${raw < 0 ? "floored at 0" : "capped at 100"})` : ""}. Each penalty is recoverable — {recover}.
       </div>
     </div>
   );
@@ -5538,8 +5538,16 @@ function TransactionInspector({ onBack, isMobile, onScan, onNav, prefill, prefil
           <div style={{ ...label, color: a.leaky ? T.red : T.green }}>{tx.confirmed ? "FORENSIC VERDICT · CONFIRMED TX" : "PRE-BROADCAST VERDICT"}</div>
           <div style={{ fontFamily: T.serif, fontSize: isMobile ? 18 : 21, color: T.text, fontWeight: 400, marginBottom: a.findings.length ? 12 : 0 }}>
             {tx.confirmed
-              ? (a.leaky ? "This transaction leaked — what follows is what every analyst already reads from it." : "Clean — this transaction gives an analyst little to work with.")
-              : (a.leaky ? "This transaction leaks — you can still fix it before broadcasting." : "Clean — nothing in this transaction obviously links or identifies you.")}
+              ? (a.leaky
+                  ? "This transaction leaked. What follows is what every analyst already reads from it."
+                  : (link && link.available && link.entropy === 0
+                      ? "An ordinary payment. An analyst can follow the coins, which is true of almost every payment, and nothing here adds reuse, a round amount, or a merge."
+                      : "Nothing in this transaction adds a special fingerprint. The readings below are what is already public."))
+              : (a.leaky
+                  ? "This transaction leaks. You can still fix it before broadcasting."
+                  : (link && link.available && link.entropy === 0
+                      ? "An ordinary payment. An analyst could follow the coins, which is true of almost every payment, and nothing here adds reuse, a round amount, or a merge. You can still change it before you broadcast."
+                      : "Nothing here adds a special fingerprint. You can still change it before you broadcast."))}
           </div>
           {a.findings.length > 0 && (
             <ul style={{ listStyle: "none", display: "flex", flexDirection: "column", gap: 7, padding: 0, margin: 0 }}>
@@ -5944,11 +5952,12 @@ function XpubScan({ onBack, isMobile, onScan, onNav, prefill, onOpenWalletReview
             <div style={{ flexShrink: 0 }}><ScoreRing score={r.score} size={isMobile ? 96 : 118} animate={false} /></div>
             <div style={{ flex: 1, minWidth: 200 }}>
               <div style={{ fontFamily: T.serif, fontSize: isMobile ? 22 : 26, color: r.riskColor, fontWeight: 400 }}>Grade {r.grade} · {r.riskLabel}</div>
-              <div style={{ fontSize: 13, color: T.textMid, lineHeight: 1.6, marginTop: 4 }}>Wallet-level privacy across {r.stats.used} used address{r.stats.used !== 1 ? "es" : ""} ({r.stats.addresses} derived & checked).</div>
+              <p style={{ fontSize: 15, color: T.text, lineHeight: 1.55, margin: "8px 0 0" }}>{plainVerdict({ score: r.score, checks: r.checks, kind: "wallet" })}</p>
+              <div style={{ fontSize: 13, color: T.textMid, lineHeight: 1.6, marginTop: 6 }}>Across {r.stats.used} used address{r.stats.used !== 1 ? "es" : ""} ({r.stats.addresses} derived and checked in this browser).</div>
               <div style={{ display: "flex", gap: 18, marginTop: 12, flexWrap: "wrap" }}>
                 {tiles.map(t => (
                   <div key={t.k}>
-                    <div style={{ fontFamily: T.mono, fontSize: 8, color: T.textDim, letterSpacing: 1.5 }}>{t.k}</div>
+                    <div style={{ fontFamily: T.mono, fontSize: 11, color: T.textDim, letterSpacing: 0.6 }}>{t.k}</div>
                     <div style={{ fontFamily: T.serif, fontSize: 17, color: t.c, lineHeight: 1.1, marginTop: 2 }}>{t.v}</div>
                   </div>
                 ))}
@@ -5967,7 +5976,8 @@ function XpubScan({ onBack, isMobile, onScan, onNav, prefill, onOpenWalletReview
                   <div key={i} style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
                     <span style={{ fontSize: 18, flexShrink: 0 }}>{rec.icon}</span>
                     <div><div style={{ fontFamily: T.serif, fontSize: 16, color: T.text }}>{rec.action} <span style={{ fontFamily: T.serif, fontSize: 13, color: T.green }}>+{rec.impact}</span></div>
-                      <div style={{ fontSize: 12.5, color: T.textMid, lineHeight: 1.55, marginTop: 3 }}>{rec.plain}</div>
+                      <div style={{ fontSize: 14, color: T.textMid, lineHeight: 1.55, marginTop: 3 }}>{rec.plain}</div>
+                      {i === 0 && <FixSteps rec={rec} />}
                       <FixToolChips tools={rec.tools} tool={rec.tool} onReview={onOpenWalletReview} /></div>
                   </div>
                 ))}
@@ -7299,9 +7309,8 @@ function ExposureFlow({ txs, isMobile, onFix, entity, address, onScan }) {
    (3 = front line, 0 = still worth doing, lower priority here). Selection is
    session-only — nothing is stored.
 ───────────────────────────────────────────── */
-/* The scoring brain, published — hoisted to module scope so the Dashboard
-   Methodology tab, the Lightning Methodology tab, and the standalone
-   ?page=methodology Intel page all render the SAME source of truth. */
+/* The scoring brain, published — hoisted so the standalone
+   ?page=methodology page is the one write-up. Results link to it. */
 const BTC_METHODOLOGY = [
   { check:"Address Reuse", deduct:"–7 to –28", why:"Permanent public link between all transactions on this address.", sev:"critical" },
   { check:"CoinJoin Usage", deduct:"+4 to +12", why:"Breaks transaction graph. Positive score if detected. Heavy penalty if absent.", sev:"high" },
@@ -7349,9 +7358,8 @@ const THREAT_MODELS = [
 
 /* ─────────────────────────────────────────────
    METHODOLOGY — the Intel page at /?page=methodology. The site's core claim
-   ("open heuristics, no black box") was previously verifiable only AFTER a
-   completed scan, and never on mobile (the Methodology tab is desktop-only).
-   This page composes the SAME hoisted constants the dashboards render — the
+   ("open heuristics, no black box") is the page results link to, on every
+   screen size. It composes the hoisted constants — the
    full scoring brain, the threat-model briefing, and the data sources — as a
    pre-scan orientation surface. Zero new content, one new URL.
 ───────────────────────────────────────────── */
@@ -7461,6 +7469,224 @@ function MethodologyPage({ onBack, isMobile, onNav }) {
   );
 }
 
+/* One sentence a person can read without knowing the heuristics. Built from the
+   check that moved the score the most. Does not change the score. */
+function firstSentence(s) {
+  if (!s) return "";
+  const m = String(s).trim().match(/^[\s\S]*?[.!?](?:\s|$)/);
+  return (m ? m[0] : s).trim();
+}
+function worstCheck(checks) {
+  const bad = (checks || []).filter(c => c.status !== "pass");
+  const scored = bad.filter(c => typeof c.pts === "number");
+  if (scored.length) return [...scored].sort((a, b) => a.pts - b.pts)[0];
+  return bad[0] || null;
+}
+const LN_WHY = {
+  kyc_peers: "Channels to KYC exchanges can log who this node routes with.",
+  announced: "This node is on the public Lightning map, so peers can see where it connects.",
+  tor: "Peers can see this node's IP address.",
+  channels: "Too few public channels make a payment easier to correlate.",
+  cap_conc: "Almost all of the capacity sits in one channel, so routes are predictable.",
+  alias: "The alias reads like a real name, and the whole network can see it.",
+  age: "A new node has a short history, which is easier to watch.",
+  onchain: "Channel opens on the blockchain can tie this node to an on-chain wallet.",
+};
+function whyLine(check) {
+  if (!check) return "";
+  const simple = SIMPLE.checks[check.key];
+  if (simple) {
+    const d = check.status === "fail" ? simple.fail_detail : check.status === "warn" ? simple.warn_detail : simple.pass_detail;
+    if (d) return firstSentence(d);
+  }
+  return firstSentence(check.plain || check.detail || "");
+}
+function plainVerdict({ score, checks, kind, clusterN = 0 }) {
+  const noun = kind === "ln" ? "node" : kind === "wallet" ? "wallet" : "address";
+  const fails = (checks || []).filter(c => c.status === "fail").length;
+  const worst = worstCheck(checks);
+  const why = (kind === "ln" && worst && LN_WHY[worst.key]) || whyLine(worst);
+  const link = kind === "btc" && clusterN > 0 ? ` The chain already links it to ${clusterN} other address${clusterN === 1 ? "" : "es"}.` : "";
+  if (score >= 80 && fails === 0) {
+    if (worst && worst.status === "warn" && why) {
+      return `The score is high. One warning is left: ${why.charAt(0).toLowerCase()}${why.slice(1)}` + link;
+    }
+    return `An observer has little to connect on this ${noun}. Keep receiving on a fresh address, and don't merge these coins with an exchange withdrawal.` + link;
+  }
+  if (score >= 60) {
+    return (why
+      ? `An observer can still read part of this ${noun}. ${why}`
+      : `An observer can still read part of this ${noun}. The first step below closes the biggest gap.`) + link;
+  }
+  return (why
+    ? `Easy to follow. ${why}`
+    : `This ${noun} is easy to follow. The first step below is the one that matters.`) + link;
+}
+
+/* Concrete steps for a fix. Keyed off the recommendation, not the score,
+   so the engine output stays the same. Wallet-scan recs have no key; match
+   them by what they tell the person to do. */
+const FIX_HOWTO = {
+  cj: { where: "Ginger Wallet or Wasabi", steps: [
+    "Install Ginger Wallet (it runs a coordinator) or Wasabi, then choose a community coordinator under Change Coordinator.",
+    "Load only the coins you want to mix. Leave any dust frozen so it is not pulled in.",
+    "Start a CoinJoin and wait until the round finishes. Come back here and rescan.",
+  ]},
+  payjoin: { where: "Cake Wallet", steps: [
+    "Install Cake Wallet and open the wallet you spend from.",
+    "Pay someone who accepts Payjoin the way you normally would. Cake adds one of their coins to the payment.",
+    "If you receive payments, turn Payjoin on so the sender's coins mix with yours.",
+  ]},
+  reuse: { where: "Sparrow, Cake, or the wallet you already use", steps: [
+    "Tap Receive and copy the new address. Send that one. Do not paste an address you have already used.",
+    "If you must publish one address, use a Silent Payment (it starts with sp1) in Sparrow or Cake. Each payer still lands on a fresh on-chain address.",
+    "After the next payment arrives, rescan the new address.",
+  ]},
+  lightning: { where: "Phoenix Wallet", steps: [
+    "Install Phoenix or Breez. Both are self-custodial.",
+    "Send a small amount in from a coin that is not dust and not an exchange withdrawal you want to keep separate.",
+    "Pay everyday amounts over Lightning. Those payments do not appear on the blockchain.",
+  ]},
+  cons: { where: "Sparrow Wallet", steps: [
+    "Keep exchange coins and private coins in two wallets. Do not send from one to the other.",
+    "Open the Coins tab. Before you send, select only the coins that belong together.",
+    "Label each coin (exchange, private, mixed) so the next spend does not merge them.",
+  ]},
+  dust: { where: "Sparrow Wallet", steps: [
+    "Open the coin list and find outputs under 546 sats.",
+    "Right-click each one and choose Freeze. In Electrum that is Freeze coin. In Bitcoin Core it is lockunspent.",
+    "Leave them frozen. Spending one tells the sender where the rest of the wallet went.",
+  ]},
+  round: { where: "the exchange withdrawal screen", steps: [
+    "Do not withdraw a round number such as 0.1. Change the last digits, for example 0.10381.",
+    "Send it to a fresh address, and keep those coins out of your private stack.",
+    "When you can, buy without KYC (Bisq, RoboSats, or Peach) so there is no exchange trail.",
+  ]},
+  change: { where: "Sparrow or Electrum", steps: [
+    "In Sparrow, use a Native SegWit wallet. Change already goes to a new address.",
+    "In Electrum, open Preferences and turn on Use change addresses.",
+    "Send a small payment to yourself and confirm the change is a new address, then rescan.",
+  ]},
+  node: { where: "Umbrel, Start9, or Bitcoin Core", steps: [
+    "Run your own node: Umbrel or Start9 on a small computer, or Bitcoin Core on a machine you leave on.",
+    "In the wallet's server settings, point it at that node and turn off public Electrum servers.",
+    "Lookups then stay on your machine. A public explorer never sees your addresses next to your IP.",
+  ]},
+  fee: { where: "Sparrow Wallet", steps: [
+    "Before you send, check the fee on mempool.space.",
+    "Set the fee yourself instead of accepting the wallet default.",
+    "Change it a little every time. The same sat/vB on every payment is a fingerprint.",
+  ]},
+  conc: { where: "Sparrow Wallet", steps: [
+    "Open coin control and send part of the large coin to a new address of your own.",
+    "Do it when fees are low, and do not combine it with coins from another source.",
+    "A CoinJoin also splits the balance into several pieces.",
+  ]},
+  changeid: { where: "Bitcoin Core or Sparrow", steps: [
+    "Use a wallet that makes the change the same address type as the person you pay. Bitcoin Core does this on its own.",
+    "In Sparrow, set the change address type to match the payment before you broadcast.",
+    "Keeping the whole wallet on Native SegWit removes the tell.",
+  ]},
+  kyc_peers: { where: "Amboss, then your node", steps: [
+    "On Amboss, pick Tor-only nodes with no real-name alias and enough capacity.",
+    "In Umbrel, Thunderhub, or RTL, close the channels to exchanges such as Bitfinex, Kraken, Binance, and OKX.",
+    "Open replacement channels to the nodes you picked, then rescan.",
+  ]},
+  announced: { where: "Core Lightning or LND", steps: [
+    "New channels can stay unannounced. They still work. They are just not on the public map.",
+    "In Core Lightning, open the channel as unannounced. In LND, do not advertise it.",
+    "Channels that are already public stay public until you close them.",
+  ]},
+  tor: { where: "Umbrel, Start9, or RaspiBlitz", steps: [
+    "Umbrel: Settings, then Tor, then force Tor. Start9: System, then Tor, then enforce Tor. RaspiBlitz: CONNECT, then TOR.",
+    "Turn off clearnet listening so the node has no public IP.",
+    "Restart and rescan. The address list should be onion-only.",
+  ]},
+  onchain: { where: "Sparrow, then your node", steps: [
+    "Do not open a channel straight from an exchange withdrawal.",
+    "In Sparrow, pick a coin that did not come from an exchange and send it to the node's on-chain wallet.",
+    "Open the channel from that coin.",
+  ]},
+};
+function howtoFor(rec) {
+  if (!rec) return null;
+  if (rec.key && FIX_HOWTO[rec.key]) return FIX_HOWTO[rec.key];
+  const blob = `${rec.action || ""} ${rec.plain || ""}`;
+  if (/CoinJoin/i.test(blob)) return FIX_HOWTO.cj;
+  if (/fresh address|new address|reuse/i.test(blob)) return FIX_HOWTO.reuse;
+  if (/coin control|merge|different sources/i.test(blob)) return FIX_HOWTO.cons;
+  if (/dust|Freeze/i.test(blob)) return FIX_HOWTO.dust;
+  if (/Payjoin/i.test(blob)) return FIX_HOWTO.payjoin;
+  if (/Lightning/i.test(blob)) return FIX_HOWTO.lightning;
+  return null;
+}
+function FixSteps({ rec }) {
+  const how = howtoFor(rec);
+  if (!how) return null;
+  return (
+    <div style={{ marginTop: 10 }}>
+      <div style={{ fontSize: 13, fontWeight: 700, color: T.text, marginBottom: 6 }}>How, in {how.where}</div>
+      <ol style={{ margin: 0, paddingLeft: 18, display: "flex", flexDirection: "column", gap: 5 }}>
+        {how.steps.map((s, n) => (
+          <li key={n} style={{ fontSize: 14, color: T.textMid, lineHeight: 1.5 }}>{s}</li>
+        ))}
+      </ol>
+    </div>
+  );
+}
+
+function ResultHero({ score, grade, riskLabel, riskColor, verdict, fail, warn, pass, stats, statsOpen, onToggleStats, isMobile }) {
+  return (
+    <section aria-label="Your score" style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 16, padding: isMobile ? "16px" : "18px 22px", marginBottom: 14 }}>
+      <div style={{ display: "flex", gap: isMobile ? 12 : 16, alignItems: "flex-start" }}>
+        <ScoreRing score={score} size={isMobile ? 76 : 88} animate={false} />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+            <span style={{ fontFamily: T.serif, fontSize: isMobile ? 26 : 32, color: riskColor, lineHeight: 1 }}>Grade {grade}</span>
+            <span style={{ fontFamily: T.mono, fontSize: 13, color: T.textMid }}>{score}/100</span>
+            <Tag label={riskLabel} color={riskColor} size={12} />
+          </div>
+          <p style={{ fontSize: isMobile ? 15 : 16.5, color: T.text, lineHeight: 1.55, margin: "10px 0 0" }}>{verdict}</p>
+        </div>
+      </div>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginTop: 14, flexWrap: "wrap" }}>
+        <div style={{ fontSize: 13, color: T.textMid, lineHeight: 1.4 }}>
+          <span style={{ color: T.red, fontWeight: 700 }}>{fail}</span> failed
+          <span style={{ color: T.textDim }}> · </span>
+          <span style={{ color: T.amber, fontWeight: 700 }}>{warn}</span> {warn === 1 ? "warning" : "warnings"}
+          <span style={{ color: T.textDim }}> · </span>
+          <span style={{ color: T.green, fontWeight: 700 }}>{pass}</span> passed
+        </div>
+        {stats && stats.length > 0 && (
+          <button type="button" onClick={onToggleStats} aria-expanded={!!statsOpen}
+            style={{ background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: T.sans, fontSize: 13, fontWeight: 600, color: T.cyan }}>
+            {statsOpen ? "Hide balance and comparison" : "Balance and comparison"}
+          </button>
+        )}
+      </div>
+      {statsOpen && stats && (
+        <div style={{ display: "flex", gap: isMobile ? 16 : 28, flexWrap: "wrap", marginTop: 12, paddingTop: 12, borderTop: `1px solid ${T.border}` }}>
+          {stats.map(s => {
+            const body = (
+              <>
+                <div style={{ fontFamily: T.mono, fontSize: 11, color: T.textDim, letterSpacing: 0.6, marginBottom: 3 }}>{s.label}</div>
+                <div style={{ fontFamily: T.serif, fontSize: 18, color: s.color, lineHeight: 1 }}>{s.val}</div>
+                {s.sub && <div style={{ fontSize: 12, color: s.onClick ? T.cyan : T.textDim, marginTop: 3 }}>{s.sub}{s.onClick ? " →" : ""}</div>}
+              </>
+            );
+            return s.onClick ? (
+              <button key={s.label} type="button" onClick={s.onClick} title={s.title || s.sub}
+                style={{ background: "none", border: "none", padding: 0, textAlign: "left", cursor: "pointer", fontFamily: "inherit" }}>{body}</button>
+            ) : (
+              <div key={s.label}>{body}</div>
+            );
+          })}
+        </div>
+      )}
+    </section>
+  );
+}
+
 function Dashboard({ address, addrInfo, utxos, txs, txSample, isMobile, onBack, onRescan, toast, autoShare, scanAt, defaultSimple, simpleMode: simpleModeFromApp, onSimpleModeChange, onCoach, delta, onNav, onOpenCase, onOpenWalletReview, onInspectTx, onInspectTxid }) {
   const [tab, setTab] = useState("Fix It");
   const [threat, setThreat] = useState(null); // null = ranked for everyone; session-only, never stored
@@ -7474,6 +7700,9 @@ function Dashboard({ address, addrInfo, utxos, txs, txSample, isMobile, onBack, 
   const [shareOpen, setShareOpen] = useState(false);
   const [selectedUtxo, setSelectedUtxo] = useState(null);
   const [doneFixes, setDoneFixes] = useState(() => getDoneFixes(address));
+  const [statsOpen, setStatsOpen] = useState(false);
+  const [moreFixes, setMoreFixes] = useState(false);
+  const [whyKey, setWhyKey] = useState(null);
 
   const toggleDone = (key) => setDoneFixes(prev => {
     const next = new Set(prev);
@@ -7496,9 +7725,7 @@ function Dashboard({ address, addrInfo, utxos, txs, txSample, isMobile, onBack, 
     return utxos.reduce((s, u) => s + u.value, 0);
   }, [addrInfo, utxos]);
   const issueCount = checks.filter(c => c.status !== "pass").length;
-  const TABS = isMobile
-    ? ["Fix It","Overview","Flow","UTXOs","Transactions"]
-    : ["Fix It","Overview","Flow","UTXOs","Transactions","Methodology"];
+  const TABS = ["Fix It","Overview","Flow","UTXOs","Transactions"];
 
   useEffect(() => {
     if (!autoShare) return;
@@ -7610,7 +7837,7 @@ function Dashboard({ address, addrInfo, utxos, txs, txSample, isMobile, onBack, 
         {!isMobile && <div style={{ fontFamily: T.display, fontSize: 15, letterSpacing: 4, fontWeight: 700 }}>ANON<span style={{ color: T.cyan }}>SCORE</span></div>}
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontFamily: T.mono, fontSize: 11, color: T.textDim, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{address === "DEMO" || address === "DEMO_A" ? "Demo Wallet" : fmt.addr(address)}</div>
-          {scanAt && <div style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim, marginTop: 2 }}>Scanned {fmt.age(scanAt / 1000)}</div>}
+          {scanAt && <div style={{ fontFamily: T.mono, fontSize: 11, color: T.textDim, marginTop: 2 }}>Scanned {fmt.age(scanAt / 1000)}</div>}
         </div>
         <div style={{ display: "flex", gap: 8, flexShrink: 0, alignItems: "center" }}>
           <Tag label={riskLabel} color={riskColor} size={10} />
@@ -7643,72 +7870,26 @@ function Dashboard({ address, addrInfo, utxos, txs, txSample, isMobile, onBack, 
       </nav>
 
       <div style={{ flex: 1, padding: isMobile ? "12px 12px" : "16px 32px", maxWidth: 1100, margin: "0 auto", width: "100%" }}>
-        {/* ── Compact summary bar ── */}
-        <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 14, padding: isMobile ? "12px 14px" : "12px 20px", marginBottom: 12, display: "flex", alignItems: "center", gap: isMobile ? 12 : 20, flexWrap: "wrap", animation: "fadeUp .35s ease both" }}>
-          {/* Score ring — smaller */}
-          <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
-            <ScoreRing score={score} size={52} animate={false} />
-            <div>
-              <div style={{ fontFamily: T.serif, fontSize: 20, color: riskColor, lineHeight: 1, animation: `popIn .55s cubic-bezier(.34,1.56,.64,1) .85s both${score < 30 ? ", shake .5s ease 2s" : ""}`, transformOrigin: "left center" }}>Grade {grade}</div>
-              <div style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim, letterSpacing: 1, marginTop: 2, animation: "fadeIn .35s ease 1.4s both" }}>{score}/100</div>
-            </div>
-          </div>
-
-          <div style={{ width: 1, height: 36, background: T.border, flexShrink: 0 }} />
-
-          {/* Issues — most important, highlighted */}
-          <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
-            <div style={{ background: T.red + "18", border: `1px solid ${T.red}44`, borderRadius: 8, padding: "4px 10px", display: "flex", alignItems: "center", gap: 5 }}>
-              <span style={{ fontFamily: T.mono, fontSize: 16, fontWeight: 700, color: T.red, lineHeight: 1 }}>{checks.filter(c => c.status === "fail").length}</span>
-              <span style={{ fontFamily: T.mono, fontSize: 9, color: T.red, letterSpacing: 0.5 }}>FAIL</span>
-            </div>
-            <div style={{ background: T.amber + "18", border: `1px solid ${T.amber}44`, borderRadius: 8, padding: "4px 10px", display: "flex", alignItems: "center", gap: 5 }}>
-              <span style={{ fontFamily: T.mono, fontSize: 16, fontWeight: 700, color: T.amber, lineHeight: 1 }}>{checks.filter(c => c.status === "warn").length}</span>
-              <span style={{ fontFamily: T.mono, fontSize: 9, color: T.amber, letterSpacing: 0.5 }}>WARN</span>
-            </div>
-            <div style={{ background: T.green + "18", border: `1px solid ${T.green}44`, borderRadius: 8, padding: "4px 10px", display: "flex", alignItems: "center", gap: 5 }}>
-              <span style={{ fontFamily: T.mono, fontSize: 16, fontWeight: 700, color: T.green, lineHeight: 1 }}>{checks.filter(c => c.status === "pass").length}</span>
-              <span style={{ fontFamily: T.mono, fontSize: 9, color: T.green, letterSpacing: 0.5 }}>PASS</span>
-            </div>
-          </div>
-
-          <div style={{ width: 1, height: 36, background: T.border, flexShrink: 0 }} />
-
-          {/* Other stats — slim */}
-          <div style={{ display: "flex", gap: isMobile ? 14 : 24, flexWrap: "wrap" }}>
-            {[
-              { label: "BALANCE", val: `₿${(totalSats/1e8).toFixed(4)}`, sub: `${addrInfo?.chain_stats?.funded_txo_count != null ? (addrInfo.chain_stats.funded_txo_count - (addrInfo.chain_stats.spent_txo_count||0)) : utxos.length} UTXOs`, color: T.blue },
-              { label: "TXS", val: txCount, sub: txSample?.capped ? `latest ${txSample.fetched}` : "total", color: T.cyan },
-              { label: "VS TYPICAL", val: score > 38 ? `+${score-38}` : `${score-38}`, sub: "typical ~38", color: score > 38 ? T.green : T.red },
-              // The cluster the common-input heuristic builds — surfaced here so
-              // the Flow tab's headline finding is discoverable at a glance.
-              ...(clusterN > 0 ? [{ label: "CLUSTER", val: clusterN, sub: "linked addrs", color: T.red, onClick: () => setTab("Flow") }] : []),
-              // Progress vs the user's own previous scan of this address — the
-              // feedback loop for the Fix It plan. Only shown when it moved.
-              ...(delta != null && delta !== 0 ? [{ label: "PROGRESS", val: delta > 0 ? `+${delta}` : `${delta}`, sub: "vs your last scan", color: delta > 0 ? T.green : T.red }] : []),
-            ].map(s => s.onClick ? (
-              <button key={s.label} onClick={s.onClick} title="See the cluster on the Flow tab"
-                style={{ background: "none", border: "none", padding: 0, textAlign: "left", cursor: "pointer", fontFamily: "inherit" }}>
-                <div style={{ fontFamily: T.mono, fontSize: 8, color: T.textDim, letterSpacing: 1.5, marginBottom: 2 }}>{s.label}</div>
-                <div style={{ fontFamily: T.serif, fontSize: 18, color: s.color, lineHeight: 1 }}>{s.val}</div>
-                <div style={{ fontSize: 10, color: T.cyan, marginTop: 1, textDecoration: "underline", textUnderlineOffset: 2 }}>{s.sub} →</div>
-              </button>
-            ) : (
-              <div key={s.label}>
-                <div style={{ fontFamily: T.mono, fontSize: 8, color: T.textDim, letterSpacing: 1.5, marginBottom: 2 }}>{s.label}</div>
-                <div style={{ fontFamily: T.serif, fontSize: 18, color: s.color, lineHeight: 1 }}>{s.val}</div>
-                <div style={{ fontSize: 10, color: T.textDim, marginTop: 1 }}>{s.sub}</div>
-              </div>
-            ))}
-          </div>
-
-          {/* Fix potential — right-aligned */}
-          <div style={{ marginLeft: "auto", flexShrink: 0, textAlign: "right" }}>
-            <div style={{ fontFamily: T.mono, fontSize: 8, color: T.textDim, letterSpacing: 1.5, marginBottom: 2 }}>TOP 3 FIXES</div>
-            <div style={{ fontFamily: T.serif, fontSize: 18, color: T.green, lineHeight: 1 }}>+{recommendations.slice(0, 3).reduce((a, r) => a + r.impact, 0)} pts</div>
-            <div style={{ fontSize: 10, color: T.textDim, marginTop: 1 }}>potential gain</div>
-          </div>
-        </div>
+        <ResultHero
+          score={score}
+          grade={grade}
+          riskLabel={riskLabel}
+          riskColor={riskColor}
+          verdict={plainVerdict({ score, checks, kind: "btc", clusterN })}
+          fail={checks.filter(c => c.status === "fail").length}
+          warn={checks.filter(c => c.status === "warn").length}
+          pass={checks.filter(c => c.status === "pass").length}
+          statsOpen={statsOpen}
+          onToggleStats={() => setStatsOpen(o => !o)}
+          isMobile={isMobile}
+          stats={[
+            { label: "BALANCE", val: `₿${(totalSats/1e8).toFixed(4)}`, sub: `${addrInfo?.chain_stats?.funded_txo_count != null ? (addrInfo.chain_stats.funded_txo_count - (addrInfo.chain_stats.spent_txo_count||0)) : utxos.length} UTXOs`, color: T.blue },
+            { label: "TRANSACTIONS", val: txCount, sub: txSample?.capped ? `latest ${txSample.fetched}` : "total", color: T.cyan },
+            { label: "VS TYPICAL", val: score > 38 ? `+${score-38}` : `${score-38}`, sub: "typical ~38", color: score > 38 ? T.green : T.red },
+            ...(clusterN > 0 ? [{ label: "CLUSTER", val: clusterN, sub: "linked addresses", color: T.red, onClick: () => setTab("Flow"), title: "See the cluster on the Flow tab" }] : []),
+            ...(delta != null && delta !== 0 ? [{ label: "PROGRESS", val: delta > 0 ? `+${delta}` : `${delta}`, sub: "vs your last scan", color: delta > 0 ? T.green : T.red }] : []),
+          ]}
+        />
 
         {txSample?.capped && txSample.total != null && (
           <div style={{ fontFamily: T.mono, fontSize: 11, color: T.textDim, margin: "-4px 4px 12px", lineHeight: 1.5 }}>
@@ -7762,8 +7943,14 @@ function Dashboard({ address, addrInfo, utxos, txs, txSample, isMobile, onBack, 
         {/* Tabs + Simple Mode toggle — desktop only; mobile uses bottom bar */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 14 }}>
           {!isMobile && (
-            <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 2 }}>
+            <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 2, alignItems: "center" }}>
               {TABS.map(t => <Pill key={t} active={tab === t} onClick={() => setTab(t)}>{t}</Pill>)}
+              {onNav && (
+                <button type="button" onClick={() => onNav("methodology")}
+                  style={{ background: "none", border: "none", fontFamily: T.sans, fontSize: 13, color: T.textMid, cursor: "pointer", textDecoration: "underline", textUnderlineOffset: 3, whiteSpace: "nowrap" }}>
+                  How scoring works
+                </button>
+              )}
             </div>
           )}
           <button onClick={() => setSimpleModeSync(!simpleMode)} style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 7, background: simpleMode ? T.cyan : T.surface, border: `1.5px solid ${simpleMode ? T.cyan : T.border}`, borderRadius: 20, padding: "8px 16px", cursor: "pointer", transition: "all .2s", boxShadow: simpleMode ? `0 0 12px ${T.cyanMid}` : "none" }}
@@ -7783,12 +7970,17 @@ function Dashboard({ address, addrInfo, utxos, txs, txSample, isMobile, onBack, 
             : recommendations;
           return (
           <div key={tab} style={{ display: "flex", flexDirection: "column", gap: 10, animation: "fadeIn .22s ease both" }}>
-            <div style={{ fontSize: 14, color: T.textMid, lineHeight: 1.5 }}>
-              {tm
-                ? <>Re-ranked for <strong style={{ color: T.cyan }}>{tm.label.toLowerCase()}</strong>. The points do not change — only the order does.</>
-                : <>Sorted by impact. The top 3 could add <strong style={{ color: T.cyan }}>{recommendations.slice(0, 3).reduce((a, r) => a + r.impact, 0)} points</strong>.</>}
+            <div>
+              <h2 style={{ fontFamily: T.serif, fontSize: isMobile ? 20 : 22, color: T.text, fontWeight: 400, margin: "2px 0 4px" }}>
+                {checks.some(c => c.status === "fail") || score < 60 ? "Do these first" : checks.some(c => c.status === "warn") ? "The one thing left" : "If you want to go further"}
+              </h2>
+              <div style={{ fontSize: 14, color: T.textMid, lineHeight: 1.5, marginBottom: 4 }}>
+                {tm
+                  ? <>Re-ranked for <strong style={{ color: T.cyan }}>{tm.label.toLowerCase()}</strong>. The points do not change — only the order does.</>
+                  : <>Start with the first one. It returns the most points. The rest can wait.</>}
+              </div>
             </div>
-            {shownRecs.map((r, i) => {
+            {shownRecs.slice(0, moreFixes ? shownRecs.length : 3).map((r, i) => {
               const done = doneFixes.has(r.key);
               const w = weight(r);
               const simple = SIMPLE.recs[r.key];
@@ -7805,12 +7997,25 @@ function Dashboard({ address, addrInfo, utxos, txs, txSample, isMobile, onBack, 
                     <div style={{ fontFamily: T.serif, fontSize: isMobile ? 17 : 20, color: done ? T.green : T.text, fontWeight: 400, textDecoration: done ? "line-through" : "none", transition: "color .25s ease" }}>{displayAction}</div>
                   </div>
                   {!done && <>
-                    <div style={{ fontSize: 14, color: T.textMid, lineHeight: 1.7, marginBottom: 10 }}>{displayPlain}</div>
-                    {!simpleMode && <div style={{ fontSize: 12, color: T.textDim, lineHeight: 1.6, background: T.surface, borderRadius: 8, padding: "10px 14px" }}><strong style={{ color: T.textMid }}>How:</strong> {r.detail}</div>}
+                    <div style={{ fontSize: 14, color: T.textMid, lineHeight: 1.65 }}>{displayPlain}</div>
+                    {i < 3 && <FixSteps rec={r} />}
                     <FixToolChips tools={r.tools} tool={r.tool} onReview={onOpenWalletReview} />
-                    {!simpleMode && (r.tools || []).length > 0 && (
-                      <div style={{ marginTop: 6, fontSize: 11, color: T.textDim, lineHeight: 1.55 }}>
-                        {(r.tools || []).map((t, ti) => t.note ? <span key={ti}><span style={{ color: T.textMid }}>{t.name}</span> — {t.note}{ti < r.tools.length - 1 ? " · " : ""}</span> : null)}
+                    {r.detail && r.detail !== displayPlain && (
+                      <div style={{ marginTop: 8 }}>
+                        <button type="button" onClick={() => setWhyKey(whyKey === r.key ? null : r.key)} aria-expanded={whyKey === r.key}
+                          style={{ background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: T.sans, fontSize: 13, fontWeight: 600, color: T.cyan }}>
+                          {whyKey === r.key ? "Hide the background" : "Why this works"}
+                        </button>
+                        {whyKey === r.key && (
+                          <div style={{ fontSize: 13, color: T.textMid, lineHeight: 1.6, marginTop: 8 }}>
+                            {r.detail}
+                            {(r.tools || []).some(t => t.note) && (
+                              <div style={{ marginTop: 8 }}>
+                                {(r.tools || []).map((t, ti) => t.note ? <div key={ti}><span style={{ color: T.text }}>{t.name}.</span> {t.note}</div> : null)}
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
                     )}
                   </>}
@@ -7819,12 +8024,12 @@ function Dashboard({ address, addrInfo, utxos, txs, txSample, isMobile, onBack, 
                   <div style={{ textAlign: isMobile ? "left" : "right" }}>
                     <div style={{ fontFamily: T.serif, fontSize: 22, color: T.green }}>+{r.impact}pts</div>
                     {scoreGrade(Math.min(score + r.impact, 97)) !== grade && (
-                      <div title="Your grade if you complete just this one fix" style={{ fontFamily: T.mono, fontSize: 9, color: T.green, marginTop: 1 }}>→ grade {scoreGrade(Math.min(score + r.impact, 97))}</div>
+                      <div title="Your grade if you complete just this one fix" style={{ fontFamily: T.mono, fontSize: 11, color: T.green, marginTop: 1 }}>→ grade {scoreGrade(Math.min(score + r.impact, 97))}</div>
                     )}
                   </div>
-                  {tm && !done && w === 3 && <Tag label="front line" color={T.cyan} size={9} />}
-                  {tm && !done && w === 0 && <Tag label="lower priority here" color={T.textDim} size={9} />}
-                  <Tag label={r.effort} color={r.effort === "Easy" ? T.green : r.effort === "Medium" ? T.amber : T.textMid} size={9} />
+                  {tm && !done && w === 3 && <Tag label="front line" color={T.cyan} size={11} />}
+                  {tm && !done && w === 0 && <Tag label="lower priority here" color={T.textDim} size={11} />}
+                  <Tag label={r.effort} color={r.effort === "Easy" ? T.green : r.effort === "Medium" ? T.amber : T.textMid} size={11} />
                   <button onClick={() => toggleDone(r.key)} style={{ background: done ? T.green : "transparent", border: `1.5px solid ${done ? T.green : T.border}`, borderRadius: 8, padding: "5px 10px", color: done ? T.bg : T.textDim, fontSize: 11, cursor: "pointer", transition: "all .2s", whiteSpace: "nowrap" }}>
                     {done ? "✓ Done" : "Mark done"}
                   </button>
@@ -7832,6 +8037,12 @@ function Dashboard({ address, addrInfo, utxos, txs, txSample, isMobile, onBack, 
               </div>
               );
             })}
+            {shownRecs.length > 3 && (
+              <button type="button" onClick={() => setMoreFixes(v => !v)} aria-expanded={moreFixes}
+                style={{ background: "none", border: `1px solid ${T.border}`, borderRadius: 10, padding: "10px 14px", cursor: "pointer", fontFamily: T.sans, fontSize: 13, fontWeight: 600, color: T.textMid, textAlign: "left" }}>
+                {moreFixes ? "Hide the other fixes" : `Show ${shownRecs.length - 3} more fixes`}
+              </button>
+            )}
             {/* Projection */}
             {(() => { const proj = Math.min(score + recommendations.reduce((a, r) => a + r.impact, 0), 97); return (
             <div style={{ background: T.greenLo, border: `1px solid ${T.green}33`, borderRadius: 14, padding: "18px 22px", display: "flex", gap: 14, alignItems: "center" }}>
@@ -8160,52 +8371,8 @@ function Dashboard({ address, addrInfo, utxos, txs, txSample, isMobile, onBack, 
           <ExposureFlow txs={txs} isMobile={isMobile} onFix={() => setTab("Fix It")} entity={CASE_FILES.find(c => c.address === address)?.entity} address={address} onScan={onRescan} />
         )}
 
-        {/* ── METHODOLOGY ── */}
-        {tab === "Methodology" && (
-          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 16, padding: 28 }}>
-              <div style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim, letterSpacing: 2, marginBottom: 16 }}>HOW SCORING WORKS</div>
-              <div style={{ fontFamily: T.serif, fontSize: 22, color: T.text, marginBottom: 12, fontWeight: 400 }}>11 heuristics, each weighted by severity</div>
-              <div style={{ fontSize: 14, color: T.textMid, lineHeight: 1.75, marginBottom: 20 }}>
-                Every wallet starts at 100. Each detected issue deducts points based on its real-world impact on traceability. We use the same heuristics published in open blockchain research — nothing proprietary.
-              </div>
-              <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 10 }}>
-                {BTC_METHODOLOGY.map((row, i) => (
-                  <div key={i} style={{ background: T.surface, borderRadius: 10, padding: "14px 16px", border: `1px solid ${T.borderLo}` }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: T.text }}>{row.check}</div>
-                      <Tag label={row.deduct} color={row.deduct.startsWith("+") ? T.green : RISK_META[row.sev]?.color || T.red} size={9} />
-                    </div>
-                    <div style={{ fontSize: 12, color: T.textMid, lineHeight: 1.55 }}>{row.why}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 16, padding: 24 }}>
-              <div style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim, letterSpacing: 2, marginBottom: 12 }}>NON-SCORING INSIGHTS</div>
-              <div style={{ fontSize: 12.5, color: T.textMid, lineHeight: 1.65 }}>
-                Four insights inform without moving the score. The <strong style={{ color: T.text }}>Exposure Map</strong> (what each output leaks, per transaction), <strong style={{ color: T.text }}>Cluster Exposure</strong> (the common-input heuristic's view of which addresses share one owner), and the <strong style={{ color: T.text }}>Activity Clock</strong> (transactions binned by UTC hour; a strong quiet window lets an analyst estimate a timezone) are shown because analysts read them — scoring them would double-count checks already in the table above. The <strong style={{ color: T.text }}>address-poisoning alert</strong> flags lookalike addresses planted in the history as copy-paste bait; it's a safety check, not a privacy metric — being targeted doesn't make a wallet more traceable, so it never moves the score.
-              </div>
-            </div>
-            <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 16, padding: 24 }}>
-              <div style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim, letterSpacing: 2, marginBottom: 12 }}>DATA SOURCES</div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                {BTC_DATA_SOURCES.map((s, i) => (
-                  <div key={i} style={{ display: "flex", gap: 12, paddingBottom: 10, borderBottom: i < 3 ? `1px solid ${T.borderLo}` : undefined }}>
-                    <div style={{ width: 4, borderRadius: 2, background: T.cyan, flexShrink: 0, alignSelf: "stretch" }} />
-                    <div>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: T.text, marginBottom: 3 }}>{s.src}</div>
-                      <div style={{ fontSize: 12, color: T.textMid, lineHeight: 1.55 }}>{s.desc}</div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div style={{ background: T.cyanLo, border: `1px solid ${T.cyanMid}`, borderRadius: 14, padding: "16px 20px", fontSize: 13, color: T.textMid, lineHeight: 1.65 }}>
-              <strong style={{ color: T.cyan }}>Open source:</strong> All 11 heuristics are implemented in plain JavaScript in this tool's source. No black box. View and audit the full scoring logic at <a href="https://github.com/netasset/anonscore" target="_blank" rel="noopener noreferrer" style={{ color: T.cyan }}>github.com/netasset/anonscore</a>.
-            </div>
-          </div>
-        )}
+        {/* Scoring write-up lives on ?page=methodology. The results link there
+            instead of repeating it. */}
 
 
       </div>
@@ -8230,7 +8397,7 @@ function Dashboard({ address, addrInfo, utxos, txs, txSample, isMobile, onBack, 
             return (
               <button key={t} onClick={() => setTab(t)} aria-current={tab === t ? "page" : undefined} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3, background: "none", border: "none", cursor: "pointer", borderTop: `2px solid ${tab === t ? T.cyan : "transparent"}`, transition: "border-color .15s" }}>
                 <span style={{ fontSize: 14, color: tab === t ? T.cyan : T.textDim }}>{icons[t]}</span>
-                <span style={{ fontFamily: T.mono, fontSize: 9, color: tab === t ? T.cyan : T.textDim, letterSpacing: 0.2 }}>{t}</span>
+                <span style={{ fontFamily: T.mono, fontSize: 11, color: tab === t ? T.cyan : T.textDim, letterSpacing: 0 }}>{t}</span>
               </button>
             );
           })}
@@ -8255,17 +8422,19 @@ function LightningDashboard({ nodeId, nodeData, channels, isMobile, onBack, onRe
   const [doneFixes, setDoneFixes] = useState(() => getDoneFixes(nodeId || "ln"));
   const [shareOpen, setShareOpen] = useState(false);
   const [aiStage, setAiStage] = useState(null);
+  const [statsOpen, setStatsOpen] = useState(false);
+  const [moreLn, setMoreLn] = useState(false);
   const toggleDone = k => setDoneFixes(p => { const n = new Set(p); n.has(k) ? n.delete(k) : n.add(k); saveDoneFixes(nodeId || "ln", n); return n; });
 
   const totalCap = channels.reduce((s, c) => s + (c.capacity || 0), 0);
   const alias = (nodeData.alias || "Unknown Node").replace(/[\x00-\x1f\x7f]/g, "").trim().slice(0, 50) || "Unknown Node";
   const pubkeyShort = nodeId ? `${nodeId.slice(0, 10)}…${nodeId.slice(-6)}` : "—";
-  const TABS = isMobile ? ["Fix It", "Checks", "Channels"] : ["Fix It", "Checks", "Channels", "Methodology"];
+  const TABS = ["Fix It", "Checks", "Channels"];
 
   const handleRescan = () => onRescan && onRescan(nodeId, false, "ln_pubkey");
 
   return (
-    <div role="main" aria-label={`Lightning privacy audit for ${nodeData?.alias || nodeId.slice(0, 16)}`} style={{ minHeight: "100vh", background: "transparent", display: "flex", flexDirection: "column" }}>
+    <div role="main" aria-label={`Lightning privacy audit for ${nodeData?.alias || nodeId.slice(0, 16)}`} style={{ minHeight: "100vh", background: "transparent", display: "flex", flexDirection: "column", paddingBottom: isMobile ? 72 : 0 }}>
       <h1 className="sr-only">Lightning privacy score {score} of 100, grade {grade}</h1>
 
       {/* ── Share modal — unified with BTC ── */}
@@ -8275,19 +8444,13 @@ function LightningDashboard({ nodeId, nodeData, channels, isMobile, onBack, onRe
       )}
 
       {/* ── Nav — matches BTC nav ── */}
-      <nav style={{ display: "flex", alignItems: "center", gap: 10, padding: isMobile ? "12px 16px" : "12px 32px", borderBottom: `1px solid ${T.border}`, background: T.bg, position: "sticky", top: 0, zIndex: 100 }}>
-        <button onClick={onBack} style={{ background: "transparent", border: `1.5px solid ${T.border}`, borderRadius: 8, padding: "7px 12px", color: T.textMid, fontFamily: T.sans, fontSize: 13, cursor: "pointer", transition: "border .15s" }}
+      <nav style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 10, padding: isMobile ? "12px 16px" : "12px 32px", borderBottom: `1px solid ${T.border}`, background: T.bg, position: "sticky", top: 0, zIndex: 100 }}>
+        <button onClick={onBack} style={{ background: "transparent", border: `1.5px solid ${T.border}`, borderRadius: 8, padding: "7px 12px", color: T.textMid, fontFamily: T.sans, fontSize: 13, cursor: "pointer", transition: "border .15s", flex: "0 0 auto" }}
           onMouseOver={e => e.currentTarget.style.borderColor = T.ln}
           onMouseOut={e => e.currentTarget.style.borderColor = T.border}>← Back</button>
-        {!isMobile && <div style={{ fontFamily: T.display, fontSize: 15, letterSpacing: 4, fontWeight: 700 }}>ANON<span style={{ color: T.cyan }}>SCORE</span></div>}
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontFamily: T.mono, fontSize: 11, color: T.textDim, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            ⚡ {alias !== "Unknown Node" ? alias : (nodeId ? `${nodeId.slice(0,10)}…${nodeId.slice(-6)}` : "Lightning Node")}
-          </div>
-          <div style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim, marginTop: 2 }}>Lightning node audit</div>
-        </div>
-        <div style={{ display: "flex", gap: 8, flexShrink: 0, alignItems: "center" }}>
-          <Tag label={grade} color={col} size={10} />
+        {!isMobile && <div style={{ fontFamily: T.display, fontSize: 15, letterSpacing: 4, fontWeight: 700, flex: "0 0 auto" }}>ANON<span style={{ color: T.cyan }}>SCORE</span></div>}
+        <div style={{ display: "flex", gap: 8, flex: "0 0 auto", marginLeft: "auto", alignItems: "center" }}>
+          <Tag label={scoreLabel(score)} color={col} size={12} />
           {!isMobile && (
             <>
               <button onClick={handleRescan} style={{ background: "transparent", border: `1.5px solid ${T.border}`, borderRadius: 8, padding: "6px 12px", color: T.textMid, fontSize: 13, cursor: "pointer", transition: "all .15s" }}
@@ -8301,73 +8464,50 @@ function LightningDashboard({ nodeId, nodeData, channels, isMobile, onBack, onRe
           {isMobile && (
             <>
               <button onClick={() => setShareOpen(true)} style={{ background: "transparent", border: `1.5px solid ${T.border}`, borderRadius: 8, padding: "6px 10px", color: T.textMid, fontSize: 12, cursor: "pointer" }}>Share</button>
-              <button onClick={handleRescan} style={{ background: "transparent", border: `1.5px solid ${T.border}`, borderRadius: 8, padding: "6px 10px", color: T.textMid, fontSize: 12, cursor: "pointer" }}>↻</button>
+              <button onClick={handleRescan} aria-label="Re-scan this node" style={{ background: "transparent", border: `1.5px solid ${T.border}`, borderRadius: 8, padding: "6px 10px", color: T.textMid, fontSize: 12, cursor: "pointer" }}>↻</button>
             </>
           )}
+        </div>
+        {/* Alias on its own row so a long name cannot shrink the risk tag. */}
+        <div style={{ flex: "1 0 100%", minWidth: 0 }}>
+          <div title={alias} style={{ fontFamily: T.mono, fontSize: 13, color: T.textMid, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            ⚡ {alias !== "Unknown Node" ? alias : (nodeId ? `${nodeId.slice(0,10)}…${nodeId.slice(-6)}` : "Lightning Node")}
+          </div>
+          <div style={{ fontFamily: T.mono, fontSize: 11, color: T.textDim, marginTop: 2 }}>Lightning node audit{nodeId && nodeId.length >= 20 ? ` · ${pubkeyShort}` : ""}</div>
         </div>
       </nav>
 
       <div style={{ flex: 1, padding: isMobile ? "12px 12px" : "16px 32px", maxWidth: 1100, margin: "0 auto", width: "100%" }}>
 
-        {/* ── Compact summary bar — matches BTC exactly ── */}
-        <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 14, padding: isMobile ? "12px 14px" : "12px 20px", marginBottom: 12, display: "flex", alignItems: "center", gap: isMobile ? 12 : 20, flexWrap: "wrap", animation: "fadeUp .35s ease both" }}>
-
-          {/* Score ring + grade */}
-          <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
-            <ScoreRing score={score} size={52} animate={false} />
-            <div>
-              <div style={{ fontFamily: T.serif, fontSize: 20, color: col, lineHeight: 1 }}>Grade {grade}</div>
-              <div style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim, letterSpacing: 1, marginTop: 2 }}>{score}/100</div>
-            </div>
-          </div>
-
-          <div style={{ width: 1, height: 36, background: T.border, flexShrink: 0 }} />
-
-          {/* FAIL / WARN / PASS badges */}
-          <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
-            <div style={{ background: T.red + "18", border: `1px solid ${T.red}44`, borderRadius: 8, padding: "4px 10px", display: "flex", alignItems: "center", gap: 5 }}>
-              <span style={{ fontFamily: T.mono, fontSize: 16, fontWeight: 700, color: T.red, lineHeight: 1 }}>{fails}</span>
-              <span style={{ fontFamily: T.mono, fontSize: 9, color: T.red, letterSpacing: 0.5 }}>FAIL</span>
-            </div>
-            <div style={{ background: T.amber + "18", border: `1px solid ${T.amber}44`, borderRadius: 8, padding: "4px 10px", display: "flex", alignItems: "center", gap: 5 }}>
-              <span style={{ fontFamily: T.mono, fontSize: 16, fontWeight: 700, color: T.amber, lineHeight: 1 }}>{warns}</span>
-              <span style={{ fontFamily: T.mono, fontSize: 9, color: T.amber, letterSpacing: 0.5 }}>WARN</span>
-            </div>
-            <div style={{ background: T.green + "18", border: `1px solid ${T.green}44`, borderRadius: 8, padding: "4px 10px", display: "flex", alignItems: "center", gap: 5 }}>
-              <span style={{ fontFamily: T.mono, fontSize: 16, fontWeight: 700, color: T.green, lineHeight: 1 }}>{passes}</span>
-              <span style={{ fontFamily: T.mono, fontSize: 9, color: T.green, letterSpacing: 0.5 }}>PASS</span>
-            </div>
-          </div>
-
-          <div style={{ width: 1, height: 36, background: T.border, flexShrink: 0 }} />
-
-          {/* Node stats */}
-          <div style={{ display: "flex", gap: isMobile ? 14 : 24, flexWrap: "wrap" }}>
-            {[
-              { label: "CHANNELS", val: channels.length,                           sub: "open",      color: T.blue  },
-              { label: "CAPACITY", val: `₿${(totalCap/1e8).toFixed(3)}`,           sub: "total",     color: T.btc   },
-              { label: "VS TARGET", val: score >= 70 ? `+${score-70}` : `${score-70}`, sub: "target: 70+", color: score >= 70 ? T.green : T.red },
-            ].map(s => (
-              <div key={s.label}>
-                <div style={{ fontFamily: T.mono, fontSize: 8, color: T.textDim, letterSpacing: 1.5, marginBottom: 2 }}>{s.label}</div>
-                <div style={{ fontFamily: T.serif, fontSize: 18, color: s.color, lineHeight: 1 }}>{s.val}</div>
-                <div style={{ fontSize: 10, color: T.textDim, marginTop: 1 }}>{s.sub}</div>
-              </div>
-            ))}
-          </div>
-
-          {/* Top fixes potential — right-aligned */}
-          <div style={{ marginLeft: "auto", flexShrink: 0, textAlign: "right" }}>
-            <div style={{ fontFamily: T.mono, fontSize: 8, color: T.textDim, letterSpacing: 1.5, marginBottom: 2 }}>TOP FIXES</div>
-            <div style={{ fontFamily: T.serif, fontSize: 18, color: T.green, lineHeight: 1 }}>+{recommendations.slice(0, 3).reduce((a, r) => a + r.impact, 0)} pts</div>
-            <div style={{ fontSize: 10, color: T.textDim, marginTop: 1 }}>potential gain</div>
-          </div>
-        </div>
+        <ResultHero
+          score={score}
+          grade={grade}
+          riskLabel={scoreLabel(score)}
+          riskColor={col}
+          verdict={plainVerdict({ score, checks, kind: "ln" })}
+          fail={fails}
+          warn={warns}
+          pass={passes}
+          statsOpen={statsOpen}
+          onToggleStats={() => setStatsOpen(o => !o)}
+          isMobile={isMobile}
+          stats={[
+            { label: "CHANNELS", val: channels.length, sub: "open", color: T.blue },
+            { label: "CAPACITY", val: `₿${(totalCap/1e8).toFixed(3)}`, sub: "total", color: T.btc },
+            { label: "VS TARGET", val: score >= 70 ? `+${score-70}` : `${score-70}`, sub: "target 70+", color: score >= 70 ? T.green : T.red },
+          ]}
+        />
 
         {/* ── Tabs — desktop only; mobile uses bottom bar ── */}
         {!isMobile && (
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14, overflowX: "auto", paddingBottom: 2 }}>
             {TABS.map(t => <Pill key={t} active={tab === t} onClick={() => setTab(t)} color={T.ln}>{t}</Pill>)}
+            {onNav && (
+              <button type="button" onClick={() => onNav("methodology")}
+                style={{ background: "none", border: "none", fontFamily: T.sans, fontSize: 13, color: T.textMid, cursor: "pointer", textDecoration: "underline", textUnderlineOffset: 3, whiteSpace: "nowrap" }}>
+                How scoring works
+              </button>
+            )}
           </div>
         )}
         {isMobile && <div style={{ marginBottom: 14 }} />}
@@ -8375,30 +8515,30 @@ function LightningDashboard({ nodeId, nodeData, channels, isMobile, onBack, onRe
         {/* ── Fix It ── */}
         {tab === "Fix It" && (
           <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-            {score >= 80 && (
-              <div style={{ background: T.greenLo, border: `1px solid ${T.green}44`, borderRadius: 14, padding: "18px 20px", textAlign: "center" }}>
-                <div style={{ fontFamily: T.serif, fontSize: 22, color: T.green, marginBottom: 4 }}>Strong privacy posture ⚡</div>
-                <div style={{ fontSize: 13, color: T.textMid }}>Your Lightning node is well-configured. Keep monitoring as your channel peers change.</div>
-              </div>
+            {recommendations.length > 0 && (
+              <h2 style={{ fontFamily: T.serif, fontSize: isMobile ? 20 : 22, color: T.text, fontWeight: 400, margin: 0 }}>
+                {fails > 0 || score < 60 ? "Do these first" : warns > 0 ? "The one thing left" : "If you want to go further"}
+              </h2>
             )}
             {recommendations.length === 0 && score < 80 && (
-              <div style={{ fontSize: 13, color: T.textMid, padding: "12px 0" }}>No specific fixes generated. Check the Checks tab for detail.</div>
+              <div style={{ fontSize: 14, color: T.textMid, padding: "4px 0" }}>No specific fix for this node. The Checks tab lists what was looked at.</div>
             )}
 
-            {recommendations.map((r, i) => {
+            {recommendations.slice(0, moreLn ? recommendations.length : 3).map((r, i) => {
               const done = doneFixes.has(r.key);
               return (
                 <div key={r.key} style={{ background: done ? T.greenLo : T.card, border: `1px solid ${done ? T.green + "44" : T.border}`, borderRadius: 14, overflow: "hidden", transition: "all .2s" }}>
                   <div style={{ display: "flex", alignItems: "flex-start", gap: 14, padding: "18px 20px" }}>
                     <div style={{ fontFamily: T.mono, fontSize: 11, color: done ? T.green : T.ln, minWidth: 24, marginTop: 2 }}>{String(i+1).padStart(2,"0")}</div>
                     <div style={{ flex: 1 }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
-                        <div style={{ fontSize: 14, fontWeight: 700, color: done ? T.textDim : T.text, textDecoration: done ? "line-through" : "none" }}>{r.action}</div>
-                        <span style={{ fontFamily: T.mono, fontSize: 10, color: T.green, background: T.greenLo, padding: "3px 8px", borderRadius: 5 }}>+{r.impact} pts</span>
-                        <Tag label={r.effort} color={r.effort === "Easy" ? T.green : r.effort === "Medium" ? T.amber : T.red} size={9} />
+                      <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                        <div style={{ fontSize: 15, fontWeight: 700, color: done ? T.textDim : T.text, textDecoration: done ? "line-through" : "none", flex: "1 1 200px" }}>{r.action}</div>
+                        <span style={{ fontFamily: T.mono, fontSize: 12, color: T.green, background: T.greenLo, padding: "3px 8px", borderRadius: 5, flexShrink: 0 }}>+{r.impact} pts</span>
+                        <Tag label={r.effort} color={r.effort === "Easy" ? T.green : r.effort === "Medium" ? T.amber : T.red} size={11} />
                       </div>
-                      <div style={{ fontSize: 13, color: T.textMid, lineHeight: 1.6, marginBottom: r.tools?.length ? 12 : 0 }}>{r.detail}</div>
-                      <FixToolChips tools={r.tools} onReview={onOpenWalletReview} />
+                      {!done && <div style={{ fontSize: 14, color: T.textMid, lineHeight: 1.6 }}>{r.detail}</div>}
+                      {!done && i < 3 && <FixSteps rec={r} />}
+                      {!done && <FixToolChips tools={r.tools} onReview={onOpenWalletReview} />}
                     </div>
                     <button onClick={() => toggleDone(r.key)}
                       style={{ background: done ? T.green : "transparent", border: `1.5px solid ${done ? T.green : T.border}`, borderRadius: 8,
@@ -8409,6 +8549,12 @@ function LightningDashboard({ nodeId, nodeData, channels, isMobile, onBack, onRe
                 </div>
               );
             })}
+            {recommendations.length > 3 && (
+              <button type="button" onClick={() => setMoreLn(v => !v)} aria-expanded={moreLn}
+                style={{ background: "none", border: `1px solid ${T.border}`, borderRadius: 10, padding: "10px 14px", cursor: "pointer", fontFamily: T.sans, fontSize: 13, fontWeight: 600, color: T.textMid, textAlign: "left" }}>
+                {moreLn ? "Hide the other fixes" : `Show ${recommendations.length - 3} more fixes`}
+              </button>
+            )}
             {/* AI assistant card — same pattern as BTC */}
             {aiStage !== "chat" && (
               <div style={{ background: T.card, border: `1px solid ${T.ln}33`, borderRadius: 16, overflow: "hidden", marginBottom: 2 }}>
@@ -8560,29 +8706,14 @@ function LightningDashboard({ nodeId, nodeData, channels, isMobile, onBack, onRe
                       <div style={{ height: "100%", width: `${pct}%`, background: isKyc ? T.red : T.ln, borderRadius: 2 }} />
                     </div>
                   </div>
-                  <div style={{ fontFamily: T.mono, fontSize: 10, color: T.textDim, whiteSpace: "nowrap" }}>{pct}% · {(ch.capacity / 1e8).toFixed(4)} BTC</div>
-                  <Tag label={riskLabel} color={riskColor} size={9} />
+                  <div style={{ fontFamily: T.mono, fontSize: 12, color: T.textDim, whiteSpace: "nowrap", flexShrink: 0 }}>{pct}% · {(ch.capacity / 1e8).toFixed(4)} BTC</div>
+                  <span style={{ flexShrink: 0 }}><Tag label={riskLabel} color={riskColor} size={11} /></span>
                 </div>
               );
             })}
           </div>
         )}
 
-        {/* ── Methodology ── */}
-        {tab === "Methodology" && (
-          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            <div style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim, letterSpacing: 2, marginBottom: 4 }}>8 HEURISTICS · LIGHTNING NODE PRIVACY SCORING</div>
-            {LN_METHODOLOGY.map(c => (
-              <div key={c.n} style={{ display: "flex", gap: 14, background: T.card, border: `1px solid ${T.border}`, borderRadius: 12, padding: "14px 18px" }}>
-                <div style={{ fontFamily: T.mono, fontSize: 10, color: T.ln, minWidth: 24, marginTop: 1 }}>{c.n}</div>
-                <div>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: T.text, marginBottom: 4 }}>{c.label}</div>
-                  <div style={{ fontSize: 13, color: T.textMid, lineHeight: 1.6 }}>{c.desc}</div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
       </div>
 
       {/* ── Mobile sticky bottom tab bar ── */}
@@ -8593,7 +8724,7 @@ function LightningDashboard({ nodeId, nodeData, channels, isMobile, onBack, onRe
             return (
               <button key={t} onClick={() => setTab(t)} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3, background: "none", border: "none", cursor: "pointer", borderTop: `2px solid ${tab === t ? T.ln : "transparent"}`, transition: "border-color .15s" }}>
                 <span style={{ fontSize: 14, color: tab === t ? T.ln : T.textDim }}>{icons[t]}</span>
-                <span style={{ fontFamily: T.mono, fontSize: 8, color: tab === t ? T.ln : T.textDim, letterSpacing: 0.5 }}>{t.toUpperCase()}</span>
+                <span style={{ fontFamily: T.mono, fontSize: 11, color: tab === t ? T.ln : T.textDim, letterSpacing: 0.2 }}>{t.toUpperCase()}</span>
               </button>
             );
           })}
