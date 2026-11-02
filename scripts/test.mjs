@@ -1684,14 +1684,17 @@ else {
   if (!ranked) fail("dashboard: adversary ranking didn't open");
   else pass("dashboard: adversary ranking stays behind one disclosure");
 }
-for (const tab of ["Fix It", "Overview", "Flow", "UTXOs", "Transactions", "Methodology"]) {
+for (const tab of ["Fix It", "Overview", "Flow", "UTXOs", "Transactions"]) {
   const el = page.getByText(tab, { exact: true }).first();
   if (await el.count() === 0) { fail(`Dashboard tab missing: ${tab}`); continue; }
   await el.click(); await page.waitForTimeout(250);
   const txt = await page.evaluate(() => document.body.innerText);
   if (txt.length < 500) fail(`Tab ${tab} rendered too little (${txt.length} chars)`);
 }
-pass("All 6 dashboard tabs rendered");
+if (await page.getByRole("button", { name: "How scoring works" }).count() === 0)
+  fail("dashboard: methodology is not linked from the results");
+else pass("dashboard: methodology links out instead of a second copy");
+pass("All 5 dashboard tabs rendered");
 
 // Item 4 — the Transactions tab hands each tx to the Inspector; the UTXOs tab's
 // funding-tx button is guarded to real 64-hex txids, so the demo's fake short
