@@ -2021,6 +2021,288 @@ function _derSigInfo(b) {
 // of what the Inspector catches. Parsed live by the real parser (zero network).
 const DEMO_PSBT = "cHNidP8BAMMCAAAAAwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD9////AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABAAAAAP3///8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIAAAAA/f///wJAS0wAAAAAABYAFEREREREREREREREREREREREREREUC0ZAAAAAAAWABQREREREREREREREREREREREREREQAAAAAAAQEfwMYtAAAAAAAWABQREREREREREREREREREREREREREQABAR+gJSYAAAAAABYAFCIiIiIiIiIiIiIiIiIiIiIiIiIiAAEBH4BPEgAAAAAAFgAUMzMzMzMzMzMzMzMzMzMzMzMzMzMAAAA=";
 
+/* Before-you-send check. Parses a PSBT already in the page, or a plain
+   description of inputs and outputs, and says what an observer would learn
+   if it were broadcast. Never broadcasts and never leaves the browser.
+   The score engine is not involved. */
+const SEND_SCRIPTS = {
+  p2wpkh: "v0_p2wpkh", segwit: "v0_p2wpkh", wpkh: "v0_p2wpkh",
+  p2tr: "v1_p2tr", taproot: "v1_p2tr", tr: "v1_p2tr",
+  p2pkh: "p2pkh", legacy: "p2pkh",
+  p2sh: "p2sh",
+};
+function parseSendAmount(tok) {
+  const s = String(tok || "").replace(/,/g, "").toLowerCase();
+  const m = s.match(/^(\d+(?:\.\d+)?)(btc|sats?)?$/);
+  if (!m) return null;
+  const n = Number(m[1]);
+  if (!Number.isFinite(n) || n < 0) return null;
+  return m[2] === "btc" ? Math.round(n * 1e8) : Math.round(n);
+}
+function parseSendDescription(text) {
+  const inputs = [], outputs = [];
+  let fee = null, locktime = null;
+  String(text || "").split(/\r?\n/).forEach((line, idx) => {
+    const raw = line.trim();
+    if (!raw || raw.startsWith("#")) return;
+    const parts = raw.split(/\s+/);
+    const head = parts[0].toLowerCase();
+    const n = idx + 1;
+    if (head === "fee") {
+      const v = parseSendAmount(parts[1]);
+      if (v == null) throw new Error("Line " + n + ": fee needs an amount in sats.");
+      fee = v;
+      return;
+    }
+    if (head === "locktime") {
+      if (!/^\d+$/.test(parts[1] || "")) throw new Error("Line " + n + ": locktime needs a number.");
+      locktime = parseInt(parts[1], 10);
+      return;
+    }
+    if (head !== "in" && head !== "out") throw new Error("Line " + n + " should start with in or out. Example: in bc1q… 50000000 p2wpkh");
+    const address = parts[1];
+    const value = parseSendAmount(parts[2]);
+    if (!address || value == null) throw new Error("Line " + n + " needs an address and an amount in sats.");
+    let script = null;
+    const flags = { cluster: null, reused: false, toxic: false, kyc: false, exchange: false };
+    parts.slice(3).forEach(p => {
+      const k = p.toLowerCase();
+      if (SEND_SCRIPTS[k]) script = SEND_SCRIPTS[k];
+      else if (k === "reused") flags.reused = true;
+      else if (k === "toxic" || k === "kyc" || k === "exchange") { flags.toxic = true; if (k !== "toxic") flags[k] = true; }
+      else if (k.startsWith("cluster:")) flags.cluster = p.slice(8);
+      else throw new Error("Line " + n + ": don't know \"" + p + "\". Use p2wpkh, p2tr, p2pkh, reused, kyc, toxic, or cluster:name.");
+    });
+    const row = { address, value, script: script || "v0_p2wpkh", ...flags };
+    if (head === "in") inputs.push(row);
+    else outputs.push(row);
+  });
+  if (!inputs.length || !outputs.length) throw new Error("Describe at least one in line and one out line.");
+  const inn = inputs.reduce((s, i) => s + i.value, 0);
+  const out = outputs.reduce((s, o) => s + o.value, 0);
+  if (fee == null) fee = inn - out;
+  if (fee < 0) throw new Error("The outputs add up to more than the inputs.");
+  const tx = {
+    version: 2,
+    locktime: locktime == null ? 0 : locktime,
+    fee,
+    vin: inputs.map((inp, i) => ({
+      txid: String(i).padStart(64, "0"),
+      vout: 0,
+      sequence: 0xfffffffd,
+      prevout: { value: inp.value, scriptpubkey_type: inp.script, scriptpubkey_address: inp.address },
+    })),
+    vout: outputs.map(o => ({ value: o.value, scriptpubkey_type: o.script, scriptpubkey_address: o.address })),
+  };
+  return { tx, notes: inputs };
+}
+function checkBeforeSend(tx, opts) {
+  const opt = opts || {};
+  const vin = (tx && tx.vin) || [];
+  const vout = (tx && tx.vout) || [];
+  const missing = !!opt.partial || vin.length === 0 || vin.some(v => !v.prevout || v.prevout.value == null);
+  const stays = "This stays in this browser. Nothing is broadcast, and the PSBT is not sent anywhere.";
+  if (!vin.length || !vout.length) return { ok: false, headline: "This transaction has nothing to check yet.", changes: [], stays };
+  if (missing) {
+    return {
+      ok: false,
+      headline: "Paste the unsigned PSBT.",
+      stays,
+      changes: [{
+        id: "partial",
+        title: "The input amounts are missing",
+        learns: "A raw transaction does not carry the coins you are spending, so a merge or change call would be a guess.",
+        where: "Sparrow",
+        also: "In Electrum, use File, then Export, then PSBT, and paste that here.",
+        steps: [
+          "Open the send you have not broadcast.",
+          "Choose File, then Save PSBT, and copy the unsigned PSBT.",
+          "Paste it here. It is not sent anywhere.",
+        ],
+      }],
+    };
+  }
+  const notes = opt.notes || [];
+  const coinjoin = isCoinJoinShape(vin, vout);
+  const changes = [];
+  const cluster = clusterUnification(tx);
+  const clusters = [...new Set(notes.map(n => n && n.cluster).filter(Boolean))];
+  const reusedIn = notes.some(n => n && n.reused);
+  if (!coinjoin && (cluster.addrs.length >= 2 || clusters.length >= 2 || reusedIn)) {
+    const cross = clusters.length >= 2;
+    const alone = cluster.addrs.length < 2 && !cross;
+    changes.push({
+      id: "merge",
+      title: cross ? "Don't merge coins from different groups" : alone ? "This input is an address you already used" : "These inputs will be tied as one owner",
+      learns: cross
+        ? "An observer learns the " + clusters.join(" and ") + " coins are one wallet, because one transaction spends them together."
+        : alone
+          ? "An observer learns the older payments on this address, because you are spending it again."
+          : "An observer learns these " + cluster.addrs.length + " addresses are one wallet. Spending them together is what creates that link.",
+      where: "Sparrow",
+      also: "In Electrum, open View, then Coins, and select only one group before you send.",
+      steps: [
+        "Open the wallet, then View, then Coins.",
+        cross ? "Click only the coins from one label. Leave the other label unchecked." : "Click only the coins that already belong together. Leave the rest unchecked.",
+        reusedIn ? "Right-click the coin on the address you already used, then Freeze." : "Right-click any coin you are not spending, then Freeze, so the next send cannot pull it in.",
+        "Click Send and build the payment from that selection. Come back here and check again before you broadcast.",
+      ],
+    });
+  }
+  const analyzed = analyzeTx(tx);
+  const spend = vout.map((o, i) => ({ o, i })).filter(x => x.o.scriptpubkey_type !== "op_return");
+  const g = guessChange(tx);
+  const reasons = [];
+  if (g && g.confidence === "Medium") reasons.push("one output's address type matches the inputs and the other does not");
+  if (g && g.confidence === "Low") reasons.push("the payment is a round amount, so the other output reads as the change");
+  if (!coinjoin && analyzed.round && !(g && g.confidence === "Low")) reasons.push("an output is a round amount");
+  if (spend.length === 2) {
+    const big = spend[0].o.value >= spend[1].o.value ? spend[0] : spend[1];
+    const small = big === spend[0] ? spend[1] : spend[0];
+    if (small.o.value > 0 && big.o.value >= small.o.value * 3 && !isRoundSat(big.o.value)) reasons.push("the larger output is about " + Math.round(big.o.value / small.o.value) + " times the smaller one, which reads as change");
+  }
+  if (!coinjoin && reasons.length) {
+    changes.push({
+      id: "change",
+      title: "The change is easy to pick out",
+      learns: "An observer can see which coins come back to you, because " + reasons.join(", and ") + ".",
+      where: "Sparrow",
+      also: "Bitcoin Core matches the change type to the payment on its own. In Electrum, turn on Use change addresses under Tools, then Preferences.",
+      steps: [
+        "On the Send screen, open the change address menu.",
+        "Set the change type to the same type as the address you are paying: Native SegWit, Taproot, or Legacy.",
+        "If the amount is a round number, change the last digits. If the change is still much larger than the payment, split the payment, or use Payjoin when the receiver offers it.",
+        "Create the transaction again and check it here before you broadcast.",
+      ],
+    });
+  }
+  const outAddrs = vout.map(o => o.scriptpubkey_address).filter(Boolean);
+  const dupOut = outAddrs.some((a, i) => outAddrs.indexOf(a) !== i);
+  if (analyzed.reuse || dupOut) {
+    changes.push({
+      id: "reuse",
+      title: "An output reuses an address",
+      learns: "An observer learns the whole balance behind that address, because this payment pays it again.",
+      where: "Sparrow",
+      also: "In Electrum, click Receive and copy the new address. Turn on Use change addresses under Tools, then Preferences.",
+      steps: [
+        "Click Receive and copy a new address. Paste that as the destination, not an address this wallet has used.",
+        "If the change address is one you have used, open Settings, then script type, then Native SegWit, so change goes to a fresh address.",
+        "Build the send again and check it here before you broadcast.",
+      ],
+    });
+  }
+  const toxicIn = vin.some((v, i) => {
+    const n = notes[i] || {};
+    const val = v.prevout && v.prevout.value;
+    return !!(n.toxic || n.kyc || n.exchange) || (val != null && (isDustSat(val) || isRoundSat(val)));
+  });
+  if (!coinjoin && toxicIn && (reasons.length > 0 || spend.length >= 2)) {
+    const why = notes.some(n => n && (n.toxic || n.kyc || n.exchange))
+      ? "one input is marked as coming from an exchange or as toxic"
+      : vin.some(v => v.prevout && isDustSat(v.prevout.value))
+        ? "one input is dust"
+        : "one input is a round amount, the shape of an exchange withdrawal";
+    changes.push({
+      id: "toxic",
+      title: "The change carries a toxic history",
+      learns: "The coins that come back stay tied to that history, because " + why + ".",
+      where: "Sparrow",
+      also: "In Electrum, right-click that coin on the Coins tab and choose Freeze.",
+      steps: [
+        "Open View, then Coins, and find the coin from the exchange or the dust send.",
+        "Right-click it, then Freeze, so this send cannot select it.",
+        "Spend a coin that is not tied to that source. Check the new PSBT here before you broadcast.",
+      ],
+    });
+  }
+  const fp = fingerprintTx(tx);
+  const rate = feeRate(tx);
+  const feeRound = !!(rate && Number.isInteger(rate.rate) && [1, 2, 5, 10, 20].includes(rate.rate));
+  const distinctive = (fp && fp.available && fp.signals) ? fp.signals.filter(s => s.distinctive) : [];
+  if (distinctive.length || feeRound) {
+    const bits = [];
+    distinctive.forEach(s => {
+      if (s.key === "locktime") bits.push("locktime is 0, so this does not set a recent block height the way Sparrow, Core, and Electrum do");
+      else if (s.key === "rbf") bits.push("the inputs opt out of replace-by-fee");
+      else if (s.key === "version") bits.push("the version is 1, which most wallets no longer use");
+      else if (s.key === "bip69") bits.push("the inputs and outputs are sorted in a way only a few wallets do");
+      else if (s.key === "mixin") bits.push("the inputs mix address types");
+    });
+    if (feeRound) bits.push("the fee is an exact " + rate.rate + " sat/vB, a round default an observer can match to a wallet");
+    if (bits.length) {
+      changes.push({
+        id: "fingerprint",
+        title: "The fee or the locktime stands out",
+        learns: "An observer can narrow which wallet built this, because " + bits.join(", and ") + ".",
+        where: "Sparrow",
+        also: "Electrum's fee slider and Bitcoin Core's fee settings let you move off a round rate. Leave anti-fee-sniping on.",
+        steps: [
+          "On Send, set the fee yourself with the fee slider instead of accepting a whole number.",
+          "Nudge it off the round rate, for example 3.1 sat/vB instead of 3.",
+          "Leave locktime on the default. Sparrow sets a recent block height. Do not clear it to 0. Rebuild and check again.",
+        ],
+      });
+    }
+  }
+  const n = changes.length;
+  const headline = n === 0
+    ? "Safe to send."
+    : "Don't broadcast yet: change " + (n === 1 ? "this one thing" : "these " + n + " things") + ".";
+  return { ok: n === 0, headline, changes, stays, coinjoin: !!coinjoin };
+}
+function runSendCheck(raw) {
+  const s = (raw || "").trim();
+  if (!s) return { error: "Paste an unsigned PSBT, or describe the inputs and outputs." };
+  const kind = detectTxInput(s);
+  if (kind === "psbt" || kind === "rawhex") {
+    try {
+      const parsed = parseTransactionInput(s);
+      const tx = parsed.tx;
+      const partial = !tx || tx.partial || (tx.vin || []).some(v => !v.prevout || v.prevout.value == null);
+      return { report: checkBeforeSend(tx || { vin: [], vout: [] }, { partial }) };
+    } catch (e) {
+      return { error: (e && e.message) || "That transaction didn't parse." };
+    }
+  }
+  if (/^(in|out|fee|locktime)\b/im.test(s)) {
+    try {
+      const described = parseSendDescription(s);
+      return { report: checkBeforeSend(described.tx, { notes: described.notes }) };
+    } catch (e) {
+      return { error: (e && e.message) || "That description didn't parse." };
+    }
+  }
+  if (detectInputType(s)) return { error: "That's an address or a node. Switch to Score an address to audit it. This check is for a send you have not broadcast." };
+  return { error: "Paste an unsigned PSBT, or one line per coin. Example: in bc1q… 50000000 p2wpkh" };
+}
+function SendVerdict({ report }) {
+  if (!report) return null;
+  const tone = report.ok ? T.green : T.amber;
+  return (
+    <div role="status" style={{ marginTop: 12, textAlign: "left", background: T.surface, border: `1px solid ${tone}55`, borderRadius: 14, padding: "14px 14px", animation: "slideDown .25s ease" }}>
+      <div style={{ fontFamily: T.serif, fontSize: 20, color: T.text, fontWeight: 400, lineHeight: 1.3 }}>{report.headline}</div>
+      <p style={{ fontSize: 13, color: T.textMid, lineHeight: 1.5, margin: "6px 0 0" }}>{report.stays}</p>
+      {report.ok && (
+        <p style={{ fontSize: 14, color: T.text, lineHeight: 1.5, margin: "10px 0 0" }}>An observer learns about as much as they would from any normal payment. Broadcast it from your wallet when you are ready.</p>
+      )}
+      <div style={{ display: "flex", flexDirection: "column", gap: 12, marginTop: report.changes.length ? 12 : 0 }}>
+        {report.changes.map((c, i) => (
+          <div key={c.id} style={{ borderTop: `1px solid ${T.border}`, paddingTop: 10 }}>
+            <div style={{ fontSize: 15, fontWeight: 700, color: T.text }}>{i + 1}. {c.title}</div>
+            <p style={{ fontSize: 14, color: T.text, lineHeight: 1.5, margin: "4px 0 0" }}>{c.learns}</p>
+            <div style={{ fontSize: 13, fontWeight: 700, color: T.text, marginTop: 8 }}>How, in {c.where}</div>
+            <ol style={{ margin: "4px 0 0", paddingLeft: 18 }}>
+              {c.steps.map((step, n) => <li key={n} style={{ fontSize: 14, color: T.textMid, lineHeight: 1.45, marginTop: 3 }}>{step}</li>)}
+            </ol>
+            {c.also && <p style={{ fontSize: 13, color: T.textMid, lineHeight: 1.45, margin: "6px 0 0" }}>{c.also}</p>}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 /* ─────────────────────────────────────────────
    BIP32 PUBLIC DERIVATION — derive a whole wallet's addresses from an xpub,
    entirely in the browser (pure-JS BigInt, no eval/WASM, no dependency). Public
@@ -4145,6 +4427,8 @@ function Landing({ onAnalyze, isMobile, onCases, onNav, onOpenTool }) {
   }, []);
   const [input, setInput] = useState("");
   const [error, setError] = useState("");
+  const [boxMode, setBoxMode] = useState("score");
+  const [sendReport, setSendReport] = useState(null);
   const [formatsOpen, setFormatsOpen] = useState(false);
   const [spInfo, setSpInfo] = useState(null);   // decoded Silent Payments (BIP352) address, if entered
   const [lnInvoice, setLnInvoice] = useState(null);   // decoded BOLT11 Lightning invoice, if entered
@@ -4218,6 +4502,12 @@ function Landing({ onAnalyze, isMobile, onCases, onNav, onOpenTool }) {
   const submit = (val, plain = false) => {
     const v = (val || input).trim();
     setSpInfo(null); setLnInvoice(null); setLnPay(null); setToolHint(null);
+    if (boxMode === "send") {
+      const res = runSendCheck(v);
+      setSendReport(res.report || null);
+      setError(res.error || "");
+      return;
+    }
     if (!v) { setError(t("err.empty")); return; }
     const detected = detectInputType(v);
     if (!detected) {
@@ -4372,9 +4662,17 @@ function Landing({ onAnalyze, isMobile, onCases, onNav, onOpenTool }) {
                   </span>
                 </div>
               )}
+              <div role="group" aria-label="What to check" style={{ display: "flex", gap: 6, marginBottom: 8 }}>
+                {[["score", "Score an address"], ["send", "Check a send"]].map(([id, label]) => (
+                  <button key={id} type="button" aria-pressed={boxMode === id} onClick={() => { setBoxMode(id); setError(""); setSendReport(null); setSpInfo(null); setLnInvoice(null); setLnPay(null); setToolHint(null); }}
+                    style={{ background: boxMode === id ? T.cyanLo : "transparent", border: `1px solid ${boxMode === id ? T.cyan : T.border}`, borderRadius: 99, padding: "6px 12px", color: boxMode === id ? T.cyan : T.textMid, fontFamily: T.sans, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
+                    {label}
+                  </button>
+                ))}
+              </div>
               <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 8, marginBottom: 7 }}>
                 <div style={{ fontFamily: T.mono, fontSize: 9, letterSpacing: 1.5, color: T.textDim, textAlign: "left" }}>
-                  {isLn ? "NODE PUBKEY" : "BITCOIN ADDRESS OR LIGHTNING NODE"}
+                  {boxMode === "send" ? "UNSIGNED PSBT OR A DESCRIPTION" : isLn ? "NODE PUBKEY" : "BITCOIN ADDRESS OR LIGHTNING NODE"}
                 </div>
                 <button type="button" onClick={() => setFormatsOpen(o => !o)} aria-expanded={formatsOpen}
                   style={{ background: "none", border: "none", padding: 0, fontFamily: T.mono, fontSize: 9, letterSpacing: 0.4, color: T.cyan, cursor: "pointer", flexShrink: 0 }}>
@@ -4399,10 +4697,19 @@ function Landing({ onAnalyze, isMobile, onCases, onNav, onOpenTool }) {
                 {/* Recessed input well: leading search glyph + strong border make it stand off the card */}
                 <div style={{ position: "relative", flex: 1, minWidth: 0 }}>
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"
-                    style={{ position: "absolute", left: 18, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }}>
+                    style={{ position: "absolute", left: 18, top: boxMode === "send" ? 18 : "50%", transform: boxMode === "send" ? "none" : "translateY(-50%)", pointerEvents: "none" }}>
                     <circle cx="11" cy="11" r="7" stroke={inputType ? (isLn ? T.ln : T.btc) : T.cyan} strokeWidth="2" opacity="0.9" />
                     <line x1="16.5" y1="16.5" x2="21" y2="21" stroke={inputType ? (isLn ? T.ln : T.btc) : T.cyan} strokeWidth="2" strokeLinecap="round" opacity="0.9" />
                   </svg>
+                  {boxMode === "send" ? (
+                  <textarea ref={inputRef} value={input} rows={4} onChange={e => { setInput(e.target.value); setError(""); setSendReport(null); }}
+                    aria-label="Paste an unsigned PSBT or describe the inputs and outputs"
+                    placeholder={"Paste an unsigned PSBT, or describe it:\nin bc1q… 50000000 p2wpkh\nout bc1q… 10000 p2wpkh"}
+                    style={{ width: "100%", boxSizing: "border-box", background: "#070910", resize: "vertical",
+                      border: `2px solid ${error ? T.red : T.cyan + "77"}`,
+                      borderRadius: 14, padding: "16px 16px 16px 48px", color: T.text, fontFamily: T.mono, fontSize: 16, letterSpacing: 0.3, outline: "none", transition: "border .18s, box-shadow .25s", boxShadow: `inset 0 2px 14px #00000080`, minWidth: 0, lineHeight: 1.45 }}
+                  />
+                  ) : (
                   <input ref={inputRef} value={input} onChange={e => { setInput(e.target.value); setError(""); setSpInfo(null); setLnInvoice(null); setLnPay(null); }}
                     onKeyDown={e => e.key === "Enter" && submit(null, true)}
                     aria-label="Paste a Bitcoin address, Lightning node pubkey, or silent payment address"
@@ -4419,14 +4726,25 @@ function Landing({ onAnalyze, isMobile, onCases, onNav, onOpenTool }) {
                       e.target.style.borderColor = error ? T.red : inputType ? (isLn ? T.ln : T.btc) : T.cyan + "77";
                       e.target.style.boxShadow = `inset 0 2px 14px #00000080`;
                     }} />
+                  )}
                 </div>
               </div>
               <button onClick={() => submit(null, !isLn)} className="sheen"
-                style={{ ...ui.primary(isLn ? T.ln : T.btc), width: "100%", marginTop: 10, borderRadius: 14, padding: "14px 22px", fontSize: 16, whiteSpace: "nowrap", transition: "opacity .15s" }}
+                style={{ ...ui.primary(boxMode === "send" ? T.cyan : isLn ? T.ln : T.btc), width: "100%", marginTop: 10, borderRadius: 14, padding: "14px 22px", fontSize: 16, whiteSpace: "nowrap", transition: "opacity .15s" }}
                 onMouseOver={e => e.currentTarget.style.opacity = ".88"}
                 onMouseOut={e => e.currentTarget.style.opacity = "1"}>
-                {isLn ? t("cta.audit") : t("cta.analyze")}
+                {boxMode === "send" ? "Check this send" : isLn ? t("cta.audit") : t("cta.analyze")}
               </button>
+              {boxMode === "send" && (
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center", marginTop: 8, flexWrap: "wrap" }}>
+                  <button type="button" onClick={() => { setInput(DEMO_PSBT); setError(""); const res = runSendCheck(DEMO_PSBT); setSendReport(res.report || null); }}
+                    style={{ background: "none", border: "none", padding: 0, color: T.cyan, fontFamily: T.sans, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
+                    Load example send
+                  </button>
+                  <span style={{ fontSize: 12, color: T.textMid, textAlign: "left" }}>Nothing is broadcast.</span>
+                </div>
+              )}
+              {boxMode === "send" && <SendVerdict report={sendReport} />}
               {isLn && (
                 <div style={{ fontFamily: T.mono, fontSize: 10, color: T.textDim, marginTop: 5, textAlign: "left" }}>
                   ⚡ Node pubkeys only work if you run your own node — Umbrel, Start9, Citadel, RaspiBlitz, etc.
@@ -9273,6 +9591,7 @@ window.__ANONSCORE_TEST__ = Object.freeze({
   // Transaction Inspector — parser + analysis (validated against BIP174/173/350)
   parsePsbt, parseRawTx, classifyScript, parseTransactionInput, detectTxInput, normalizeEsploraTx,
   analyzeTx, guessChange, clusterUnification, feeRate, DEMO_PSBT,
+  parseSendDescription, checkBeforeSend, runSendCheck,
   // transaction entropy / linkability (Boltzmann · validated vs LaurentMT vectors)
   txInterpretations, txLinkability, isCoinJoinShape, classifyCoinjoin,
   // wallet fingerprint (structural tells: version/locktime/RBF/BIP69/script-mix/low-r)
