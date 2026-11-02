@@ -1,0 +1,305 @@
+name: Deploy workers
+
+# Deploys the privacy relay (workers/relay) and the AI worker (workers/ai).
+#
+# A push to main runs when either worker directory changes, then deploys only
+# the workers that changed. workflow_dispatch deploys relay, ai, or both.
+# Tests finish before either deploy. The two deploy jobs do not depend on each
+# other, so one failure stays visible. concurrency queues overlapping runs so
+# two deploys cannot write the same Worker at once.
+#
+# CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID are repo secrets. If either
+# is missing, the deploy job stops in "Require Cloudflare credentials" with
+# that name in the log — it does not call Wrangler.
+#
+# The AI job does not deploy while workers/ai/wrangler.toml still has the
+# `<your-kv-namespace-id>` placeholder and AI_KV_NAMESPACE_ID is unset. That
+# skip is a success, with a log line that says so. ANTHROPIC_API_KEY and
+# IP_HASH_SALT are never sent from here; set them once with `wrangler secret put`.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "workers/relay/**"
+      - "workers/ai/**"
+  workflow_dispatch:
+    inputs:
+      worker:
+        description: Which worker to deploy
+        required: true
+        type: choice
+        default: both
+        options:
+          - both
+          - relay
+          - ai
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    name: Select workers
+    runs-on: ubuntu-latest
+    outputs:
+      deploy_relay: ${{ steps.select.outputs.deploy_relay }}
+      deploy_ai: ${{ steps.select.outputs.deploy_ai }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 2
+      - name: Choose which workers to deploy
+        id: select
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          WORKER_CHOICE: ${{ github.event.inputs.worker }}
+        run: |
+          set -euo pipefail
+          relay=false
+          ai=false
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            case "$WORKER_CHOICE" in
+              relay) relay=true ;;
+              ai) ai=true ;;
+              both) relay=true; ai=true ;;
+              *)
+                echo "::error title=Unknown worker::workflow_dispatch input 'worker' must be both, relay, or ai (got '${WORKER_CHOICE}')."
+                exit 1
+                ;;
+            esac
+            echo "Manual run. worker=${WORKER_CHOICE}"
+          else
+            if git rev-parse --verify --quiet HEAD^ >/dev/null; then
+              mapfile -t files < <(git diff --name-only HEAD^ HEAD)
+            else
+              mapfile -t files < <(git diff-tree --no-commit-id --name-only -r HEAD)
+            fi
+            echo "Changed files:"
+            if [ "${#files[@]}" -eq 0 ]; then
+              echo "  (none)"
+            else
+              printf '  %s\n' "${files[@]}"
+            fi
+            for f in "${files[@]}"; do
+              case "$f" in
+                workers/relay/*) relay=true ;;
+                workers/ai/*) ai=true ;;
+              esac
+            done
+          fi
+          echo "deploy_relay=${relay}" >> "$GITHUB_OUTPUT"
+          echo "deploy_ai=${ai}" >> "$GITHUB_OUTPUT"
+          echo "Will deploy relay: ${relay}"
+          echo "Will deploy AI: ${ai}"
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Install deps
+        run: npm install
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+      - name: Build
+        run: npm run build
+      - name: Verify build is up-to-date
+        run: |
+          if ! git diff --quiet -- anonscore.js sw.js; then
+            echo "::error::Build output drifted. anonscore.js must match source (run 'npm run build' and commit it). sw.js must not change."
+            git --no-pager diff anonscore.js sw.js | head -60
+            exit 1
+          fi
+      - name: Run test suite
+        run: npm test
+
+  deploy-relay:
+    name: Deploy relay
+    needs: [plan, test]
+    if: needs.plan.outputs.deploy_relay == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - name: Deploy only from main
+        if: github.ref != 'refs/heads/main'
+        run: |
+          echo "::error title=Refusing to deploy::The relay is production. This job only deploys from refs/heads/main (current ref: ${GITHUB_REF})."
+          exit 1
+      - name: Require Cloudflare credentials
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          # Presence check only. The values are never printed.
+          token="$(printf '%s' "$CLOUDFLARE_API_TOKEN" | tr -d '[:space:]')"
+          account="$(printf '%s' "$CLOUDFLARE_ACCOUNT_ID" | tr -d '[:space:]')"
+          missing=""
+          if [ -z "$token" ]; then
+            missing="${missing} CLOUDFLARE_API_TOKEN"
+          fi
+          if [ -z "$account" ]; then
+            missing="${missing} CLOUDFLARE_ACCOUNT_ID"
+          fi
+          if [ -n "$missing" ]; then
+            echo "::error title=Missing Cloudflare credentials::Cannot deploy the relay. These GitHub repository secrets are not set:${missing}."
+            if [ -z "$token" ]; then
+              echo "CLOUDFLARE_API_TOKEN is missing. Create a Cloudflare API token with Account → Workers Scripts → Edit, then add it under Settings → Secrets and variables → Actions → Repository secrets."
+            fi
+            if [ -z "$account" ]; then
+              echo "CLOUDFLARE_ACCOUNT_ID is missing. Copy the account id from the Cloudflare dashboard (Workers & Pages sidebar) into that same secrets page."
+            fi
+            echo "The workflow stops here so the failure says the token is missing instead of dying inside Wrangler."
+            exit 1
+          fi
+          if ! printf '%s' "$account" | grep -Eq '^[0-9a-fA-F]{32}$'; then
+            echo "::error title=CLOUDFLARE_ACCOUNT_ID is not an account id::CLOUDFLARE_ACCOUNT_ID is set, but it is not a 32-character hex account id. Copy the Account ID from the Cloudflare dashboard, not the API token."
+            exit 1
+          fi
+          echo "Cloudflare credentials are present (values not logged)."
+      - name: Deploy relay
+        uses: cloudflare/wrangler-action@v4
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: workers/relay
+          wranglerVersion: "4"
+          command: deploy
+
+  deploy-ai:
+    name: Deploy AI worker
+    needs: [plan, test]
+    if: needs.plan.outputs.deploy_ai == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - name: Deploy only from main
+        if: github.ref != 'refs/heads/main'
+        run: |
+          echo "::error title=Refusing to deploy::The AI worker is production. This job only deploys from refs/heads/main (current ref: ${GITHUB_REF})."
+          exit 1
+      - name: Check KV namespace id
+        id: kv
+        env:
+          AI_KV_FROM_VAR: ${{ vars.AI_KV_NAMESPACE_ID }}
+          AI_KV_FROM_SECRET: ${{ secrets.AI_KV_NAMESPACE_ID }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os, re, sys
+          from pathlib import Path
+
+          path = Path("workers/ai/wrangler.toml")
+          text = path.read_text()
+          placeholder = re.compile(r'^id\s*=\s*"<your-kv-namespace-id>"\s*$', re.M)
+          out = Path(os.environ["GITHUB_OUTPUT"])
+
+          def emit(skip):
+              with out.open("a") as fh:
+                  fh.write(f"skip={skip}\n")
+
+          if not placeholder.search(text):
+              print("workers/ai/wrangler.toml has a KV namespace id committed. The AI worker will deploy.")
+              emit("false")
+              sys.exit(0)
+
+          kv = os.environ.get("AI_KV_FROM_VAR", "").strip()
+          source = "repository variable"
+          if not kv:
+              kv = os.environ.get("AI_KV_FROM_SECRET", "").strip()
+              source = "repository secret"
+          if not kv:
+              print("KV placeholder is still in workers/ai/wrangler.toml and AI_KV_NAMESPACE_ID is not set.")
+              emit("true")
+              sys.exit(0)
+          if not re.fullmatch(r"[0-9a-fA-F]{32}", kv):
+              print("::error title=AI_KV_NAMESPACE_ID is not a namespace id::AI_KV_NAMESPACE_ID is set, but it is not a 32-character hex KV namespace id. Paste the id from `wrangler kv namespace create KV`. The value was not logged.")
+              sys.exit(1)
+
+          path.write_text(placeholder.sub(f'id = "{kv}"', text, count=1))
+          print(f"Replaced the KV placeholder for this job from the AI_KV_NAMESPACE_ID {source}. The id is not logged and the file is not committed.")
+          emit("false")
+          PY
+      - name: Skip AI deploy
+        if: steps.kv.outputs.skip == 'true'
+        run: |
+          echo "AI worker deploy skipped."
+          echo "workers/ai/wrangler.toml still has id = \"<your-kv-namespace-id>\", and the AI_KV_NAMESPACE_ID repository variable (or secret) is not set."
+          echo "This job succeeds on purpose. The relay deploy is a separate job and is not affected."
+          echo "One-time setup, from your machine — this workflow does not upload worker secrets:"
+          echo "  cd workers/ai"
+          echo "  npx wrangler kv namespace create KV"
+          echo "  # commit that id over the placeholder, or set the repository variable AI_KV_NAMESPACE_ID"
+          echo "  npx wrangler secret put ANTHROPIC_API_KEY"
+          echo "  npx wrangler secret put IP_HASH_SALT"
+          echo "wrangler secret put stores the secret on the Worker. Later deploys leave it there."
+      - name: Require Cloudflare credentials
+        if: steps.kv.outputs.skip != 'true'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          token="$(printf '%s' "$CLOUDFLARE_API_TOKEN" | tr -d '[:space:]')"
+          account="$(printf '%s' "$CLOUDFLARE_ACCOUNT_ID" | tr -d '[:space:]')"
+          missing=""
+          if [ -z "$token" ]; then
+            missing="${missing} CLOUDFLARE_API_TOKEN"
+          fi
+          if [ -z "$account" ]; then
+            missing="${missing} CLOUDFLARE_ACCOUNT_ID"
+          fi
+          if [ -n "$missing" ]; then
+            echo "::error title=Missing Cloudflare credentials::Cannot deploy the AI worker. These GitHub repository secrets are not set:${missing}."
+            if [ -z "$token" ]; then
+              echo "CLOUDFLARE_API_TOKEN is missing. Create a Cloudflare API token with Account → Workers Scripts → Edit and Account → Workers KV Storage → Edit, then add it under Settings → Secrets and variables → Actions → Repository secrets."
+            fi
+            if [ -z "$account" ]; then
+              echo "CLOUDFLARE_ACCOUNT_ID is missing. Copy the account id from the Cloudflare dashboard (Workers & Pages sidebar) into that same secrets page."
+            fi
+            echo "The workflow stops here so the failure says the token is missing instead of dying inside Wrangler."
+            exit 1
+          fi
+          if ! printf '%s' "$account" | grep -Eq '^[0-9a-fA-F]{32}$'; then
+            echo "::error title=CLOUDFLARE_ACCOUNT_ID is not an account id::CLOUDFLARE_ACCOUNT_ID is set, but it is not a 32-character hex account id. Copy the Account ID from the Cloudflare dashboard, not the API token."
+            exit 1
+          fi
+          echo "Cloudflare credentials are present (values not logged)."
+          echo "ANTHROPIC_API_KEY and IP_HASH_SALT are not uploaded by this workflow. If they are missing on the Worker, set them once with 'wrangler secret put'."
+      - name: Deploy AI worker
+        if: steps.kv.outputs.skip != 'true'
+        uses: cloudflare/wrangler-action@v4
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: workers/ai
+          wranglerVersion: "4"
+          command: deploy
+
+  smoke-live:
+    name: Smoke live relay
+    needs: deploy-relay
+    if: needs.deploy-relay.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Wait for the Cloudflare Pages deploy
+        if: github.event_name == 'push'
+        run: sleep 90
+      - name: Smoke the live relay and site
+        run: npm run smoke:live

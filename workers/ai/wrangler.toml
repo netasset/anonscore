@@ -10,6 +10,12 @@ compatibility_date = "2026-01-01"
 #
 #   wrangler kv namespace create KV
 #   # paste the printed id over the placeholder below, then deploy
+#
+# GitHub Actions (`.github/workflows/deploy-workers.yml`) skips this worker,
+# and stays green, while the placeholder is still here and the repository
+# variable AI_KV_NAMESPACE_ID is unset. Setting that variable (or a secret of
+# the same name) injects the id for the deploy only — it is not committed.
+# The workflow never runs `wrangler secret put`.
 [[kv_namespaces]]
 binding = "KV"
 id = "<your-kv-namespace-id>"
