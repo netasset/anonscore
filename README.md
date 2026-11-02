@@ -37,7 +37,7 @@ Single static site. No backend, no database, no analytics.
 | `build.mjs` | One-shot compiler: `anonscore.jsx → anonscore.js`. Touches nothing else. |
 | `scripts/test.mjs` | End-to-end test suite (68 checks: build invariants, honesty guards that fail CI if a public claim drifts from the code, relay-worker SSRF and no-tracking unit tests, AI-worker prompt and rate-limit tests, engine unit tests against the built bundle, browser smoke + a11y). Runs in CI on every PR. |
 | `scripts/fetch-fonts.mjs` | Re-fetches the self-hosted Google Fonts subset. Run only if updating font weights. |
-| `.github/workflows/` | `build.yml` auto-rebuilds `anonscore.js` on feature-branch pushes. `test.yml` runs the test suite on every PR. |
+| `.github/workflows/` | `build.yml` rebuilds `anonscore.js` on feature-branch pushes. `test.yml` runs the test suite on every PR and on `main`. `smoke-live.yml` checks the deployed relay and the live site. `deploy-workers.yml` deploys the relay and the AI worker after tests. `auto-merge.yml` merges an approved `claude/*` PR. |
 
 ## Build & test
 
@@ -52,11 +52,49 @@ Then open `index.html` via any static server (e.g. `python3 -m http.server`).
 
 `npm run smoke:live` (`scripts/smoke-live.mjs`) calls the real privacy relay and the production site. It checks an address (summary, UTXO, and transactions), the genesis coinbase transaction and its outspends, `/txs/chain/<txid>` paging, the mempool.space mirror under `/btcm/`, and a Lightning node. A malformed txid must be rejected by the relay. It also checks that https://anonscore.com serves `anonscore.js` with the same hash as the committed file, and that the HTML loads no third-party scripts. Transient explorer errors are retried. A path the relay rejects, or a bundle that does not match this commit, fails the run and lists every check that failed.
 
-GitHub Actions runs it every day, when started by hand, and after each push to `main` (that run waits briefly so the Pages deploy can finish). It does not run inside `npm test`, which stays offline.
+GitHub Actions runs it every day, when started by hand, and after each push to `main` (that run waits briefly so the Pages deploy can finish). A successful relay deploy from `deploy-workers.yml` runs it again, in that same workflow, so the live result sits next to the deploy. It does not run inside `npm test`, which stays offline.
 
 The built bundle exposes its pure engine functions read-only at `window.__ANONSCORE_TEST__` — open the console on the live site and test the scoring logic yourself (`runEngine`, `computeCluster`, `computePoisoning`, …). CI unit-tests the built bundle through the same hook, so what you can verify in your console is exactly what's tested.
 
 CI auto-rebuilds `anonscore.js` on feature-branch pushes, so PRs into `main` always carry a fresh build. Still run `npm run build` locally before committing so what you push is correct.
+
+---
+
+## Deploying the workers
+
+The relay (`workers/relay`) and the AI worker (`workers/ai`) deploy from [`.github/workflows/deploy-workers.yml`](.github/workflows/deploy-workers.yml). A push to `main` that changes `workers/relay/**` or `workers/ai/**` runs `npm test`, then deploys each worker whose files changed. Actions → Deploy workers → Run workflow deploys `relay`, `ai`, or `both` without waiting for a file change. Merging a pull request that does not touch those directories does not deploy; run the workflow by hand the first time.
+
+The two deploys are separate jobs, so a failure in one stays visible. Overlapping runs queue (`cancel-in-progress: false`) instead of deploying the same Worker at the same time. The workflow token can only read the repo (`contents: read`). Deploys run only from `main`.
+
+Nothing in the workflow uploads Worker secrets. `ANTHROPIC_API_KEY` and `IP_HASH_SALT` are set once with `wrangler secret put` and stay on the Worker across later deploys.
+
+### One-time setup
+
+1. **Create a Cloudflare API token.** Dashboard → My Profile → API Tokens → Create Token → Custom token.
+   - Permission: **Account → Workers Scripts → Edit**.
+   - Also **Account → Workers KV Storage → Edit** if you deploy the AI worker (it binds a KV namespace).
+   - Account resources: only the account that owns these workers.
+2. **Copy the Account ID.** Workers & Pages → the Account ID in the sidebar (32 hex characters). That is not the API token.
+3. **Add two repository secrets.** GitHub → this repo → Settings → Secrets and variables → Actions → Repository secrets.
+   - `CLOUDFLARE_API_TOKEN` — the token from step 1.
+   - `CLOUDFLARE_ACCOUNT_ID` — the account id from step 2.
+
+   Until those two secrets exist, the deploy job fails in **Require Cloudflare credentials** and says which one is missing (the token, the account id, or both). It does not call Wrangler.
+
+4. **AI worker only, on your machine** (the workflow does not do this):
+
+   ```bash
+   cd workers/ai
+   npx wrangler kv namespace create KV
+   npx wrangler secret put ANTHROPIC_API_KEY   # Anthropic API key. Never commit it.
+   npx wrangler secret put IP_HASH_SALT        # random string, 16+ characters
+   ```
+
+   Put the namespace id where the workflow can see it. Either commit it in place of `<your-kv-namespace-id>` in `workers/ai/wrangler.toml`, or leave the placeholder and set the repository **variable** `AI_KV_NAMESPACE_ID` (Settings → Secrets and variables → Actions → Variables) to that id. A repository secret of the same name works too; the value is not printed. While the placeholder is still in the file and `AI_KV_NAMESPACE_ID` is unset, the AI job logs `AI worker deploy skipped.` and finishes green. The relay job is separate.
+
+   An `AI_KV_NAMESPACE_ID` that is set but is not 32 hex characters fails the AI job and is not logged.
+
+The relay has no KV and no Worker secrets. After the relay deploy succeeds, the same run executes `npm run smoke:live`.
 
 ---
 
@@ -103,7 +141,7 @@ Until `endpoint` is set, the signup form opens a `mailto:` link instead. Point i
 
 ### 4. AI Assistant (already configured)
 
-The AI worker URL (`anonscore-ai.netassetpremium.workers.dev`) is wired in. The 5-message daily cap is enforced server-side and **fails closed**: the worker refuses requests if its KV binding or the `IP_HASH_SALT` secret is missing. The worker only ever receives what the consent gate shows — never the user's address — and it writes the system prompt itself. Its full source, including the required KV namespace id and secrets, is published at [`workers/ai/`](workers/ai/). Deploy steps are in that README; the `id` in `wrangler.toml` is a placeholder until you paste a real one.
+The AI worker URL (`anonscore-ai.netassetpremium.workers.dev`) is wired in. The 5-message daily cap is enforced server-side and **fails closed**: the worker refuses requests if its KV binding or the `IP_HASH_SALT` secret is missing. The worker only ever receives what the consent gate shows — never the user's address — and it writes the system prompt itself. Its full source, including the required KV namespace id and secrets, is published at [`workers/ai/`](workers/ai/). Deploy steps are in that README and under [Deploying the workers](#deploying-the-workers). The `id` in `wrangler.toml` is a placeholder until you paste a real one (or set `AI_KV_NAMESPACE_ID`). The deploy workflow skips the AI worker, and stays green, while that placeholder is still there.
 
 ### 5. Languages (i18n)
 

@@ -64,19 +64,48 @@ reference full Bitcoin addresses.
 
 KV and both secrets are required. The `id` in `wrangler.toml` ships as the
 placeholder `<your-kv-namespace-id>` — replace it with a real namespace id
-before deploying. A deploy that leaves the placeholder, or that forgets
-`IP_HASH_SALT`, will not serve traffic: the worker refuses requests when the
-binding or the salt is missing.
+before deploying, or set the `AI_KV_NAMESPACE_ID` repository variable and let
+CI substitute it for that run only. A deploy that leaves the placeholder, or
+that forgets `IP_HASH_SALT`, will not serve traffic: the worker refuses
+requests when the binding or the salt is missing.
+
+Do this once from your own machine. These commands are how the secrets get
+onto the Worker. The GitHub workflow never runs `wrangler secret put` and
+never receives `ANTHROPIC_API_KEY` or `IP_HASH_SALT`.
 
 ```bash
 cd workers/ai
 wrangler kv namespace create KV          # REQUIRED — copy the printed id into wrangler.toml
-                                         # over the "<your-kv-namespace-id>" placeholder
+                                         # over the "<your-kv-namespace-id>" placeholder,
+                                         # or set the GitHub variable AI_KV_NAMESPACE_ID
 wrangler secret put ANTHROPIC_API_KEY    # REQUIRED — your Anthropic key, never committed
 wrangler secret put IP_HASH_SALT         # REQUIRED — long random string (>= 16 chars),
                                          # the HMAC key for the daily IP counter
-wrangler deploy
+wrangler deploy                          # optional: GitHub Actions can deploy after the id is set
 ```
+
+`wrangler secret put` stores the value on the Worker. Later deploys leave it
+there. You do not add those two secrets to the workflow.
+
+### Deploy from GitHub Actions
+
+[`.github/workflows/deploy-workers.yml`](../../.github/workflows/deploy-workers.yml)
+deploys this worker on a push to `main` that changes `workers/ai/**`, and when
+you run the workflow by hand and choose `ai` or `both`. `npm test` runs first.
+The job only deploys from `main`.
+
+Two repository secrets are required before Wrangler is invoked:
+
+- `CLOUDFLARE_API_TOKEN` — API token with **Account → Workers Scripts → Edit** and **Account → Workers KV Storage → Edit**, limited to this account.
+- `CLOUDFLARE_ACCOUNT_ID` — the account id from the Cloudflare dashboard.
+
+Until those secrets exist, the job fails in **Require Cloudflare credentials** and says the token or the account id is missing.
+
+While `id = "<your-kv-namespace-id>"` is still in `wrangler.toml` and
+`AI_KV_NAMESPACE_ID` is not set (as a repository variable, or a secret of the
+same name), the job logs `AI worker deploy skipped.` and finishes green. The
+relay deploy is a different job and is not affected. A value that is set but
+is not a 32-character hex namespace id fails the job and is not printed.
 
 Deploy the worker **before or with** the site that sends `{ messages, context }`.
 An older worker still expects a client `systemPrompt` and will 400 the new

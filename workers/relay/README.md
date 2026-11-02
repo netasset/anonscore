@@ -43,6 +43,21 @@ When a lookup through the relay fails, the scan fails honestly ("couldn't
 complete", with a hint to switch the relay off) rather than silently falling
 back to a direct query — we never leak the IP the relay exists to hide.
 
+## Deploy from GitHub Actions
+
+Pushes to `main` that touch `workers/relay/**` deploy this worker from
+[`.github/workflows/deploy-workers.yml`](../../.github/workflows/deploy-workers.yml)
+after `npm test`. You can also run that workflow by hand and choose `relay`.
+The relay has no Worker secrets and no KV. It still needs two repository
+secrets or the job stops before Wrangler:
+
+- `CLOUDFLARE_API_TOKEN` — API token with **Account → Workers Scripts → Edit**, limited to this account.
+- `CLOUDFLARE_ACCOUNT_ID` — the account id from the Cloudflare dashboard.
+
+Until those secrets exist, the job fails in **Require Cloudflare credentials** and says the token or the account id is missing. It does not continue into Wrangler. After a successful deploy, the same workflow runs `npm run smoke:live`.
+
+Full one-time setup is in the root [README](../../README.md#deploying-the-workers). The workflow only deploys from `main`.
+
 ## Keeping the no-log guarantee end-to-end
 
 The Worker code logs nothing, but the guarantee is only as good as the platform
