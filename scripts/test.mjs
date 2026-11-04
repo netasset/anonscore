@@ -269,7 +269,24 @@ console.log("[2/7] Relay worker unit tests");
     const back = await hit(`/btc/address/${addr}`);
     if (back.headers.get("Set-Cookie") || back.headers.get("X-Track")) fail("relay: upstream tracking headers leaked to the caller");
     else if (back.headers.get("Cache-Control") !== "no-store") fail("relay: response is cacheable — must be no-store");
-    else pass("relay: upstream tracking headers stripped, response no-store");
+    else if (back.headers.get("X-Content-Type-Options") !== "nosniff") fail("relay: response can be MIME-sniffed");
+    else if (!/default-src 'none'/.test(back.headers.get("Content-Security-Policy") || "")) fail("relay: response has no locked-down CSP");
+    else pass("relay: upstream tracking headers stripped, response no-store and not sniffable");
+
+    upstreamResponse = () => new Response(new Uint8Array(8_000_001), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+    const huge = await hit(`/btc/address/${addr}`);
+    let hugeBody = null;
+    try { hugeBody = await huge.json(); } catch { hugeBody = null; }
+    if (huge.status !== 502 || !hugeBody || hugeBody.error !== "upstream response too large")
+      fail(`relay: oversized upstream body was not refused (status ${huge.status})`);
+    else pass("relay: upstream body over 8MB is refused");
+    upstreamResponse = () => new Response(JSON.stringify({ ok: 1 }), {
+      status: 200,
+      headers: { "Content-Type": "application/json", "Set-Cookie": "spy=1; HttpOnly", "X-Track": "yes" },
+    });
 
     // Query smuggling: only ?status=open on /channels survives; everything else is dropped.
     upstreamCalls = [];
@@ -376,7 +393,17 @@ console.log("[2b/7] AI worker unit tests");
     if (badOrigin.status !== 403 || missingOrigin.status !== 403)
       fail(`ai: origin check regressed (bad=${badOrigin.status}, missing=${missingOrigin.status})`);
     else if (www.status !== 200) fail(`ai: www.anonscore.com origin rejected (got ${www.status})`);
+    else if (www.headers.get("cache-control") !== "no-store" || www.headers.get("vary") !== "Origin")
+      fail("ai: response is cacheable or missing Vary: Origin");
     else pass("ai: Origin must be anonscore.com or www.anonscore.com");
+
+    upstream.length = 0;
+    const bareKv = makeKv();
+    const noKey = await post(okBody, { KV: bareKv, IP_HASH_SALT: salt });
+    if (noKey.status !== 503) fail(`ai: missing API key did not fail closed (got ${noKey.status})`);
+    else if (upstream.length !== 0) fail("ai: missing API key still called Anthropic");
+    else if (bareKv.store.size !== 0) fail("ai: missing API key consumed a rate-limit slot");
+    else pass("ai: missing ANTHROPIC_API_KEY refuses before the rate limit or Anthropic");
 
     const kv = makeKv();
     upstream.length = 0;
@@ -409,7 +436,9 @@ console.log("[2b/7] AI worker unit tests");
 // 3. Spin up local server serving the actual production files
 // ───────────────────────────────────────────
 console.log("[3/7] Local server");
+const serverHits = [];
 const server = createServer((req, res) => {
+  serverHits.push(req.url);
   let url = req.url.split("?")[0]; if (url === "/") url = "/index.html";
   let p = join(ROOT, url);
   try {
@@ -983,6 +1012,39 @@ else {
     fail("history: " + e.message.slice(0, 180));
   } finally {
     await histPage.close();
+  }
+}
+
+// The deployed relay still 404s /txs/chain with {"error":"not found"}. That is
+// an allowlist block, not a dead explorer. The scan must say so.
+{
+  const blockedPage = await ctx.newPage();
+  await blockedPage.route("**/anonscore-relay.netassetpremium.workers.dev/**", (route) => {
+    const url = route.request().url();
+    if (url.includes("/txs/chain/")) {
+      return route.fulfill({ status: 404, contentType: "application/json", body: JSON.stringify({ error: "not found" }) });
+    }
+    if (url.includes("/utxo")) return route.fulfill({ status: 200, contentType: "application/json", body: "[]" });
+    if (/\/txs(\?|$)/.test(url)) {
+      const tx = { txid: "ab".repeat(32), vin: [], vout: [{ value: 1000, scriptpubkey_address: "1BoatSLRHtKNngkdXEeobR76b53LETtpyT" }], status: { confirmed: true, block_time: 1700000000 } };
+      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(Array.from({ length: 25 }, () => tx)) });
+    }
+    if (url.includes("/address/")) {
+      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ chain_stats: { tx_count: 40, funded_txo_count: 1, funded_txo_sum: 1000, spent_txo_count: 0, spent_txo_sum: 0 } }) });
+    }
+    return route.fulfill({ status: 404, contentType: "application/json", body: JSON.stringify({ error: "unexpected" }) });
+  });
+  try {
+    await blockedPage.goto(`http://127.0.0.1:${PORT}/`, { waitUntil: "load" });
+    await blockedPage.waitForFunction(() => document.getElementById("root")?.childElementCount > 0, { timeout: 15000 });
+    await blockedPage.locator('input[aria-label="Paste a Bitcoin address, Lightning node pubkey, or silent payment address"]').fill("1BoatSLRHtKNngkdXEeobR76b53LETtpyT");
+    await blockedPage.getByRole("button", { name: "Analyze →" }).click();
+    await blockedPage.waitForFunction(() => /privacy relay blocked this lookup/.test(document.body.innerText), { timeout: 15000 });
+    pass("history: a relay 404 on /txs/chain is reported as an allowlist block");
+  } catch (e) {
+    fail("history block: " + e.message.slice(0, 180));
+  } finally {
+    await blockedPage.close();
   }
 }
 
@@ -1720,6 +1782,15 @@ console.log("[5c] Before-you-send check");
     ].join("\n");
     const ok = E.runSendCheck(clean);
     t("send: a plain one-input payment is safe", ok.report && ok.report.ok === true && ok.report.headline === "Safe to send.");
+    const withUnit = [
+      "in bc1qcleaninput00000000000000000000000000 0.0008 btc p2wpkh",
+      "out bc1qpayment000000000000000000000000000000 0.0004 btc p2wpkh",
+      "out bc1qchange0000000000000000000000000000000 0.00035 btc p2wpkh",
+      "fee 0.00005 btc",
+      "locktime 840000",
+    ].join("\n");
+    const unitOk = E.runSendCheck(withUnit);
+    t("send: a spaced btc amount parses", unitOk.report && unitOk.report.ok === true && !unitOk.error);
     const cross = [
       "in bc1qexchange0000000000000000000000000000 30000001 p2wpkh cluster:exchange",
       "in bc1qsavings00000000000000000000000000000 30000003 p2wpkh cluster:savings",
@@ -1995,6 +2066,55 @@ await axeRun("Landing (after demo)", page);
     await axeRun("Send check", axeS);
   } catch (e) { fail("send-check a11y: " + e.message.slice(0, 160)); }
   finally { await axeS.close(); }
+}
+
+// Production CSP, minus upgrade-insecure-requests (this server is HTTP).
+// Confirms script-src-attr 'none' and the tightened directives still let the app mount.
+{
+  const cspLine = (headers.split("\n").find(l => /^\s*Content-Security-Policy:/i.test(l)) || "").replace(/^\s*Content-Security-Policy:\s*/i, "").trim();
+  const csp = cspLine.replace(/;?\s*upgrade-insecure-requests/i, "").replace(/;;/g, ";").trim();
+  const cspPage = await ctx.newPage();
+  const cspErrors = [];
+  cspPage.on("pageerror", e => cspErrors.push(e.message));
+  cspPage.on("console", m => { if (m.type() === "error") cspErrors.push(m.text()); });
+  await cspPage.route("**/*", async (route) => {
+    const res = await route.fetch();
+    const hdrs = { ...res.headers(), "content-security-policy": csp };
+    await route.fulfill({ status: res.status(), headers: hdrs, body: await res.body() });
+  });
+  try {
+    await cspPage.goto(`http://127.0.0.1:${PORT}/`, { waitUntil: "load" });
+    await cspPage.waitForFunction(() => document.getElementById("root")?.childElementCount > 0, { timeout: 15000 });
+    await cspPage.waitForTimeout(600);
+    const mounted = await cspPage.evaluate(() => !!document.querySelector("h1"));
+    if (!csp) fail("CSP check: _headers has no Content-Security-Policy");
+    else if (!mounted) fail("CSP check: app did not mount under the production policy");
+    else if (cspErrors.length) fail("CSP check: " + cspErrors[0].slice(0, 180));
+    else pass("app mounts under the tightened CSP (upgrade-insecure-requests omitted on HTTP)");
+  } catch (e) {
+    fail("CSP check: " + e.message.slice(0, 160));
+  } finally { await cspPage.close(); }
+}
+
+// Once the service worker controls the page, a ?scan= URL must not be
+// forwarded. The address stays in location.search for the confirm dialog.
+{
+  const swPage = await ctx.newPage();
+  try {
+    await swPage.goto(`http://127.0.0.1:${PORT}/`, { waitUntil: "load" });
+    await swPage.evaluate(() => navigator.serviceWorker.ready);
+    await swPage.waitForFunction(() => navigator.serviceWorker.controller !== null, { timeout: 8000 });
+    serverHits.length = 0;
+    await swPage.goto(`http://127.0.0.1:${PORT}/?scan=bc1qleakcheck000000000000000000000000000`, { waitUntil: "load" });
+    await swPage.waitForTimeout(500);
+    const dialog = await swPage.getByRole("dialog", { name: /Confirm shared scan link/i }).count();
+    const leaked = serverHits.filter(u => u.includes("bc1qleak"));
+    if (leaked.length) fail("service worker forwarded a scan address to the host: " + leaked[0]);
+    else if (!dialog) fail("service worker stripped ?scan= from the page URL — the confirm dialog never opened");
+    else pass("service worker serves ?scan= without sending the address to the host");
+  } catch (e) {
+    fail("sw privacy: " + e.message.slice(0, 160));
+  } finally { await swPage.close(); }
 }
 
 await browser.close();

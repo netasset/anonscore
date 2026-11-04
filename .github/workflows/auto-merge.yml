@@ -12,6 +12,11 @@ name: Auto-merge claude PRs
 # Required-check names live in REQUIRED_CHECKS below. If a check is missing
 # OR not yet completed OR conclusion != "success", the PR is left alone.
 # Any branch that does not start with claude/ is never merged here.
+#
+# There is no pull_request trigger. That event runs the workflow from the
+# merge commit, so a same-repo PR could replace this script and merge itself
+# with the write token. check_suite and workflow_run use the file on the
+# default branch.
 
 on:
   check_suite:
@@ -19,8 +24,6 @@ on:
   workflow_run:
     workflows: ["Test", "Build anonscore.js"]
     types: [completed]
-  pull_request:
-    types: [opened, reopened, synchronize]
 
 permissions:
   contents: write
@@ -28,11 +31,9 @@ permissions:
 
 jobs:
   auto-merge:
-    # Skip if this fired from a PR that isn't claude/* (small optimisation)
-    if: github.event_name != 'pull_request' || startsWith(github.event.pull_request.head.ref, 'claude/')
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/github-script@v9
+      - uses: actions/github-script@373c709c69115d41ff229c7e5df9f8788daa9553 # v9
         with:
           script: |
             // "test" is the canonical gate: it builds, verifies the build is
