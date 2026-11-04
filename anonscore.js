@@ -3261,7 +3261,9 @@ function parseSendDescription(text) {
     const head = parts[0].toLowerCase();
     const n = idx + 1;
     if (head === "fee") {
-      const v = parseSendAmount(parts[1]);
+      let amountTok = parts[1] || "";
+      if (parts[2] && /^(btc|sats?)$/i.test(parts[2]) && /^\d+(?:\.\d+)?$/.test(amountTok)) amountTok += parts[2].toLowerCase();
+      const v = parseSendAmount(amountTok);
       if (v == null) throw new Error("Line " + n + ": fee needs an amount in sats.");
       fee = v;
       return;
@@ -3273,7 +3275,13 @@ function parseSendDescription(text) {
     }
     if (head !== "in" && head !== "out") throw new Error("Line " + n + " should start with in or out. Example: in bc1q… 50000000 p2wpkh");
     const address = parts[1];
-    const value = parseSendAmount(parts[2]);
+    let amountTok = parts[2] || "";
+    let flagAt = 3;
+    if (parts[3] && /^(btc|sats?)$/i.test(parts[3]) && /^\d+(?:\.\d+)?$/.test(amountTok)) {
+      amountTok += parts[3].toLowerCase();
+      flagAt = 4;
+    }
+    const value = parseSendAmount(amountTok);
     if (!address || value == null) throw new Error("Line " + n + " needs an address and an amount in sats.");
     let script = null;
     const flags = {
@@ -3283,7 +3291,7 @@ function parseSendDescription(text) {
       kyc: false,
       exchange: false
     };
-    parts.slice(3).forEach(p => {
+    parts.slice(flagAt).forEach(p => {
       const k = p.toLowerCase();
       if (SEND_SCRIPTS[k]) script = SEND_SCRIPTS[k];else if (k === "reused") flags.reused = true;else if (k === "toxic" || k === "kyc" || k === "exchange") {
         flags.toxic = true;
@@ -4751,10 +4759,15 @@ async function fetchAddress(addr, opts = {}) {
   let cursor = confirmedOnPage(firstPage).slice(-1)[0] || null;
   let more = confirmedOnPage(firstPage).length >= TX_PAGE_SIZE;
   while (more && cursor && pages < pageCap && txs.length < txCap && (chainCount == null || confirmedOnPage(txs).length < chainCount)) {
-    const page = await fetch(`${base}/address/${safe}/txs/chain/${encodeURIComponent(cursor)}`).then(r => {
-      if (!r.ok) throw new Error("Invalid TX response");
-      return r.json();
-    });
+    const res = await fetch(`${base}/address/${safe}/txs/chain/${encodeURIComponent(cursor)}`);
+    if (!res.ok) {
+      const bodyText = await res.text().catch(() => "");
+      const failure = txLookupFailure(res.status, res.headers.get("content-type"), bodyText, relayOn());
+      const err = new Error(failure.kind === "blocked" ? failure.message : "Invalid TX response");
+      err.kind = failure.kind;
+      throw err;
+    }
+    const page = await res.json();
     if (!Array.isArray(page)) throw new Error("Invalid TX response");
     const added = pushPage(page);
     pages++;
@@ -17253,7 +17266,7 @@ function Dashboard({
   const poison = useMemo(() => computePoisoning(txs, address), [txs, address]);
   const caseHit = CASE_FILES.find(c => c.address === address);
   const caseEntity = caseHit?.entity;
-  const [simpleMode, setSimpleMode] = useState(simpleModeFromApp !== undefined ? simpleModeFromApp : defaultSimple || false);
+  const [simpleMode, setSimpleMode] = useState(simpleModeFromApp != null ? !!simpleModeFromApp : !!defaultSimple);
   const setSimpleModeSync = val => {
     setSimpleMode(val);
     onSimpleModeChange && onSimpleModeChange(val);
@@ -17441,7 +17454,7 @@ function Dashboard({
       background: "transparent",
       display: "flex",
       flexDirection: "column",
-      paddingBottom: isMobile ? 64 : 0
+      paddingBottom: isMobile ? "calc(72px + env(safe-area-inset-bottom, 0px))" : 0
     }
   }, React.createElement("h1", {
     className: "sr-only"
@@ -18866,16 +18879,13 @@ function Dashboard({
       const on = pickedCoins.includes(i);
       return React.createElement("div", {
         key: u.txid + i,
-        onClick: () => setSelectedUtxo(open ? null : i),
         style: {
           background: T.card,
           border: `1.5px solid ${on ? T.cyan : open ? color : T.border}`,
           borderRadius: 14,
           padding: isMobile ? "14px" : "16px 20px",
-          cursor: "pointer",
           transition: "all .15s",
-          animation: `fadeUp .3s ease ${i * .05}s both`,
-          opacity: 0
+          animation: `fadeUp .3s ease ${i * .05}s both`
         },
         onMouseEnter: e => !open && (e.currentTarget.style.borderColor = T.cyan + "44"),
         onMouseLeave: e => !open && !on && (e.currentTarget.style.borderColor = T.border)
@@ -18885,20 +18895,11 @@ function Dashboard({
           alignItems: "flex-start",
           gap: 12
         }
-      }, React.createElement("label", {
-        onClick: e => e.stopPropagation(),
-        style: {
-          display: "flex",
-          alignItems: "flex-start",
-          gap: 10,
-          flex: 1,
-          minWidth: 0,
-          cursor: "pointer"
-        }
       }, React.createElement("input", {
         type: "checkbox",
         checked: on,
         onChange: () => toggleCoin(i),
+        "aria-label": "Select " + coinName(u.value) + ", " + c.label,
         style: {
           width: 18,
           height: 18,
@@ -18906,9 +18907,20 @@ function Dashboard({
           flexShrink: 0,
           accentColor: T.cyan
         }
-      }), React.createElement("span", {
+      }), React.createElement("button", {
+        type: "button",
+        "aria-expanded": open,
+        onClick: () => setSelectedUtxo(open ? null : i),
         style: {
-          minWidth: 0
+          flex: 1,
+          minWidth: 0,
+          textAlign: "left",
+          background: "none",
+          border: "none",
+          padding: 0,
+          cursor: "pointer",
+          font: "inherit",
+          color: "inherit"
         }
       }, React.createElement("span", {
         style: {
@@ -18958,7 +18970,7 @@ function Dashboard({
           color: T.textDim,
           marginTop: 4
         }
-      }, fmt.txid(u.txid), " \xB7 ", u.status?.block_time ? fmt.age(u.status.block_time) : "unconfirmed")))), open && React.createElement("div", {
+      }, fmt.txid(u.txid), " \xB7 ", u.status?.block_time ? fmt.age(u.status.block_time) : "unconfirmed"))), open && React.createElement("div", {
         style: {
           marginTop: 12,
           paddingTop: 12,
@@ -19075,11 +19087,19 @@ function Dashboard({
       color: T.text
     }
   }, txs.length), " transactions."), " ", "We flag CoinJoins, unsafe consolidations, and round amounts.", txs.length > 20 ? " Showing the latest 20." : ""), React.createElement("div", {
+    tabIndex: isMobile ? 0 : undefined,
+    role: "region",
+    "aria-label": "Transactions",
     style: {
       background: T.card,
       border: `1px solid ${T.border}`,
       borderRadius: 16,
-      overflow: "hidden"
+      overflowX: "auto",
+      WebkitOverflowScrolling: "touch"
+    }
+  }, React.createElement("div", {
+    style: {
+      minWidth: 680
     }
   }, React.createElement("div", {
     style: {
@@ -19196,7 +19216,7 @@ function Dashboard({
         e.currentTarget.style.color = T.cyan;
       }
     }, "Inspect \u2192"));
-  }))), tab === "Flow" && React.createElement(ExposureFlow, {
+  })))), tab === "Flow" && React.createElement(ExposureFlow, {
     txs: txs,
     isMobile: isMobile,
     onFix: () => setTab("Fix It"),
@@ -19247,7 +19267,7 @@ function Dashboard({
       background: T.bg,
       borderTop: `1px solid ${T.border}`,
       display: "flex",
-      height: 64,
+      height: "calc(64px + env(safe-area-inset-bottom, 0px))",
       paddingBottom: "env(safe-area-inset-bottom, 0px)"
     }
   }, TABS.map(t => {
@@ -19265,6 +19285,7 @@ function Dashboard({
       "aria-current": tab === t ? "page" : undefined,
       style: {
         flex: 1,
+        minWidth: 0,
         display: "flex",
         flexDirection: "column",
         alignItems: "center",
@@ -19284,9 +19305,13 @@ function Dashboard({
     }, icons[t]), React.createElement("span", {
       style: {
         fontFamily: T.mono,
-        fontSize: 11,
+        fontSize: 10,
         color: tab === t ? T.cyan : T.textDim,
-        letterSpacing: 0
+        letterSpacing: 0,
+        maxWidth: "100%",
+        overflow: "hidden",
+        textOverflow: "ellipsis",
+        whiteSpace: "nowrap"
       }
     }, t));
   })));
@@ -19338,7 +19363,7 @@ function LightningDashboard({
       background: "transparent",
       display: "flex",
       flexDirection: "column",
-      paddingBottom: isMobile ? 72 : 0
+      paddingBottom: isMobile ? "calc(72px + env(safe-area-inset-bottom, 0px))" : 0
     }
   }, React.createElement("h1", {
     className: "sr-only"
@@ -20144,7 +20169,7 @@ function LightningDashboard({
       background: T.bg,
       borderTop: `1px solid ${T.border}`,
       display: "flex",
-      height: 64,
+      height: "calc(64px + env(safe-area-inset-bottom, 0px))",
       paddingBottom: "env(safe-area-inset-bottom, 0px)"
     }
   }, TABS.map(t => {
@@ -20157,8 +20182,10 @@ function LightningDashboard({
     return React.createElement("button", {
       key: t,
       onClick: () => setTab(t),
+      "aria-current": tab === t ? "page" : undefined,
       style: {
         flex: 1,
+        minWidth: 0,
         display: "flex",
         flexDirection: "column",
         alignItems: "center",
@@ -20178,9 +20205,13 @@ function LightningDashboard({
     }, icons[t]), React.createElement("span", {
       style: {
         fontFamily: T.mono,
-        fontSize: 11,
+        fontSize: 10,
         color: tab === t ? T.ln : T.textDim,
-        letterSpacing: 0.2
+        letterSpacing: 0,
+        maxWidth: "100%",
+        overflow: "hidden",
+        textOverflow: "ellipsis",
+        whiteSpace: "nowrap"
       }
     }, t.toUpperCase()));
   })));
@@ -20427,7 +20458,7 @@ function App() {
   const [autoShare, setAutoShare] = useState(false);
   const [scanAt, setScanAt] = useState(null);
   const [defaultSimple, setDefaultSimple] = useState(false);
-  const [simpleMode, setSimpleMode] = useState(false);
+  const [simpleMode, setSimpleMode] = useState(null);
   const [lnNodeId, setLnNodeId] = useState("");
   const [lnNodeData, setLnNodeData] = useState(null);
   const [lnChannels, setLnChannels] = useState([]);
@@ -20527,6 +20558,7 @@ function App() {
         setScoreTint(scoreColor(runEngine(demoData.utxos, demoData.txs, demoData.addrInfo?.chain_stats?.tx_count || demoData.txs.length, demoData.addrInfo?.chain_stats?.funded_txo_count ?? null).score));
         setScanDataReady(true);
         await new Promise(r => setTimeout(r, 300));
+        if (plain) setSimpleMode(prev => prev == null ? true : prev);
         setPage("dashboard");
         toast.show("Demo loaded", {
           icon: isPristine ? "✨" : "🔍",
@@ -20556,6 +20588,7 @@ function App() {
       setScoreTint(scoreColor(analysis.score));
       setScanDataReady(true);
       await new Promise(r => setTimeout(r, 300));
+      if (plain) setSimpleMode(prev => prev == null ? true : prev);
       setPage("dashboard");
       setAutoShare(true);
       toast.show(delta > 0 ? "Score improved" : "Scan complete", {
@@ -20563,14 +20596,15 @@ function App() {
         color: T.green,
         msg: `Privacy score: ${analysis.score}/100${delta != null && delta !== 0 ? ` (${delta > 0 ? "+" : ""}${delta} since your last scan)` : ""}`
       });
-    } catch {
+    } catch (e) {
       await new Promise(r => setTimeout(r, 700));
       setScanDataReady(false);
       setPage("landing");
+      const blocked = e && e.kind === "blocked" && e.message;
       toast.show("Scan couldn't complete", {
         icon: "⚠️",
         color: T.red,
-        msg: relayOn() ? "Couldn't reach the explorer via the privacy relay — try again, or switch the relay off to query the explorer directly (it will then see your IP)." : "Couldn't reach the blockchain API — check your connection and try again."
+        msg: blocked || (relayOn() ? "Couldn't reach the explorer via the privacy relay — try again, or switch the relay off to query the explorer directly (it will then see your IP)." : "Couldn't reach the blockchain API — check your connection and try again.")
       });
     }
   }, [toast]);

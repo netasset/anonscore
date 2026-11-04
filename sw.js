@@ -11,13 +11,17 @@
  * only when the precache LIST changes (to force a full purge) — never per build.
  *
  * Privacy stance: only same-origin GETs are intercepted. Cross-origin API
- * calls (blockstream.info, mempool.space) go straight to the network — the
- * service worker never sees user addresses.
+ * calls (blockstream.info, mempool.space, the relay) go straight to the
+ * network. A same-origin URL may carry ?scan=<address>. The worker sees that
+ * URL in memory for the request, then drops the query before any network
+ * fetch or cache write, so the address is not sent to the host and is not
+ * stored. The first load, before this worker controls the page, still
+ * requests the original URL — that one is the browser's, not this file's.
  */
-// v3: bumped to purge any previously-cached query-bearing URLs (e.g. a
-// /?scan=<address> share link) that older SW versions may have stored — see
-// the query-stripping guard in the fetch handler below.
-const CACHE = "anonscore-v3";
+// v4: latin font files joined the precache (offline paint), and query
+// strings are neither stored nor forwarded. The bump also drops any
+// address-bearing entries an older cache may still hold.
+const CACHE = "anonscore-v4";
 const PRECACHE = [
   "/",
   "/index.html",
@@ -29,6 +33,10 @@ const PRECACHE = [
   "/vendor/confetti.browser.min.js",
   "/vendor/dom-to-image-more.min.js",
   "/vendor/fonts/fonts.css",
+  "/vendor/fonts/6NU78FyLNQOQZAnv9bYEvDiIdE9Ea92uemAk_WBq8U_9v0c2Wa0KxC9TeA.woff2",
+  "/vendor/fonts/tDbv2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKwBNntkaToggR7BYRbKPxDcwg.woff2",
+  "/vendor/fonts/QGYvz_MVcBeNP4NJtEtq.woff2",
+  "/vendor/fonts/RrQQboN_4yJ0JmiMe2LE0Q.woff2",
   "/vendor/icon-192.png",
   "/vendor/icon-512.png",
 ];
@@ -59,21 +67,20 @@ self.addEventListener("fetch", (e) => {
   // Only intercept same-origin requests — never touch API calls.
   if (url.origin !== self.location.origin) return;
 
+  // Drop the query before matching, fetching, or storing. /?scan=<address>
+  // and /?page=… are the same shell; forwarding the original request would
+  // hand the address to the host on every return visit. A string (not a
+  // Request) so the cache write is not a second use of a consumed body.
+  const bareUrl = url.origin + url.pathname;
   // Stale-while-revalidate: serve cache immediately if present, and in the
   // background fetch a fresh copy to update the cache for next time. Falls back
   // to network when there's no cache hit, and to the SPA shell when offline.
   e.respondWith(
-    caches.match(req).then((hit) => {
-      const network = fetch(req).then(async (res) => {
+    caches.match(bareUrl).then((hit) => {
+      const network = fetch(bareUrl).then(async (res) => {
         if (res && res.ok && res.type === "basic") {
           const clone = res.clone();
-          // Never persist a URL that carries query params (e.g. /?scan=<address>
-          // or /?case=…) — that would write a scanned address into the on-disk
-          // cache. The SPA shell is byte-identical for every query, so store it
-          // under the bare pathname instead. Address-bearing URLs then simply
-          // fall through to network (or the /index.html offline fallback).
-          const key = url.search ? new Request(url.origin + url.pathname) : req;
-          await caches.open(CACHE).then((c) => c.put(key, clone));
+          await caches.open(CACHE).then((c) => c.put(bareUrl, clone));
         }
         return res;
       }).catch(() =>

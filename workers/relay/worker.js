@@ -66,15 +66,49 @@ const CORS = {
   "Access-Control-Max-Age": "86400",
 };
 
+// A single esplora page is well under this. Anything larger is refused
+// before the worker buffers it, so a huge UTXO set can't exhaust the isolate.
+const MAX_UPSTREAM_BODY = 8_000_000;
+
+// The body is explorer JSON (or a short text 404). These headers stop that
+// body from being sniffed or framed if someone opens the relay URL directly.
+const SAFE = {
+  "X-Content-Type-Options": "nosniff",
+  "Referrer-Policy": "no-referrer",
+  "X-Frame-Options": "DENY",
+  "Content-Security-Policy": "default-src 'none'; frame-ancestors 'none'; base-uri 'none'",
+};
+
 const json = (obj, status) =>
   new Response(JSON.stringify(obj), {
     status,
-    headers: { ...CORS, "Content-Type": "application/json", "Cache-Control": "no-store" },
+    headers: { ...CORS, ...SAFE, "Content-Type": "application/json", "Cache-Control": "no-store" },
   });
+
+async function readLimited(upstream) {
+  if (!upstream.body) return new Uint8Array(0);
+  const reader = upstream.body.getReader();
+  const chunks = [];
+  let size = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.byteLength;
+    if (size > MAX_UPSTREAM_BODY) {
+      try { await reader.cancel(); } catch { /* already closed */ }
+      return null;
+    }
+    chunks.push(value);
+  }
+  const body = new Uint8Array(size);
+  let off = 0;
+  for (const chunk of chunks) { body.set(chunk, off); off += chunk.byteLength; }
+  return body;
+}
 
 export default {
   async fetch(request) {
-    if (request.method === "OPTIONS") return new Response(null, { headers: CORS });
+    if (request.method === "OPTIONS") return new Response(null, { headers: { ...CORS, ...SAFE } });
     if (request.method !== "GET") return json({ error: "method not allowed" }, 405);
 
     const url = new URL(request.url);
@@ -119,11 +153,15 @@ export default {
 
     // Pass through status + body; strip upstream headers that could set cookies
     // or otherwise track. Only content-type is preserved.
-    const body = await upstream.arrayBuffer();
+    let body;
+    try { body = await readLimited(upstream); }
+    catch { return json({ error: "upstream unreachable" }, 502); }
+    if (body == null) return json({ error: "upstream response too large" }, 502);
     return new Response(body, {
       status: upstream.status,
       headers: {
         ...CORS,
+        ...SAFE,
         "Content-Type": upstream.headers.get("Content-Type") || "application/json",
         "Cache-Control": "no-store",
       },

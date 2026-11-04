@@ -404,18 +404,13 @@ function useLang() {
   return _lang;
 }
 
-/* Privacy relay (opt-in) ─────────────────────────────────────────────
-   By default the browser queries the block explorer directly, so the explorer
-   sees the visitor's IP next to the address. When this is ON *and* RELAY_URL is
-   configured, lookups route through the AnonScore relay (a stateless, no-log
-   Cloudflare Worker — source in workers/relay/) so the explorer sees the relay's
-   IP instead. Off by default: a direct query keeps the address off our
-   infrastructure entirely, which is the lower-trust-surface choice — the relay
-   trades that for hiding the IP. Mirrors the language hook above.
-   Dormant until configured: leave "" and the toggle stays hidden (nothing
-   changes). After deploying workers/relay/, set this to the Worker's URL —
-   e.g. "https://anonscore-relay.netassetpremium.workers.dev" — and rebuild;
-   the toggle then appears. The relay origin is already allowed in _headers. */
+/* Privacy relay ────────────────────────────────────────────────────
+   Lookups go through the AnonScore relay (a stateless, no-log Cloudflare
+   Worker — source in workers/relay/) so the explorer sees the relay's IP
+   instead of the visitor's. Default ON. One click turns it off for anyone
+   who would rather the address never touch AnonScore infrastructure; that
+   choice is saved and then wins over the default. Leave RELAY_URL "" and
+   the toggle stays hidden. The relay origin must stay in _headers connect-src. */
 const RELAY_URL = "https://anonscore-relay.netassetpremium.workers.dev";
 // Default ON: the average visitor gets IP↔address unlinkability out of the box,
 // and the relay is verifiably no-log (open source, stateless, observability
@@ -2049,7 +2044,9 @@ function parseSendDescription(text) {
     const head = parts[0].toLowerCase();
     const n = idx + 1;
     if (head === "fee") {
-      const v = parseSendAmount(parts[1]);
+      let amountTok = parts[1] || "";
+      if (parts[2] && /^(btc|sats?)$/i.test(parts[2]) && /^\d+(?:\.\d+)?$/.test(amountTok)) amountTok += parts[2].toLowerCase();
+      const v = parseSendAmount(amountTok);
       if (v == null) throw new Error("Line " + n + ": fee needs an amount in sats.");
       fee = v;
       return;
@@ -2061,11 +2058,18 @@ function parseSendDescription(text) {
     }
     if (head !== "in" && head !== "out") throw new Error("Line " + n + " should start with in or out. Example: in bc1q… 50000000 p2wpkh");
     const address = parts[1];
-    const value = parseSendAmount(parts[2]);
+    // "0.1 btc" and "50000 sats" are one amount. The unit may sit in the next token.
+    let amountTok = parts[2] || "";
+    let flagAt = 3;
+    if (parts[3] && /^(btc|sats?)$/i.test(parts[3]) && /^\d+(?:\.\d+)?$/.test(amountTok)) {
+      amountTok += parts[3].toLowerCase();
+      flagAt = 4;
+    }
+    const value = parseSendAmount(amountTok);
     if (!address || value == null) throw new Error("Line " + n + " needs an address and an amount in sats.");
     let script = null;
     const flags = { cluster: null, reused: false, toxic: false, kyc: false, exchange: false };
-    parts.slice(3).forEach(p => {
+    parts.slice(flagAt).forEach(p => {
       const k = p.toLowerCase();
       if (SEND_SCRIPTS[k]) script = SEND_SCRIPTS[k];
       else if (k === "reused") flags.reused = true;
@@ -2963,10 +2967,15 @@ async function fetchAddress(addr, opts = {}) {
   let cursor = confirmedOnPage(firstPage).slice(-1)[0] || null;
   let more = confirmedOnPage(firstPage).length >= TX_PAGE_SIZE;
   while (more && cursor && pages < pageCap && txs.length < txCap && (chainCount == null || confirmedOnPage(txs).length < chainCount)) {
-    const page = await fetch(`${base}/address/${safe}/txs/chain/${encodeURIComponent(cursor)}`).then(r => {
-      if (!r.ok) throw new Error("Invalid TX response");
-      return r.json();
-    });
+    const res = await fetch(`${base}/address/${safe}/txs/chain/${encodeURIComponent(cursor)}`);
+    if (!res.ok) {
+      const bodyText = await res.text().catch(() => "");
+      const failure = txLookupFailure(res.status, res.headers.get("content-type"), bodyText, relayOn());
+      const err = new Error(failure.kind === "blocked" ? failure.message : "Invalid TX response");
+      err.kind = failure.kind;
+      throw err;
+    }
+    const page = await res.json();
     if (!Array.isArray(page)) throw new Error("Invalid TX response");
     const added = pushPage(page);
     pages++;
@@ -8333,7 +8342,7 @@ function Dashboard({ address, addrInfo, utxos, txs, txSample, isMobile, onBack, 
   const poison = useMemo(() => computePoisoning(txs, address), [txs, address]);
   const caseHit = CASE_FILES.find(c => c.address === address);
   const caseEntity = caseHit?.entity;
-  const [simpleMode, setSimpleMode] = useState(simpleModeFromApp !== undefined ? simpleModeFromApp : (defaultSimple || false));
+  const [simpleMode, setSimpleMode] = useState(simpleModeFromApp != null ? !!simpleModeFromApp : !!defaultSimple);
   const setSimpleModeSync = (val) => { setSimpleMode(val); onSimpleModeChange && onSimpleModeChange(val); };
   const [shareOpen, setShareOpen] = useState(false);
   const [selectedUtxo, setSelectedUtxo] = useState(null);
@@ -8467,7 +8476,7 @@ function Dashboard({ address, addrInfo, utxos, txs, txSample, isMobile, onBack, 
   };
 
   return (
-    <div role="main" aria-label={`Privacy audit for ${address === "DEMO" || address === "DEMO_A" ? "demo wallet" : address}`} style={{ minHeight: "100vh", background: "transparent", display: "flex", flexDirection: "column", paddingBottom: isMobile ? 64 : 0 }}>
+    <div role="main" aria-label={`Privacy audit for ${address === "DEMO" || address === "DEMO_A" ? "demo wallet" : address}`} style={{ minHeight: "100vh", background: "transparent", display: "flex", flexDirection: "column", paddingBottom: isMobile ? "calc(72px + env(safe-area-inset-bottom, 0px))" : 0 }}>
       <h1 className="sr-only">Privacy score {score} of 100, grade {grade} — {riskLabel}</h1>
       {/* Nav */}
       <nav style={{ display: "flex", alignItems: "center", gap: 10, padding: isMobile ? "12px 16px" : "12px 32px", borderBottom: `1px solid ${T.border}`, background: T.bg, position: "sticky", top: 0, zIndex: 100 }}>
@@ -8947,23 +8956,23 @@ function Dashboard({ address, addrInfo, utxos, txs, txSample, isMobile, onBack, 
               const open = selectedUtxo === i;
               const on = pickedCoins.includes(i);
               return (
-                <div key={u.txid + i} onClick={() => setSelectedUtxo(open ? null : i)}
-                  style={{ background: T.card, border: `1.5px solid ${on ? T.cyan : open ? color : T.border}`, borderRadius: 14, padding: isMobile ? "14px" : "16px 20px", cursor: "pointer", transition: "all .15s", animation: `fadeUp .3s ease ${i * .05}s both`, opacity: 0 }}
+                <div key={u.txid + i}
+                  style={{ background: T.card, border: `1.5px solid ${on ? T.cyan : open ? color : T.border}`, borderRadius: 14, padding: isMobile ? "14px" : "16px 20px", transition: "all .15s", animation: `fadeUp .3s ease ${i * .05}s both` }}
                   onMouseEnter={e => !open && (e.currentTarget.style.borderColor = T.cyan + "44")}
                   onMouseLeave={e => !open && !on && (e.currentTarget.style.borderColor = T.border)}>
                   <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
-                    <label onClick={e => e.stopPropagation()} style={{ display: "flex", alignItems: "flex-start", gap: 10, flex: 1, minWidth: 0, cursor: "pointer" }}>
-                      <input type="checkbox" checked={on} onChange={() => toggleCoin(i)}
-                        style={{ width: 18, height: 18, marginTop: 4, flexShrink: 0, accentColor: T.cyan }} />
-                      <span style={{ minWidth: 0 }}>
-                        <span style={{ display: "block", fontFamily: T.serif, fontSize: isMobile ? 20 : 26, color, lineHeight: 1 }}>{fmt.btcRow(u.value)}</span>
-                        <span style={{ display: "block", fontSize: 15, fontWeight: 700, color: T.text, marginTop: 6 }}>{c.label}</span>
-                        <span style={{ display: "block", fontSize: 14, color: T.textMid, lineHeight: 1.45, marginTop: 2 }}>{c.reason}</span>
-                        <span style={{ display: "block", fontSize: 14, color: T.text, lineHeight: 1.45, marginTop: 4 }}>In Sparrow: {c.sparrow}</span>
-                        {c.also && <span style={{ display: "block", fontSize: 13, color: T.textMid, lineHeight: 1.45, marginTop: 2 }}>{c.also}</span>}
-                        <span style={{ display: "block", fontFamily: T.mono, fontSize: 12, color: T.textDim, marginTop: 4 }}>{fmt.txid(u.txid)} · {u.status?.block_time ? fmt.age(u.status.block_time) : "unconfirmed"}</span>
-                      </span>
-                    </label>
+                    <input type="checkbox" checked={on} onChange={() => toggleCoin(i)}
+                      aria-label={"Select " + coinName(u.value) + ", " + c.label}
+                      style={{ width: 18, height: 18, marginTop: 4, flexShrink: 0, accentColor: T.cyan }} />
+                    <button type="button" aria-expanded={open} onClick={() => setSelectedUtxo(open ? null : i)}
+                      style={{ flex: 1, minWidth: 0, textAlign: "left", background: "none", border: "none", padding: 0, cursor: "pointer", font: "inherit", color: "inherit" }}>
+                      <span style={{ display: "block", fontFamily: T.serif, fontSize: isMobile ? 20 : 26, color, lineHeight: 1 }}>{fmt.btcRow(u.value)}</span>
+                      <span style={{ display: "block", fontSize: 15, fontWeight: 700, color: T.text, marginTop: 6 }}>{c.label}</span>
+                      <span style={{ display: "block", fontSize: 14, color: T.textMid, lineHeight: 1.45, marginTop: 2 }}>{c.reason}</span>
+                      <span style={{ display: "block", fontSize: 14, color: T.text, lineHeight: 1.45, marginTop: 4 }}>In Sparrow: {c.sparrow}</span>
+                      {c.also && <span style={{ display: "block", fontSize: 13, color: T.textMid, lineHeight: 1.45, marginTop: 2 }}>{c.also}</span>}
+                      <span style={{ display: "block", fontFamily: T.mono, fontSize: 12, color: T.textDim, marginTop: 4 }}>{fmt.txid(u.txid)} · {u.status?.block_time ? fmt.age(u.status.block_time) : "unconfirmed"}</span>
+                    </button>
                   </div>
                   {open && (
                     <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${T.borderLo}` }}>
@@ -9004,7 +9013,9 @@ function Dashboard({ address, addrInfo, utxos, txs, txSample, isMobile, onBack, 
               {" "}We flag CoinJoins, unsafe consolidations, and round amounts.
               {txs.length > 20 ? " Showing the latest 20." : ""}
             </div>
-            <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 16, overflow: "hidden" }}>
+            <div tabIndex={isMobile ? 0 : undefined} role="region" aria-label="Transactions"
+              style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 16, overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
+              <div style={{ minWidth: 680 }}>
               <div style={{ display: "grid", gridTemplateColumns: onInspectTx ? "130px 90px 50px 50px 1fr 100px 76px" : "130px 90px 60px 60px 1fr 110px", padding: "10px 20px", borderBottom: `1px solid ${T.borderLo}` }}>
                 {(onInspectTx ? ["TXID","DATE","IN","OUT","FLAGS","FEE",""] : ["TXID","DATE","IN","OUT","FLAGS","FEE"]).map((h, hi) => (
                   <div key={hi} style={{ fontFamily: T.mono, fontSize: 9, color: T.textDim, letterSpacing: 1.5 }}>{h}</div>
@@ -9039,6 +9050,7 @@ function Dashboard({ address, addrInfo, utxos, txs, txSample, isMobile, onBack, 
                   </div>
                 );
               })}
+              </div>
             </div>
           </div>
         )}
@@ -9068,13 +9080,13 @@ function Dashboard({ address, addrInfo, utxos, txs, txSample, isMobile, onBack, 
 
       {/* ── Mobile sticky bottom tab bar ── */}
       {isMobile && (
-        <nav style={{ position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 200, background: T.bg, borderTop: `1px solid ${T.border}`, display: "flex", height: 64, paddingBottom: "env(safe-area-inset-bottom, 0px)" }}>
+        <nav style={{ position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 200, background: T.bg, borderTop: `1px solid ${T.border}`, display: "flex", height: "calc(64px + env(safe-area-inset-bottom, 0px))", paddingBottom: "env(safe-area-inset-bottom, 0px)" }}>
           {TABS.map(t => {
             const icons = { "Fix It": "★", "Overview": "◎", "Flow": "⋔", "UTXOs": "⬡", "Transactions": "⇄", "Methodology": "≡" };
             return (
-              <button key={t} onClick={() => setTab(t)} aria-current={tab === t ? "page" : undefined} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3, background: "none", border: "none", cursor: "pointer", borderTop: `2px solid ${tab === t ? T.cyan : "transparent"}`, transition: "border-color .15s" }}>
+              <button key={t} onClick={() => setTab(t)} aria-current={tab === t ? "page" : undefined} style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3, background: "none", border: "none", cursor: "pointer", borderTop: `2px solid ${tab === t ? T.cyan : "transparent"}`, transition: "border-color .15s" }}>
                 <span style={{ fontSize: 14, color: tab === t ? T.cyan : T.textDim }}>{icons[t]}</span>
-                <span style={{ fontFamily: T.mono, fontSize: 11, color: tab === t ? T.cyan : T.textDim, letterSpacing: 0 }}>{t}</span>
+                <span style={{ fontFamily: T.mono, fontSize: 10, color: tab === t ? T.cyan : T.textDim, letterSpacing: 0, maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t}</span>
               </button>
             );
           })}
@@ -9111,7 +9123,7 @@ function LightningDashboard({ nodeId, nodeData, channels, isMobile, onBack, onRe
   const handleRescan = () => onRescan && onRescan(nodeId, false, "ln_pubkey");
 
   return (
-    <div role="main" aria-label={`Lightning privacy audit for ${nodeData?.alias || nodeId.slice(0, 16)}`} style={{ minHeight: "100vh", background: "transparent", display: "flex", flexDirection: "column", paddingBottom: isMobile ? 72 : 0 }}>
+    <div role="main" aria-label={`Lightning privacy audit for ${nodeData?.alias || nodeId.slice(0, 16)}`} style={{ minHeight: "100vh", background: "transparent", display: "flex", flexDirection: "column", paddingBottom: isMobile ? "calc(72px + env(safe-area-inset-bottom, 0px))" : 0 }}>
       <h1 className="sr-only">Lightning privacy score {score} of 100, grade {grade}</h1>
 
       {/* ── Share modal — unified with BTC ── */}
@@ -9395,13 +9407,13 @@ function LightningDashboard({ nodeId, nodeData, channels, isMobile, onBack, onRe
 
       {/* ── Mobile sticky bottom tab bar ── */}
       {isMobile && (
-        <nav style={{ position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 200, background: T.bg, borderTop: `1px solid ${T.border}`, display: "flex", height: 64, paddingBottom: "env(safe-area-inset-bottom, 0px)" }}>
+        <nav style={{ position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 200, background: T.bg, borderTop: `1px solid ${T.border}`, display: "flex", height: "calc(64px + env(safe-area-inset-bottom, 0px))", paddingBottom: "env(safe-area-inset-bottom, 0px)" }}>
           {TABS.map(t => {
             const icons = { "Fix It": "★", "Checks": "◎", "Channels": "⚡", "Methodology": "≡" };
             return (
-              <button key={t} onClick={() => setTab(t)} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3, background: "none", border: "none", cursor: "pointer", borderTop: `2px solid ${tab === t ? T.ln : "transparent"}`, transition: "border-color .15s" }}>
+              <button key={t} onClick={() => setTab(t)} aria-current={tab === t ? "page" : undefined} style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3, background: "none", border: "none", cursor: "pointer", borderTop: `2px solid ${tab === t ? T.ln : "transparent"}`, transition: "border-color .15s" }}>
                 <span style={{ fontSize: 14, color: tab === t ? T.ln : T.textDim }}>{icons[t]}</span>
-                <span style={{ fontFamily: T.mono, fontSize: 11, color: tab === t ? T.ln : T.textDim, letterSpacing: 0.2 }}>{t.toUpperCase()}</span>
+                <span style={{ fontFamily: T.mono, fontSize: 10, color: tab === t ? T.ln : T.textDim, letterSpacing: 0, maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.toUpperCase()}</span>
               </button>
             );
           })}
@@ -9574,7 +9586,7 @@ function App() {
   const [autoShare, setAutoShare] = useState(false);
   const [scanAt, setScanAt] = useState(null);
   const [defaultSimple, setDefaultSimple] = useState(false);
-  const [simpleMode, setSimpleMode] = useState(false); // persists across re-scans
+  const [simpleMode, setSimpleMode] = useState(null); // null until a plain-English scan or the toggle chooses; then it persists across rescans
   // Lightning state
   const [lnNodeId, setLnNodeId] = useState("");
   const [lnNodeData, setLnNodeData] = useState(null);
@@ -9660,6 +9672,7 @@ function App() {
         setScoreTint(scoreColor(runEngine(demoData.utxos, demoData.txs, demoData.addrInfo?.chain_stats?.tx_count || demoData.txs.length, demoData.addrInfo?.chain_stats?.funded_txo_count ?? null).score));
         setScanDataReady(true);
         await new Promise(r => setTimeout(r, 300));
+        if (plain) setSimpleMode(prev => (prev == null ? true : prev));
         setPage("dashboard");
         toast.show("Demo loaded", { icon: isPristine ? "✨" : "🔍", color: isPristine ? T.green : T.cyan, msg: isPristine ? "Showing a pristine, CoinJoin-mixed wallet" : "Showing a sample high-risk wallet" });
         return;
@@ -9681,15 +9694,19 @@ function App() {
       setScoreTint(scoreColor(analysis.score));
       setScanDataReady(true);
       await new Promise(r => setTimeout(r, 300));
+      if (plain) setSimpleMode(prev => (prev == null ? true : prev));
       setPage("dashboard");
       setAutoShare(true);
       toast.show(delta > 0 ? "Score improved" : "Scan complete", { icon: delta > 0 ? "📈" : "✅", color: T.green, msg: `Privacy score: ${analysis.score}/100${delta != null && delta !== 0 ? ` (${delta > 0 ? "+" : ""}${delta} since your last scan)` : ""}` });
-    } catch {
+    } catch (e) {
       // Honest failure — never show canned DEMO data under the user's real address.
+      // A relay allowlist block (the deployed worker still 404s /txs/chain) names
+      // itself. Anything else stays the generic reachability message.
       await new Promise(r => setTimeout(r, 700));
       setScanDataReady(false);
       setPage("landing");
-      toast.show("Scan couldn't complete", { icon: "⚠️", color: T.red, msg: relayOn() ? "Couldn't reach the explorer via the privacy relay — try again, or switch the relay off to query the explorer directly (it will then see your IP)." : "Couldn't reach the blockchain API — check your connection and try again." });
+      const blocked = e && e.kind === "blocked" && e.message;
+      toast.show("Scan couldn't complete", { icon: "⚠️", color: T.red, msg: blocked || (relayOn() ? "Couldn't reach the explorer via the privacy relay — try again, or switch the relay off to query the explorer directly (it will then see your IP)." : "Couldn't reach the blockchain API — check your connection and try again.") });
     }
   }, [toast]);
 

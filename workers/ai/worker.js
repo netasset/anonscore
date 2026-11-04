@@ -88,6 +88,13 @@ export default {
       sanitised.push({ role: m.role, content: m.content.slice(0, MAX_USER_MSG) });
     }
 
+    // Check the key before the rate-limit write. A missing key used to burn
+    // a daily slot and still call Anthropic.
+    if (typeof env.ANTHROPIC_API_KEY !== "string" || !env.ANTHROPIC_API_KEY.trim()) {
+      console.error("Refusing request: ANTHROPIC_API_KEY is missing");
+      return json({ error: "unavailable" }, 503, origin);
+    }
+
     try {
       const ip = request.headers.get("CF-Connecting-IP") || "unknown";
       const dayKey = `rl:${await hashIp(ip, env.IP_HASH_SALT)}:${new Date().toISOString().slice(0, 10)}`;
@@ -158,6 +165,10 @@ function corsHeaders(origin) {
     "Access-Control-Allow-Methods": "POST, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type",
     "Access-Control-Max-Age": "86400",
+    "Cache-Control": "no-store",
+    "Vary": "Origin",
+    "X-Content-Type-Options": "nosniff",
+    "Referrer-Policy": "no-referrer",
   };
 }
 

@@ -2,10 +2,16 @@
   X-Frame-Options: DENY
   X-Content-Type-Options: nosniff
   Referrer-Policy: no-referrer
-  Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=()
-  X-XSS-Protection: 1; mode=block
+  # Auditor is gone from current browsers and was itself an XSS gadget in old ones.
+  X-XSS-Protection: 0
   Strict-Transport-Security: max-age=31536000; includeSubDomains; preload
-  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; connect-src 'self' https://blockstream.info https://mempool.space https://anonscore-ai.netassetpremium.workers.dev https://anonscore-relay.netassetpremium.workers.dev; img-src 'self' data: blob:; base-uri 'self'; form-action 'none'; object-src 'none'; frame-ancestors 'none'
+  Cross-Origin-Opener-Policy: same-origin
+  Cross-Origin-Resource-Policy: same-origin
+  # script-src-attr 'none' blocks injected event handlers. React 18 listens
+  # at the root, so it does not need them. upgrade-insecure-requests is
+  # production-only (the local test server strips it; the suite is HTTP).
+  Content-Security-Policy: default-src 'self'; script-src 'self'; script-src-attr 'none'; style-src 'self' 'unsafe-inline'; font-src 'self'; connect-src 'self' https://blockstream.info https://mempool.space https://anonscore-ai.netassetpremium.workers.dev https://anonscore-relay.netassetpremium.workers.dev; img-src 'self' data: blob:; base-uri 'self'; form-action 'none'; object-src 'none'; frame-src 'none'; frame-ancestors 'none'; worker-src 'self'; manifest-src 'self'; upgrade-insecure-requests
+  Permissions-Policy: accelerometer=(), autoplay=(), bluetooth=(), camera=(), display-capture=(), encrypted-media=(), fullscreen=(), geolocation=(), gyroscope=(), hid=(), interest-cohort=(), magnetometer=(), microphone=(), midi=(), payment=(), publickey-credentials-get=(), serial=(), usb=(), browsing-topics=()
 
 # Self-hosted libraries are stable — cache hard.
 /vendor/*

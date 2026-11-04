@@ -18,13 +18,19 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
+      # Credentials stay off during npm run build. A branch's build.mjs must
+      # not be able to push. The token is attached only for the commit step.
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: 22
       - run: npm install
       - run: npm run build
       - name: Commit rebuilt anonscore.js if changed
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           # build.mjs regenerates anonscore.js only. It does not touch sw.js
           # (no cache-key stamp — freshness is stale-while-revalidate).
@@ -35,5 +41,5 @@ jobs:
             git config user.email "github-actions[bot]@users.noreply.github.com"
             git add anonscore.js
             git commit -m "build: recompile anonscore.js [skip ci]"
-            git push
+            git push "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "HEAD:${GITHUB_REF_NAME}"
           fi
