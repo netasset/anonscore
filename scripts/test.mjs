@@ -1878,6 +1878,75 @@ console.log("[5d] Coin control");
   if (!badCoins.length) pass(`coin control: ${coins.length}/${coins.length} passed`);
 }
 
+// Redacted report + one plan. Separate from the engine: nothing here rescores.
+console.log("[5e] Redacted report and privacy plan");
+{
+  const rep = await page.evaluate(() => {
+    const E = window.__ANONSCORE_TEST__;
+    const r = [];
+    const t = (name, cond) => r.push({ name, ok: !!cond });
+    const baitAddr = "bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu";
+    const baitTx = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    const baitXpub = "zpub6rFR7y4Q2AijBEqTUquhVz398htDFrtymD9xYYfG1m4wAcvPhXNfE3EfH1r1ADqtfSdVCToUG868RvUUkgDKf31mGDtKsAYz2oz2AGutZYs";
+    const baitNode = "02" + "ab".repeat(32);
+    const messy = E.snapshotPart({
+      kind: "address", score: 55, grade: "D", clusterN: 3,
+      address: baitAddr, xpub: baitXpub, node: baitNode,
+      checks: [
+        { key: "reuse", status: "fail", pts: -15, plain: "leaked " + baitAddr, detail: baitTx },
+        { key: baitAddr, status: "fail", pts: -1, plain: baitXpub },
+        { key: "dust", status: "warn", pts: -5, detail: "alias Satoshi Nakamoto " + baitNode },
+        { key: "cj", status: "pass", pts: 12 },
+      ],
+    });
+    const token = E.encodeReport([messy]);
+    const back = E.decodeReport(token);
+    const text = E.reportText(back);
+    const leaked = [baitAddr, baitTx, baitXpub, baitNode, "Satoshi", "Nakamoto"].filter(s => token.includes(s) || text.includes(s));
+    t("report: round-trip keeps grade, score, and check", back && back.parts[0].grade === "D" && back.parts[0].score === 55 && back.parts[0].checks.some(c => c.key === "reuse" && c.status === "fail" && c.pts === -15));
+    t("report: address, txid, xpub, node key, and alias never appear", leaked.length === 0);
+    t("report: a forged key is dropped before encoding", !token.includes("bc1") && back.parts[0].checks.every(c => c.key !== baitAddr));
+    t("report: text names the grade and a step, and says the address is absent", /Grade D/.test(text) && /Freeze the dust/.test(text) && /No address/.test(text));
+    t("report: garbage is rejected", E.decodeReport("1.a.55.D.3.notakey:f:-1") === null && E.decodeReport("1.a.55.D.3." + baitAddr + ":f:-1") === null && E.decodeReport("") === null);
+    const plus = E.decodeReport("1.n.44.A+.0.kyc_peers:f:-22.tor:w:-7");
+    t("report: a Lightning A+ grade round-trips", !!plus && plus.parts[0].grade === "A+" && plus.parts[0].kind === "node" && E.encodeReport(plus.parts) === "1.n.44.A+.0.kyc_peers:f:-22.tor:w:-7");
+    const plan = E.buildPrivacyPlan([
+      E.snapshotPart({ kind: "address", score: 40, grade: "F", clusterN: 1, checks: [
+        { key: "cj", status: "fail", pts: -8 },
+        { key: "dust", status: "warn", pts: -5 },
+        { key: "reuse", status: "fail", pts: -15 },
+      ]}),
+    ]);
+    t("plan: dust comes before a mix you have not done", plan.steps[0].key === "dust" && plan.steps.findIndex(s => s.key === "cj") > 0);
+    t("plan: one surface says so, and does not invent a score", plan.covered.length === 1 && /only this address/.test(plan.sentence) && plan.score == null);
+    const mix = E.buildPrivacyPlan([
+      E.snapshotPart({ kind: "address", score: 70, grade: "B", checks: [
+        { key: "cj", status: "pass", pts: 12 },
+        { key: "dust", status: "warn", pts: -5 },
+      ]}),
+    ]);
+    t("plan: a finished CoinJoin plus dust says not to undo the mix", /undoes it/.test(mix.bridge) && !mix.steps.some(s => s.key === "cj"));
+    const addrP = E.snapshotPart({ kind: "address", score: 50, grade: "D", checks: [{ key: "reuse", status: "fail", pts: -15 }] });
+    const walP = E.snapshotPart({ kind: "wallet", score: 60, grade: "C", checks: [{ key: "cluster", status: "fail", pts: -18 }] });
+    const both = E.buildPrivacyPlan([addrP, walP]);
+    const merged = E.encodeReport([addrP, walP]);
+    const again = E.decodeReport(merged);
+    t("plan: address reuse and a wallet link are one plan", /this address and the wallet/.test(both.sentence) && /rest of the wallet/.test(both.bridge) && both.steps.some(s => s.key === "cons" && s.sources.includes("wallet")));
+    t("plan: the shared string packs both and still has no address", merged.startsWith("1.p.") && again && again.parts.length === 2 && !/bc1|xpub|tb1|undefined/.test(merged));
+    const nodePlan = E.buildPrivacyPlan([
+      E.snapshotPart({ kind: "wallet", score: 60, grade: "C", checks: [{ key: "round", status: "warn", pts: -4 }] }),
+      E.snapshotPart({ kind: "node", score: 44, grade: "D", checks: [{ key: "onchain", status: "warn", pts: -5 }] }),
+    ]);
+    t("plan: a round coin and a channel open are connected in words", /round amounts/.test(nodePlan.bridge) && /channel/.test(nodePlan.bridge));
+    const engine = E.runEngine([], [], 0, 0);
+    t("plan: an empty engine result is still empty", engine.isEmpty === true && engine.score == null);
+    return r;
+  });
+  const badRep = rep.filter(u => !u.ok);
+  badRep.forEach(u => fail("report: " + u.name));
+  if (!badRep.length) pass(`redacted report and plan: ${rep.length}/${rep.length} passed`);
+}
+
 // Run a demo scan end-to-end
 console.log("[6/7] Demo scan flow");
 // Re-navigate to a clean landing (earlier blocks switched language / visited
@@ -1893,6 +1962,9 @@ else pass("Dashboard renders after demo scan");
 if (!dashText.includes("What an observer can already link") || !dashText.includes("common-input"))
   fail("dashboard: linkage map missing under the verdict");
 else pass("dashboard: linkage map sits under the verdict");
+if (!dashText.includes("Before the next spend") || !dashText.includes("This plan is only this address"))
+  fail("dashboard: privacy plan missing under the verdict");
+else pass("dashboard: privacy plan sits under the verdict");
 if (await page.getByRole("button", { name: /minimize/i }).count())
   fail("dashboard: a floating assistant opens on its own and covers the fixes");
 else pass("dashboard: assistant does not cover the fix list on arrival");
@@ -1956,6 +2028,28 @@ const walletLinks = await page.evaluate(() => {
 if (walletLinks.length === 0) fail("No wallet recommendation links found on dashboard");
 else if (walletLinks.some(l => !l.href || !l.href.startsWith("http"))) fail("Wallet recommendation links don't have URLs: " + JSON.stringify(walletLinks));
 else pass(`Wallet recommendations link out (${walletLinks.length} samples checked)`);
+
+// The share dialog must lead with a report that cannot carry the demo's addresses.
+{
+  await page.getByRole("button", { name: "Share this plan" }).click();
+  await page.waitForTimeout(300);
+  const shared = await page.evaluate(() => {
+    const dlg = document.querySelector('[aria-label="Share your privacy score"]');
+    if (!dlg) return { ok: false, why: "no dialog" };
+    const token = dlg.querySelector("[data-report-token]")?.getAttribute("data-report-token") || "";
+    const text = dlg.innerText || "";
+    const bait = ["bc1q", "DEMO", "7b91cc3a", "a3f21e9b"];
+    const hit = bait.filter(s => token.includes(s) || text.includes(s));
+    return {
+      ok: /SAFE TO POST/.test(text) && /no address/.test(text) && token.startsWith("1.") && hit.length === 0 && /#r=/.test(text),
+      token, hit,
+    };
+  });
+  if (!shared.ok) fail(`share: redacted report missing or it leaked (${JSON.stringify(shared.hit || shared.why || shared.token).slice(0, 180)})`);
+  else pass("share: the report link and the dialog contain no address and no txid");
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(200);
+}
 
 // PNG export: the script tag uses vendor/dom-to-image-more.min.js (no broken SRI).
 // Verifies the source path in the bundle matches a real file — guards against the
@@ -2032,6 +2126,56 @@ await axeRun("Dashboard", page);
     await axeRun("Wallet scan", axeX);
   } catch (e) { fail("xpub a11y: " + e.message.slice(0, 120)); }
   finally { await axeX.close(); }
+}
+// A shared report opens from the fragment alone and does not fetch the chain.
+{
+  const axeR = await ctx.newPage();
+  const reqs = [];
+  axeR.on("request", q => reqs.push(q.url()));
+  try {
+    await axeR.goto(`http://127.0.0.1:${PORT}/#r=1.a.55.D.3.reuse:f:-15.dust:w:-5`, { waitUntil: "load" });
+    await axeR.waitForFunction(() => /without the wallet/.test(document.body.innerText), { timeout: 8000 });
+    const shown = await axeR.evaluate(() => {
+      const t = document.body.innerText;
+      return /Grade D/.test(t) && /did not look up/.test(t) && /Freeze the dust/.test(t) && !/bc1/.test(t);
+    });
+    const leaked = reqs.filter(u => /blockstream|mempool|workers\.dev/.test(u));
+    if (!shown) fail("report page: the fragment did not render the grade and the step");
+    else if (leaked.length) fail("report page: looked something up: " + leaked[0]);
+    else pass("report page: fragment renders offline, with no address");
+    await axeR.goto(`http://127.0.0.1:${PORT}/#r=not-a-report`, { waitUntil: "load" });
+    await axeR.waitForTimeout(400);
+    const bad = await axeR.evaluate(() => /not a privacy report/.test(document.body.innerText));
+    if (!bad) fail("report page: a bad fragment did not say it is not a report");
+    else pass("report page: a bad fragment is refused without a lookup");
+    await axeR.goto(`http://127.0.0.1:${PORT}/#r=1.a.55.D.3.reuse:f:-15.dust:w:-5`, { waitUntil: "load" });
+    await axeR.waitForFunction(() => /without the wallet/.test(document.body.innerText), { timeout: 8000 });
+    await axeRun("Shared report", axeR);
+  } catch (e) { fail("report page: " + e.message.slice(0, 160)); }
+  finally { await axeR.close(); }
+}
+// One plan across a wallet scan and an address scan, still in this tab.
+{
+  const planPage = await ctx.newPage();
+  try {
+    await planPage.goto(`http://127.0.0.1:${PORT}/?page=xpub`, { waitUntil: "load" });
+    await planPage.waitForFunction(() => document.getElementById("root")?.childElementCount > 0, { timeout: 15000 });
+    await planPage.getByText("Load example").click();
+    await planPage.waitForFunction(() => /Before the next spend/.test(document.body.innerText), { timeout: 8000 });
+    const walletOnly = await planPage.evaluate(() => /only the wallet/.test(document.body.innerText));
+    await planPage.getByRole("button", { name: "← Back" }).click();
+    await planPage.waitForTimeout(400);
+    await planPage.getByText("Risky wallet").click();
+    await planPage.waitForFunction(() => /One plan for this address and the wallet/.test(document.body.innerText), { timeout: 8000 });
+    const joined = await planPage.evaluate(() => {
+      const t = document.body.innerText;
+      return /Seen on this address and the wallet/.test(t) && /HOW THESE CONNECT/.test(t) && /rest of the wallet/.test(t);
+    });
+    if (!walletOnly) fail("plan: the wallet example did not say the plan was only the wallet");
+    else if (!joined) fail("plan: address plus wallet did not merge into one list");
+    else pass("plan: an address scan and a wallet scan become one list");
+  } catch (e) { fail("plan: " + e.message.slice(0, 180)); }
+  finally { await planPage.close(); }
 }
 // a11y on the methodology Intel page
 {
