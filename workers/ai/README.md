@@ -12,7 +12,7 @@ server. This is the exact code deployed at
 ## What it receives — and what it doesn't
 
 The browser sends `{ messages, context }` (see `buildAiContext` in
-`anonscore.jsx`). The consent gate shows that context before anything leaves
+`src/ui/assistant.jsx`). The consent gate shows that context before anything leaves
 the browser. The **system prompt is built here**, in `buildSystemPrompt()`.
 A body that includes `systemPrompt` or `system` is rejected with 400 — the
 worker will not forward a client-written instruction prompt.
@@ -111,5 +111,5 @@ Deploy the worker **before or with** the site that sends `{ messages, context }`
 An older worker still expects a client `systemPrompt` and will 400 the new
 payload; the new worker 400s a client `systemPrompt`.
 
-Redeploying under a different name means updating `WORKER_URL` in `anonscore.jsx`
+Redeploying under a different name means updating `WORKER_URL` in `src/ui/assistant.jsx`
 and the `connect-src` entry in `_headers`, then rebuilding (`npm run build`).
