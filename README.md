@@ -27,23 +27,23 @@ Single static site. No backend, no database, no analytics.
 
 | File | Role |
 |---|---|
-| `anonscore.jsx` | **Source of truth.** ~9,000 lines of React with inline styles. Edit this. |
-| `anonscore.js` | **Auto-generated** from `anonscore.jsx` (classic React runtime, no in-browser Babel). |
+| `src/` | **Source of truth.** The app, split into modules that share one script scope. `build.mjs` lists the concatenation order in `MODULES`. |
+| `anonscore.js` | **Auto-generated** from `src/` (classic React runtime, no in-browser Babel). |
 | `index.html` | Static shell: pre-rendered hero (instant paint), defer-loaded scripts, manifest + favicon + JSON-LD. |
 | `sw.js` | Service worker. Precaches for offline, serves stale-while-revalidate so returning visitors always converge on fresh code. No per-build cache key. |
 | `manifest.webmanifest` | PWA manifest — makes the site installable. |
 | `vendor/` | Self-hosted React, ReactDOM, canvas-confetti, dom-to-image-more, and Google Fonts. **Zero third-party requests at runtime.** |
 | `_headers` | Cloudflare security headers + strict CSP (`script-src 'self'`) + cache rules. |
-| `build.mjs` | One-shot compiler: `anonscore.jsx → anonscore.js`. Touches nothing else. |
+| `build.mjs` | One-shot compiler: concatenates `src/` in `MODULES` order, then writes `anonscore.js`. Touches nothing else. |
 | `scripts/test.mjs` | End-to-end test suite (68 checks: build invariants, honesty guards that fail CI if a public claim drifts from the code, relay-worker SSRF and no-tracking unit tests, AI-worker prompt and rate-limit tests, engine unit tests against the built bundle, browser smoke + a11y). Runs in CI on every PR. |
 | `scripts/fetch-fonts.mjs` | Re-fetches the self-hosted Google Fonts subset. Run only if updating font weights. |
-| `.github/workflows/` | `build.yml` rebuilds `anonscore.js` on feature-branch pushes. `test.yml` runs the test suite on every PR and on `main`. `smoke-live.yml` checks the deployed relay and the live site. `deploy-workers.yml` deploys the relay and the AI worker after tests. `auto-merge.yml` merges an approved `claude/*` PR. |
+| `.github/workflows/` | `build.yml` rebuilds `anonscore.js` when `src/` or `build.mjs` changes on a feature branch. `test.yml` runs the test suite on every PR and on `main`. `smoke-live.yml` checks the deployed relay and the live site. `deploy-workers.yml` deploys the relay and the AI worker after tests. `auto-merge.yml` merges an approved `claude/*` PR. |
 
 ## Build & test
 
 ```bash
 npm install        # once
-npm run build      # compiles anonscore.jsx → anonscore.js
+npm run build      # compiles src/ → anonscore.js
 npm test           # full E2E (build invariants + smoke + a11y in headless Chromium)
 npm run smoke:live # deployed relay + https://anonscore.com (not part of npm test)
 ```
@@ -100,7 +100,7 @@ The relay has no KV and no Worker secrets. After the relay deploy succeeds, the 
 
 ## Operator setup checklist
 
-Things you (the operator) need to fill in to activate features. All configuration lives in clearly labelled constants near the top of `anonscore.jsx`. Search for `FUNDING`, `TOOL_AFFILIATE_URL`, `NEWSLETTER`.
+Things you (the operator) need to fill in to activate features. Configuration lives in clearly labelled constants: `FUNDING` and `NEWSLETTER` in `src/copy.jsx`, `TOOL_AFFILIATE_URL` in `src/catalog/tools.jsx`.
 
 ### 1. Tip jar (Lightning + Nostr)
 
@@ -147,7 +147,7 @@ The AI worker URL (`anonscore-ai.netassetpremium.workers.dev`) is wired in. The 
 
 The site auto-detects the visitor's language (`?lang=` → saved choice → browser → English) and shows a switcher in the nav. English is always the fallback, so a partially-translated locale degrades gracefully — untranslated strings just render in English.
 
-To add or extend a locale, edit the `STRINGS` map near the top of `anonscore.jsx`:
+To add or extend a locale, edit the `STRINGS` map in `src/i18n.jsx`:
 
 ```js
 const STRINGS = {
@@ -167,7 +167,7 @@ Spanish currently covers the landing + scanning surfaces. The dashboard/case-fil
 - **No cookies, no localStorage tracking, no analytics.** localStorage holds exactly five things, all local to your browser and never transmitted: your language choice (`anonscore_lang`), your recent scan history (`anonscore_history_v1` — last 5 addresses, clearable from the UI), dismissed fix items per address (`anonscore_fixes_v1:<addr>`), your privacy-relay setting (`anonscore_relay`), and your block-explorer choice (`anonscore_explorer`). Nothing else — no visitor ID, no session token, no analytics beacon.
 - **Strict CSP**: `script-src 'self'`. No inline scripts. No eval.
 - **Tor compatible**: no fingerprinting, no canvas tricks, no third-party requests.
-- **Open source under MIT.** The full audit logic is in `anonscore.jsx`, plain JavaScript. Verifiable in minutes.
+- **Open source under MIT.** The full audit logic is in `src/`, plain JavaScript. Verifiable in minutes.
 
 ---
 
@@ -186,7 +186,7 @@ These same contacts are published machine-readably at [`/.well-known/security.tx
 - CSP or self-hosting bypasses that would introduce a third-party runtime request.
 - XSS or injection via scanned addresses, URL params, or API responses.
 
-There's no bug-bounty budget (this is a free, open-source project), but real reports get real credit. The whole audit surface is `anonscore.jsx` in plain JavaScript — verifiable in minutes.
+There's no bug-bounty budget (this is a free, open-source project), but real reports get real credit. The whole audit surface is `src/` in plain JavaScript — verifiable in minutes.
 
 ---
 

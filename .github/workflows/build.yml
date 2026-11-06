@@ -1,15 +1,15 @@
 name: Build anonscore.js
 
-# Recompiles anonscore.jsx -> anonscore.js on feature branches so the committed
+# Recompiles src/ -> anonscore.js on feature branches so the committed
 # build never goes stale. main is updated only via PRs, which therefore always
 # carry a fresh build (avoids pushing to the protected main branch directly).
 on:
   push:
     branches-ignore: [main]
-    # anonscore.jsx is the only file the compiler reads. sw.js is not an input
-    # and is not rewritten: the service worker uses stale-while-revalidate, so
-    # there is no per-build cache key to stamp.
-    paths: ["anonscore.jsx", "build.mjs"]
+    # src/ is what the compiler reads (order is MODULES in build.mjs). sw.js is
+    # not an input and is not rewritten: the service worker uses
+    # stale-while-revalidate, so there is no per-build cache key to stamp.
+    paths: ["src/**", "build.mjs"]
 
 permissions:
   contents: write

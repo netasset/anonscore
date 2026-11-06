@@ -12,6 +12,7 @@ import { spawn } from "node:child_process";
 import { createServer } from "node:http";
 import { readFileSync, statSync, existsSync } from "node:fs";
 import { join, extname } from "node:path";
+import { MODULES, readAppSource } from "../build.mjs";
 // Prefer locally-installed playwright (CI installs the version pinned in package.json),
 // but in dev sandboxes that lack browser downloads, fall back to a globally-installed one.
 let chromium;
@@ -28,9 +29,22 @@ const pass = (msg) => console.log("  ✓ " + msg);
 // 1. Build invariants — fail fast if files are malformed
 // ───────────────────────────────────────────
 console.log("[1/7] Build invariants");
-const jsxBytes = statSync(join(ROOT, "anonscore.jsx")).size;
-if (jsxBytes < 100_000) fail(`anonscore.jsx is suspiciously small (${jsxBytes} bytes — the May disaster left it at ~130 bytes)`);
-else pass(`anonscore.jsx is ${jsxBytes} bytes`);
+if (existsSync(join(ROOT, "anonscore.jsx"))) fail("anonscore.jsx is back — the app source is src/ (see MODULES in build.mjs)");
+else pass("app source lives in src/ (anonscore.jsx is not a second copy)");
+const jsxSrcEarly = readAppSource(ROOT);
+const jsxBytes = Buffer.byteLength(jsxSrcEarly);
+if (jsxBytes < 100_000) fail(`app source is suspiciously small (${jsxBytes} bytes — the May disaster left the source at ~130 bytes)`);
+else pass(`app source is ${jsxBytes} bytes across ${MODULES.length} modules`);
+for (const rel of MODULES) {
+  const p = join(ROOT, rel);
+  if (!existsSync(p)) fail(`missing source module ${rel}`);
+  else if (statSync(p).size < 20) fail(`source module ${rel} is empty`);
+}
+if (!MODULES.includes("src/scoring/engine.jsx") || !MODULES.includes("src/app.jsx"))
+  fail("MODULES is missing the score engine or the app shell");
+else if (/^(import |export )/m.test(jsxSrcEarly))
+  fail("app source has a top-level import/export — modules share one classic script scope and must not be an ES graph");
+else pass(`all ${MODULES.length} modules are present and share one script scope`);
 
 const jsBytes = statSync(join(ROOT, "anonscore.js")).size;
 if (jsBytes < 100_000) fail(`anonscore.js is suspiciously small (${jsBytes} bytes)`);
@@ -82,7 +96,7 @@ else pass(`sw.js cache "${cacheKey[1]}" uses stale-while-revalidate (no per-buil
 // outbound-call lists, undocumented storage keys, and trust-copy that
 // drifted from the source it claims to describe. If one of these fails,
 // a user-facing claim has become falsifiable — fix the claim or the code.
-const jsxSrc  = readFileSync(join(ROOT, "anonscore.jsx"), "utf8");
+const jsxSrc  = jsxSrcEarly;
 const readme  = readFileSync(join(ROOT, "README.md"), "utf8");
 const headers = readFileSync(join(ROOT, "_headers"), "utf8");
 

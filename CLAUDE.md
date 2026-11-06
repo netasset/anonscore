@@ -5,9 +5,11 @@ Deployed on Cloudflare Pages (static hosting; see `_headers`).
 
 ## Architecture
 
-- **`anonscore.jsx`** — the source of truth. The entire app (~9,000 lines, React,
-  inline-styled). Edit this.
-- **`anonscore.js`** — AUTO-GENERATED from `anonscore.jsx`. Do not edit by hand.
+- **`src/`** — the source of truth. The app is split into modules (scoring,
+  client, codecs, UI panels, share/plan). They share one script scope: no
+  `import`/`export` between them. `build.mjs` concatenates `MODULES` in order,
+  then Babel-compiles that script. Edit the module that owns the behavior.
+- **`anonscore.js`** — AUTO-GENERATED from `src/`. Do not edit by hand.
   This is what the browser actually loads. Plain JS (classic React runtime), so
   there is **no in-browser Babel** — the page is fast.
 - **`index.html`** — loads the self-hosted vendor scripts + `anonscore.js`, all
@@ -17,11 +19,11 @@ Deployed on Cloudflare Pages (static hosting; see `_headers`).
   Versions tracked in `vendor/VERSIONS.txt`.
 - **`_headers`** — Cloudflare security headers + CSP (`script-src 'self'`) + caching.
 
-## Build (required after editing anonscore.jsx)
+## Build (required after editing src/)
 
 ```
 npm install      # once
-npm run build    # regenerates anonscore.js from anonscore.jsx
+npm run build    # regenerates anonscore.js from src/
 ```
 
 A GitHub Action (`.github/workflows/build.yml`) also rebuilds and commits
@@ -33,7 +35,7 @@ committing so what you push is correct.
 
 Open `index.html` via any static server and confirm the app mounts with no
 console errors, then run a demo scan. The compiled `anonscore.js` must be in
-sync with `anonscore.jsx`. Run the full suite with `npm test` (build invariants
+sync with `src/`. Run the full suite with `npm test` (build invariants
 + headless-browser smoke + a11y; the same suite CI runs).
 
 ## Ship / pipeline (fully automated)
@@ -42,7 +44,7 @@ sync with `anonscore.jsx`. Run the full suite with `npm test` (build invariants
   `claude/*` branch, open a PR.
 - **Auto-merge**: `.github/workflows/auto-merge.yml` merges a `claude/*` PR only
  after the **`test`** check passes (that's the only required check — `build` only
- runs when `anonscore.jsx` changes) **and** a human who is not the PR author has
+ runs when `src/` or `build.mjs` changes) **and** a human who is not the PR author has
  approved it. PRs that touch the test suite, the build, or CI never auto-merge.
  Cloudflare Pages deploys from `main`, so a green check alone must not ship.
 - Don't hand-edit `anonscore.js`; CI rebuilds it. Commit the rebuilt `anonscore.js`

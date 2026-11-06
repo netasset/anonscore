@@ -34,7 +34,7 @@ cd workers/relay
 wrangler deploy          # deploys to https://anonscore-relay.<your-subdomain>.workers.dev
 ```
 
-The relay is **live and wired in**: `RELAY_URL` in `anonscore.jsx` and the
+The relay is **live and wired in**: `RELAY_URL` in `src/client/relay.jsx` and the
 `connect-src` allowlist in `_headers` both point at
 `https://anonscore-relay.netassetpremium.workers.dev`. Redeploying under a
 different name means updating those two spots and rebuilding (`npm run build`).

@@ -1,4 +1,4 @@
-/* AUTO-GENERATED from anonscore.jsx by build.mjs — do not edit directly. Run `npm run build`. */
+/* AUTO-GENERATED from src/ by build.mjs — do not edit directly. Run `npm run build`. */
 const {
   useState,
   useEffect,
@@ -7279,7 +7279,7 @@ const GUARANTEES = [{
   label: "No server, no backend",
   desc: "Lookups read a public explorer — through our no-log relay by default, or straight from your browser with the relay off. Either way nothing touches an AnonScore database. There isn't one.",
   proof: "read the fetch code",
-  href: `${REPO}/blob/main/anonscore.jsx`
+  href: `${REPO}/blob/main/src/client/chain.jsx`
 }, {
   icon: "◌",
   label: "Nothing stored or logged",
@@ -7291,7 +7291,7 @@ const GUARANTEES = [{
   label: "Scoring runs in your browser",
   desc: "All 11 heuristics execute locally. Your score and results are computed on your device and sent nowhere — not even to us.",
   proof: "read the heuristics",
-  href: `${REPO}/blob/main/anonscore.jsx`
+  href: `${REPO}/blob/main/src/scoring/engine.jsx`
 }, {
   icon: "⬢",
   label: "Zero third-party requests",
