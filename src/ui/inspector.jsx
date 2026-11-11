@@ -245,6 +245,11 @@ function TransactionInspector({ onBack, isMobile, onScan, onNav, prefill, prefil
           </div>
         )}
 
+        {tx.confirmed && !(tx.outspends && tx.outspends.length === (tx.vout || []).length) && (
+          <div style={{ background: T.surface, border: `1px solid ${T.borderLo}`, borderRadius: 12, padding: "12px 16px", fontSize: 12.5, color: T.textMid, lineHeight: 1.6 }}>
+            The transaction loaded. Which outputs were spent later did not, so that part of the trail is missing from this lookup.
+          </div>
+        )}
         {/* What happened since — the confirmed-only intel a pre-broadcast check
             can never see: which outputs were spent, and whether any were later
             RE-MERGED in one spend (proving common ownership after the fact). */}

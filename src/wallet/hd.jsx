@@ -129,18 +129,25 @@ function detectXpub(v) {
    lookup, so the relay/explorer path is unchanged.
 ───────────────────────────────────────────── */
 // Cheap probe — the address summary only (chain_stats), for gap-limit detection.
-async function fetchAddrInfo(addr) {
+async function fetchAddrInfo(addr, opts = {}) {
   const exp = explorer();
-  const base = relayOn() ? RELAY_URL + exp.relayPath : exp.api;
-  const r = await fetch(`${base}/address/${encodeURIComponent(addr)}`);
-  if (!r.ok) throw new Error("Address lookup failed");
-  return r.json();
+  const viaRelay = relayOn();
+  const base = viaRelay ? RELAY_URL + exp.relayPath : exp.api;
+  const r = await fetchLimited(`${base}/address/${encodeURIComponent(addr)}`, opts.signal);
+  const info = await readExplorerJson(r, "address summary", viaRelay);
+  if (!info || typeof info !== "object" || Array.isArray(info)) {
+    const err = new Error("The explorer returned an address summary this page couldn't read.");
+    err.kind = "upstream";
+    throw err;
+  }
+  return info;
 }
 
 async function scanXpub(xpub, opts = {}) {
   const onProgress = opts.onProgress || (() => {});
   const node = decodeXpub(xpub);
-  const GAP = 20, CAP = 100;              // gap limit + hard per-branch cap
+  const GAP = opts.gap || 20, CAP = opts.cap || 100;   // gap limit + hard per-branch cap
+  const signal = opts.signal;
   const addresses = [];
   let derived = 0, capHit = false;
   for (const branch of [0, 1]) {          // 0 = receive, 1 = change
@@ -153,7 +160,7 @@ async function scanXpub(xpub, opts = {}) {
       const address = deriveWalletAddress(child.pub33, node.scriptType);
       derived++;
       onProgress({ derived, branch, used: addresses.length });
-      const info = await fetchAddrInfo(address);
+      const info = await fetchAddrInfo(address, { signal });
       const cs = info.chain_stats || {};
       if ((cs.tx_count || 0) > 0) {
         gap = 0;
@@ -161,7 +168,8 @@ async function scanXpub(xpub, opts = {}) {
         // full fetch per used address; paging each of those to 250 txs would
         // fan out into hundreds of explorer calls. Reuse is judged from
         // chain_stats on the summary, which is complete without the pages.
-        const full = await fetchAddress(address, { pageCap: 1, txCap: 30 });
+        // Pass that summary in so the full fetch does not request it again.
+        const full = await fetchAddress(address, { pageCap: 1, txCap: 30, addrInfo: info, signal });
         (full.utxos || []).forEach(u => { u.address = address; });
         addresses.push({ address, branch, index: i, chain_stats: cs, utxos: full.utxos || [], txs: full.txs || [] });
       } else gap++;

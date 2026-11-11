@@ -8,6 +8,26 @@
 const TX_PAGE_SIZE = 25;
 const TX_PAGE_CAP = 10;
 const TX_HISTORY_CAP = 250;
+const UTXO_LIST_CAP = 30;
+
+async function readExplorerJson(res, label, viaRelay) {
+  const bodyText = await res.text().catch(() => "");
+  if (!res.ok) {
+    const failure = txLookupFailure(res.status, res.headers.get("content-type"), bodyText, viaRelay);
+    const err = new Error(failure.kind === "unknown"
+      ? `The explorer has no ${label} for that lookup.`
+      : failure.message);
+    err.kind = failure.kind === "unknown" ? "unknown" : failure.kind;
+    err.status = res.status;
+    throw err;
+  }
+  try { return JSON.parse(bodyText); }
+  catch {
+    const err = new Error(`The explorer returned a ${label} this page couldn't read.`);
+    err.kind = "upstream";
+    throw err;
+  }
+}
 
 function confirmedOnPage(list) {
   const out = [];
@@ -21,19 +41,39 @@ async function fetchAddress(addr, opts = {}) {
   // unreachable, the fetch below rejects and analyze() fails honestly — we
   // never silently fall back to a direct query, which would leak the very IP
   // the user has the relay on to hide.
+  // opts.addrInfo skips the summary GET when the caller already has it (the
+  // wallet scan probes chain_stats before deciding an address is used).
   const pageCap = opts.pageCap || TX_PAGE_CAP;
   const txCap = opts.txCap || TX_HISTORY_CAP;
+  const signal = opts.signal;
   const exp = explorer();
-  const base = relayOn() ? `${RELAY_URL}${exp.relayPath}` : exp.api;
+  const viaRelay = relayOn();
+  const base = viaRelay ? `${RELAY_URL}${exp.relayPath}` : exp.api;
   const safe = encodeURIComponent(addr);
+  const summaryUrl = `${base}/address/${safe}`;
+  const infoP = opts.addrInfo
+    ? Promise.resolve(opts.addrInfo)
+    : fetchLimited(summaryUrl, signal).then(r => readExplorerJson(r, "address summary", viaRelay));
   const [info, utxos, firstPage] = await Promise.all([
-    fetch(`${base}/address/${safe}`).then(r => { if (!r.ok) throw new Error("Not found"); return r.json(); }),
-    fetch(`${base}/address/${safe}/utxo`).then(r => r.json()),
-    fetch(`${base}/address/${safe}/txs`).then(r => r.json()),
+    infoP,
+    fetchLimited(`${summaryUrl}/utxo`, signal).then(r => readExplorerJson(r, "unspent-output list", viaRelay)),
+    fetchLimited(`${summaryUrl}/txs`, signal).then(r => readExplorerJson(r, "transaction page", viaRelay)),
   ]);
-  if (!info || typeof info !== "object") throw new Error("Invalid API response");
-  if (!Array.isArray(utxos)) throw new Error("Invalid UTXO response");
-  if (!Array.isArray(firstPage)) throw new Error("Invalid TX response");
+  if (!info || typeof info !== "object" || Array.isArray(info)) {
+    const err = new Error("The explorer returned an address summary this page couldn't read.");
+    err.kind = "upstream";
+    throw err;
+  }
+  if (!Array.isArray(utxos)) {
+    const err = new Error("The explorer returned an unspent-output list this page couldn't read.");
+    err.kind = "upstream";
+    throw err;
+  }
+  if (!Array.isArray(firstPage)) {
+    const err = new Error("The explorer returned a transaction page this page couldn't read.");
+    err.kind = "upstream";
+    throw err;
+  }
 
   const txs = [];
   const seen = new Set();
@@ -55,11 +95,11 @@ async function fetchAddress(addr, opts = {}) {
   let cursor = confirmedOnPage(firstPage).slice(-1)[0] || null;
   let more = confirmedOnPage(firstPage).length >= TX_PAGE_SIZE;
   while (more && cursor && pages < pageCap && txs.length < txCap && (chainCount == null || confirmedOnPage(txs).length < chainCount)) {
-    const res = await fetch(`${base}/address/${safe}/txs/chain/${encodeURIComponent(cursor)}`);
+    const res = await fetchLimited(`${base}/address/${safe}/txs/chain/${encodeURIComponent(cursor)}`, signal);
     if (!res.ok) {
       const bodyText = await res.text().catch(() => "");
       const failure = txLookupFailure(res.status, res.headers.get("content-type"), bodyText, relayOn());
-      const err = new Error(failure.kind === "blocked" ? failure.message : "Invalid TX response");
+      const err = new Error(failure.message);
       err.kind = failure.kind;
       throw err;
     }
@@ -79,7 +119,8 @@ async function fetchAddress(addr, opts = {}) {
   const capped = chainCount != null && confirmedFetched < chainCount && hitCap;
   return {
     addrInfo: info,
-    utxos: utxos.slice(0, 30),
+    utxos: utxos.slice(0, UTXO_LIST_CAP),
+    utxoSample: { fetched: Math.min(utxos.length, UTXO_LIST_CAP), total: utxos.length, capped: utxos.length > UTXO_LIST_CAP },
     txs,
     txSample: { fetched: txs.length, total: chainCount, capped },
   };

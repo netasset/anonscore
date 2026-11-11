@@ -122,6 +122,46 @@ function txLookupTimeoutMs() {
   } catch { /* no window in a worker */ }
   return TX_LOOKUP_TIMEOUT_MS;
 }
+function scanTimeoutMs() {
+  try {
+    const override = typeof window !== "undefined" && window.__SCAN_TIMEOUT_MS;
+    if (Number.isFinite(override) && override > 0) return override;
+  } catch { /* no window in a worker */ }
+  return TX_LOOKUP_TIMEOUT_MS;
+}
+// One explorer GET with a per-request deadline. `parent` aborting (the user
+// hit Cancel, or a newer scan replaced this one) is a cancel, not an outage.
+function fetchLimited(url, parent) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort("timeout"), scanTimeoutMs());
+  let onParent = null;
+  if (parent) {
+    onParent = () => ctrl.abort(parent.reason || "cancel");
+    if (parent.aborted) ctrl.abort(parent.reason || "cancel");
+    else parent.addEventListener("abort", onParent, { once: true });
+  }
+  const finish = () => {
+    clearTimeout(timer);
+    if (parent && onParent) parent.removeEventListener("abort", onParent);
+  };
+  return fetch(url, { signal: ctrl.signal }).then((res) => { finish(); return res; }, () => {
+    finish();
+    const reason = ctrl.signal.reason;
+    if (reason === "timeout") {
+      const err = new Error(upstreamTxMessage(null, relayOn(), "timeout"));
+      err.kind = "timeout";
+      throw err;
+    }
+    if (reason === "cancel" || (parent && parent.aborted)) {
+      const err = new Error("cancelled");
+      err.kind = "cancelled";
+      throw err;
+    }
+    const err = new Error(upstreamTxMessage(null, relayOn(), "network"));
+    err.kind = "upstream";
+    throw err;
+  });
+}
 function blockedTxMessage(status) {
   return `The privacy relay blocked this lookup (HTTP ${status}) before any explorer saw it. The txid is validly formed, so this is a relay allowlist problem, not a missing transaction. Turn the relay off to ask the explorer directly — it will then see your IP — or retry after the relay is updated.`;
 }

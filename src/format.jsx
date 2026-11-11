@@ -102,9 +102,59 @@ const SIMPLE = {
   },
 };
 
+// Strict 5-bit → 8-bit witness program (BIP173/350). Rejects non-zero padding.
+function _witnessProgram(data5) {
+  if (!data5 || !data5.length) return null;
+  const version = data5[0];
+  if (version < 0 || version > 16) return null;
+  let acc = 0, bits = 0;
+  const program = [];
+  for (const v of data5.slice(1)) {
+    acc = (acc << 5) | v;
+    bits += 5;
+    if (bits >= 8) { bits -= 8; program.push((acc >> bits) & 0xff); }
+  }
+  if (bits >= 5) return null;
+  if (bits > 0 && (acc & ((1 << bits) - 1)) !== 0) return null;
+  if (program.length < 2 || program.length > 40) return null;
+  return { version, program };
+}
+// Mainnet address with a verified checksum. A shape-only check used to send
+// one-character typos to the explorer and then report that the network failed.
+function decodeBitcoinAddress(addr) {
+  const s = (addr || "").trim();
+  if (!s) return null;
+  if (s[0] === "1" || s[0] === "3") {
+    let body;
+    try { body = _base58checkDecode(s); } catch { return null; }
+    if (body.length !== 21) return null;
+    if (s[0] === "1" && body[0] === 0x00) return { type: "p2pkh" };
+    if (s[0] === "3" && body[0] === 0x05) return { type: "p2sh" };
+    return null;
+  }
+  const d = _bech32Decode(s);
+  if (!d || d.hrp !== "bc") return null;
+  const prog = _witnessProgram(d.data);
+  if (!prog) return null;
+  if (prog.version === 0) {
+    if (d.spec !== "bech32") return null;
+    if (prog.program.length !== 20 && prog.program.length !== 32) return null;
+    return { type: prog.program.length === 20 ? "p2wpkh" : "p2wsh" };
+  }
+  if (d.spec !== "bech32m") return null;
+  return { type: prog.version === 1 && prog.program.length === 32 ? "p2tr" : "witness" };
+}
 function isValidBitcoinAddress(addr) {
-  if (!addr || addr.length < 26 || addr.length > 90) return false;
-  return /^(bc1|[13])[a-zA-HJ-NP-Z0-9]{25,87}$/.test(addr);
+  return !!decodeBitcoinAddress(addr);
+}
+// "checksum" when the string looks like a mainnet address but the checksum
+// (or witness version) does not verify. Null for anything else, including a
+// valid address, so the caller can keep its generic "not an address" copy.
+function addressChecksumIssue(addr) {
+  const s = (addr || "").trim();
+  if (!s || isValidBitcoinAddress(s)) return null;
+  if (/^(bc1|[13])[a-zA-HJ-NP-Z0-9]{20,120}$/i.test(s)) return "checksum";
+  return null;
 }
 
 function isValidLightningPubkey(str) {

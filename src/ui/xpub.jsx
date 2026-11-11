@@ -10,6 +10,7 @@ function XpubScan({ onBack, isMobile, onScan, onNav, prefill, onOpenWalletReview
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
   const [shareOpen, setShareOpen] = useState(false);
+  const scanAbort = useRef(null);
   const detected = detectXpub(raw);
   const walletPart = result && !result.isEmpty ? snapshotPart({ kind: "wallet", score: result.score, grade: result.grade, checks: result.checks }) : null;
   const planList = mergePlanParts(walletPart, planSaved);
@@ -25,9 +26,12 @@ function XpubScan({ onBack, isMobile, onScan, onNav, prefill, onOpenWalletReview
   }, []);
 
   const runScan = async () => {
+    if (scanAbort.current) scanAbort.current.abort("cancel");
+    const ctrl = new AbortController();
+    scanAbort.current = ctrl;
     setError(""); setResult(null); setProgress({ derived: 0, used: 0 }); setBusy(true);
     try {
-      const scan = await scanXpub(raw.trim(), { onProgress: p => setProgress({ derived: p.derived, used: p.used }) });
+      const scan = await scanXpub(raw.trim(), { signal: ctrl.signal, onProgress: p => setProgress({ derived: p.derived, used: p.used }) });
       const rep = runWalletEngine(scan);
       // History parity with address/LN scans — keyed on the BIP32 fingerprint
       // (hash160 of the key)[0..4]; the xpub itself is NEVER stored.
@@ -43,8 +47,20 @@ function XpubScan({ onBack, isMobile, onScan, onNav, prefill, onOpenWalletReview
       }
       setResult(rep);
     } catch (e) {
+      if (ctrl.signal.aborted || (e && e.kind === "cancelled")) return;
       setError(e && e.message ? e.message : "Couldn't scan that key.");
-    } finally { setBusy(false); setProgress(null); }
+    } finally {
+      if (scanAbort.current === ctrl) {
+        scanAbort.current = null;
+        setBusy(false);
+        setProgress(null);
+      }
+    }
+  };
+  const cancelScan = () => {
+    if (scanAbort.current) scanAbort.current.abort("cancel");
+    setBusy(false);
+    setProgress(null);
   };
   const loadDemo = () => { setError(""); setBusy(false); setProgress(null); setResult(runWalletEngine(DEMO_WALLET)); };
 
@@ -165,6 +181,7 @@ function XpubScan({ onBack, isMobile, onScan, onNav, prefill, onOpenWalletReview
               style={{ background: (detected && !busy) ? T.cyan : T.surface, border: "none", borderRadius: 10, padding: "12px 22px", color: (detected && !busy) ? T.bg : T.textDim, fontFamily: T.sans, fontWeight: 700, fontSize: 14, cursor: (detected && !busy) ? "pointer" : "default", transition: "all .15s" }}>
               {busy ? "Scanning…" : "Scan wallet →"}
             </button>
+            {busy && <button type="button" onClick={cancelScan} style={{ background: "transparent", border: `1px solid ${T.border}`, borderRadius: 10, padding: "12px 16px", color: T.text, fontFamily: T.sans, fontSize: 13, cursor: "pointer" }}>Cancel</button>}
             <button onClick={loadDemo} disabled={busy} style={{ background: "transparent", border: `1px solid ${T.border}`, borderRadius: 10, padding: "12px 16px", color: T.textMid, fontFamily: T.sans, fontSize: 13, cursor: busy ? "default" : "pointer" }}
               onMouseOver={e => { if (!busy) e.currentTarget.style.borderColor = T.cyan; }} onMouseOut={e => e.currentTarget.style.borderColor = T.border}>Load example</button>
             {detected && !busy && <span style={{ fontFamily: T.mono, fontSize: 10, color: T.cyan }}>✓ extended key detected</span>}
