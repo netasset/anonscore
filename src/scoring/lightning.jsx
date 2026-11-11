@@ -3,17 +3,67 @@
 ───────────────────────────────────────────── */
 const LN_API = "https://mempool.space/api/v1/lightning";
 
-async function fetchLightningNode(pubkey) {
+async function fetchLightningNode(pubkey, opts = {}) {
   // Relay path is /ln/nodes/…; direct is mempool's /nodes/…. Same honest-failure
   // rule as fetchAddress: no silent direct fallback when the relay is on.
-  const base = relayOn() ? `${RELAY_URL}/ln` : LN_API;
+  // A missing channel list is not "zero channels" — that would score a node
+  // as if it had no peers. Fail the scan instead of inventing an empty set.
+  const viaRelay = relayOn();
+  const base = viaRelay ? `${RELAY_URL}/ln` : LN_API;
   const safe = encodeURIComponent(pubkey);
-  const [node, channels] = await Promise.all([
-    fetch(`${base}/nodes/${safe}`).then(r => { if (!r.ok) throw new Error("Node not found"); return r.json(); }),
-    fetch(`${base}/nodes/${safe}/channels?status=open`).then(r => r.json()).catch(() => ({ channels: [] })),
+  const signal = opts.signal;
+  const [nodeRes, chRes] = await Promise.all([
+    fetchLimited(`${base}/nodes/${safe}`, signal),
+    fetchLimited(`${base}/nodes/${safe}/channels?status=open`, signal),
   ]);
-  if (!node || typeof node !== "object") throw new Error("Invalid node response");
-  return { node, channels: (Array.isArray(channels.channels) ? channels.channels : []).slice(0, 30) };
+  if (!nodeRes.ok) {
+    const bodyText = await nodeRes.text().catch(() => "");
+    const failure = txLookupFailure(nodeRes.status, nodeRes.headers.get("content-type"), bodyText, viaRelay);
+    const err = new Error(failure.kind === "blocked"
+      ? failure.message
+      : nodeRes.status === 404
+        ? "No Lightning node is published under that pubkey. It may be unannounced, or the pubkey has a typo."
+        : failure.message);
+    err.kind = failure.kind === "blocked" ? "blocked" : nodeRes.status === 404 ? "unknown" : failure.kind;
+    err.status = nodeRes.status;
+    throw err;
+  }
+  let node;
+  try { node = await nodeRes.json(); }
+  catch {
+    const err = new Error("The explorer returned a node record this page couldn't read.");
+    err.kind = "upstream";
+    throw err;
+  }
+  if (!node || typeof node !== "object" || Array.isArray(node)) {
+    const err = new Error("The explorer returned a node record this page couldn't read.");
+    err.kind = "upstream";
+    throw err;
+  }
+  if (!chRes.ok) {
+    const bodyText = await chRes.text().catch(() => "");
+    const failure = txLookupFailure(chRes.status, chRes.headers.get("content-type"), bodyText, viaRelay);
+    const err = new Error(failure.kind === "blocked"
+      ? failure.message
+      : "Couldn't read this node's open channels, so the score would skip the peer, capacity, and KYC checks. Nothing was scored. Try again.");
+    err.kind = failure.kind === "blocked" ? "blocked" : "channels";
+    err.status = chRes.status;
+    throw err;
+  }
+  let channelsBody;
+  try { channelsBody = await chRes.json(); }
+  catch {
+    const err = new Error("The channel list came back in a form this page couldn't read.");
+    err.kind = "channels";
+    throw err;
+  }
+  const list = Array.isArray(channelsBody) ? channelsBody : (channelsBody && Array.isArray(channelsBody.channels) ? channelsBody.channels : null);
+  if (!list) {
+    const err = new Error("The channel list came back in a form this page couldn't read.");
+    err.kind = "channels";
+    throw err;
+  }
+  return { node, channels: list.slice(0, 30) };
 }
 
 // Known KYC/custodial exchange node pubkeys — verified against 1ML/Amboss

@@ -67,7 +67,7 @@ function ResultHero({ score, grade, riskLabel, riskColor, verdict, linkage, fail
   );
 }
 
-function Dashboard({ address, addrInfo, utxos, txs, txSample, isMobile, onBack, onRescan, toast, autoShare, scanAt, defaultSimple, simpleMode: simpleModeFromApp, onSimpleModeChange, onCoach, delta, onNav, onOpenCase, onOpenWalletReview, onInspectTx, onInspectTxid, planSaved, onPlan }) {
+function Dashboard({ address, addrInfo, utxos, txs, txSample, utxoSample, isMobile, onBack, onRescan, toast, autoShare, scanAt, defaultSimple, simpleMode: simpleModeFromApp, onSimpleModeChange, onCoach, delta, onNav, onOpenCase, onOpenWalletReview, onInspectTx, onInspectTxid, planSaved, onPlan }) {
   const [tab, setTab] = useState("Fix It");
   const [threat, setThreat] = useState(null); // null = ranked for everyone; session-only, never stored
   const [threatOpen, setThreatOpen] = useState(false);
@@ -280,6 +280,11 @@ function Dashboard({ address, addrInfo, utxos, txs, txSample, isMobile, onBack, 
         {txSample?.capped && txSample.total != null && (
           <div style={{ fontFamily: T.mono, fontSize: 11, color: T.textDim, margin: "-4px 4px 12px", lineHeight: 1.5 }}>
             Based on the latest {txSample.fetched} of {txSample.total} transactions.
+          </div>
+        )}
+        {utxoSample?.capped && (
+          <div style={{ fontFamily: T.mono, fontSize: 11, color: T.textDim, margin: "-4px 4px 12px", lineHeight: 1.5 }}>
+            Showing {utxoSample.fetched} of {utxoSample.total} unspent outputs. The balance is the full total. The score uses these {utxoSample.fetched}.
           </div>
         )}
 

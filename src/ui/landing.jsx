@@ -181,6 +181,7 @@ function Landing({ onAnalyze, isMobile, onCases, onNav, onOpenTool }) {
         // Only offer the handoff when it genuinely parses (pure local check).
         try { parseTransactionInput(v); setError(""); setToolHint({ kind: "tx", value: v }); return; } catch {}
       }
+      if (addressChecksumIssue(v)) { setError(t("err.checksum")); return; }
       setFormatsOpen(true);
       setError(t("err.invalid"));
       return;
@@ -341,7 +342,7 @@ function Landing({ onAnalyze, isMobile, onCases, onNav, onOpenTool }) {
               <div style={{ display: "flex", gap: 8 }}>
                 {isMobile && (
                   <button type="button" aria-label="Paste from clipboard" onClick={async () => {
-                    try { const t = await navigator.clipboard.readText(); setInput(t.trim()); setError(""); } catch {}
+                    try { const t = await navigator.clipboard.readText(); setInput(t.trim()); setError(""); } catch { setError(t("err.clipboard")); }
                   }} style={{ ...ui.ghost, background: T.surface, borderRadius: 14, padding: "12px 14px", fontSize: 18, flexShrink: 0, alignSelf: "stretch" }}>
                     📋
                   </button>
@@ -402,7 +403,7 @@ function Landing({ onAnalyze, isMobile, onCases, onNav, onOpenTool }) {
                   ⚡ Node pubkeys only work if you run your own node — Umbrel, Start9, Citadel, RaspiBlitz, etc.
                 </div>
               )}
-              {error && <div style={{ fontSize: 12, color: T.red, marginTop: 6, animation: "slideDown .2s ease" }}>⚠ {error}</div>}
+              {error && <div role="alert" style={{ fontSize: 12, color: T.red, marginTop: 6, animation: "slideDown .2s ease" }}>⚠ {error}</div>}
               {spInfo && (
                 <div style={{ marginTop: 12, textAlign: "left", background: T.green + "0e", border: `1px solid ${T.green}40`, borderRadius: 14, padding: "14px 16px", animation: "slideDown .25s ease" }}>
                   <div style={{ fontFamily: T.mono, fontSize: 9, color: T.green, letterSpacing: 1.5, marginBottom: 8 }}>SILENT PAYMENT ADDRESS · BIP352{spInfo.network === "testnet" ? " · TESTNET" : ""}</div>
@@ -820,7 +821,7 @@ function Landing({ onAnalyze, isMobile, onCases, onNav, onOpenTool }) {
 /* ─────────────────────────────────────────────
    SCANNING — with educational facts
 ───────────────────────────────────────────── */
-function Scanning({ address, isLightning, dataReady }) {
+function Scanning({ address, isLightning, dataReady, onCancel }) {
   useLang(); // re-render on language change
   const [step, setStep] = useState(0);
   const intervalRef = useRef(null);
@@ -961,6 +962,12 @@ function Scanning({ address, isLightning, dataReady }) {
         <div style={{ fontFamily: T.mono, fontSize: 9, color: accentColor, letterSpacing: 2, marginBottom: 6 }}>{t("scanning.didyouknow")}</div>
         <div style={{ fontSize: 13, color: T.textMid, lineHeight: 1.65 }}>{currentFact}</div>
       </div>
+      {onCancel && (
+        <button type="button" onClick={onCancel}
+          style={{ background: "transparent", border: `1px solid ${T.border}`, borderRadius: 10, padding: "10px 18px", color: T.text, fontFamily: T.sans, fontSize: 14, cursor: "pointer" }}>
+          {t("scanning.cancel")}
+        </button>
+      )}
     </div>
   );
 }

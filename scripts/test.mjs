@@ -1062,6 +1062,148 @@ else {
   }
 }
 
+// A one-character typo must be rejected in the browser, before any lookup.
+{
+  const typoPage = await ctx.newPage();
+  const calls = [];
+  typoPage.on("request", (r) => { if (r.url().includes("workers.dev") || r.url().includes("blockstream") || r.url().includes("mempool")) calls.push(r.url()); });
+  try {
+    await typoPage.goto(`http://127.0.0.1:${PORT}/`, { waitUntil: "load" });
+    await typoPage.waitForFunction(() => document.getElementById("root")?.childElementCount > 0, { timeout: 15000 });
+    await typoPage.locator('input[aria-label="Paste a Bitcoin address, Lightning node pubkey, or silent payment address"]').fill("1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNb");
+    await typoPage.getByRole("button", { name: "Analyze →" }).click();
+    await typoPage.waitForFunction(() => /checksum doesn't match/.test(document.body.innerText), { timeout: 5000 });
+    if (calls.length) fail(`checksum: typo still requested the network (${calls.join(", ")})`);
+    else pass("checksum: a one-character typo is rejected before any request");
+  } catch (e) {
+    fail("checksum: " + e.message.slice(0, 180));
+  } finally {
+    await typoPage.close();
+  }
+}
+
+// Cancel must leave the scan and ignore a response that arrives afterwards.
+{
+  const cancelPage = await ctx.newPage();
+  await cancelPage.route("**/anonscore-relay.netassetpremium.workers.dev/**", async (route) => {
+    await new Promise((r) => setTimeout(r, 2500));
+    try {
+      const url = route.request().url();
+      if (url.includes("/utxo") || url.includes("/txs")) {
+        await route.fulfill({ status: 200, contentType: "application/json", body: "[]" });
+      } else {
+        await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ chain_stats: { tx_count: 1, funded_txo_count: 1, funded_txo_sum: 1, spent_txo_count: 0, spent_txo_sum: 0 } }) });
+      }
+    } catch { /* request already aborted */ }
+  });
+  try {
+    await cancelPage.goto(`http://127.0.0.1:${PORT}/`, { waitUntil: "load" });
+    await cancelPage.waitForFunction(() => document.getElementById("root")?.childElementCount > 0, { timeout: 15000 });
+    await cancelPage.locator('input[aria-label="Paste a Bitcoin address, Lightning node pubkey, or silent payment address"]').fill("1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa");
+    await cancelPage.getByRole("button", { name: "Analyze →" }).click();
+    await cancelPage.getByRole("button", { name: "Cancel" }).click();
+    await cancelPage.waitForFunction(() => /Paste an address/.test(document.body.innerText) && !/RUNNING 11 CHECKS/.test(document.body.innerText), { timeout: 5000 });
+    await cancelPage.waitForTimeout(3000);
+    const stillHome = await cancelPage.evaluate(() => /Paste an address/.test(document.body.innerText) && !/Fix It/.test(document.body.innerText));
+    if (!stillHome) fail("cancel: a late explorer response painted the dashboard after Cancel");
+    else pass("cancel: Cancel returns home and a late response does not");
+  } catch (e) {
+    fail("cancel: " + e.message.slice(0, 180));
+  } finally {
+    await cancelPage.close();
+  }
+}
+
+// A hung explorer must time out instead of leaving the scanning screen up.
+{
+  const timeoutPage = await ctx.newPage();
+  await timeoutPage.addInitScript(() => { window.__SCAN_TIMEOUT_MS = 400; });
+  await timeoutPage.route("**/anonscore-relay.netassetpremium.workers.dev/**", async (route) => {
+    await new Promise((r) => setTimeout(r, 3000));
+    try { await route.fulfill({ status: 200, contentType: "application/json", body: "[]" }); } catch { /* aborted */ }
+  });
+  try {
+    await timeoutPage.goto(`http://127.0.0.1:${PORT}/`, { waitUntil: "load" });
+    await timeoutPage.waitForFunction(() => document.getElementById("root")?.childElementCount > 0, { timeout: 15000 });
+    await timeoutPage.locator('input[aria-label="Paste a Bitcoin address, Lightning node pubkey, or silent payment address"]').fill("1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa");
+    await timeoutPage.getByRole("button", { name: "Analyze →" }).click();
+    await timeoutPage.waitForFunction(() => /timed out/.test(document.body.innerText), { timeout: 8000 });
+    pass("scan: a hung explorer times out instead of spinning forever");
+  } catch (e) {
+    fail("scan timeout: " + e.message.slice(0, 180));
+  } finally {
+    await timeoutPage.close();
+  }
+}
+
+// Missing channel data must not be scored as "zero channels".
+{
+  const chPage = await ctx.newPage();
+  const pub = "02" + "ab".repeat(32);
+  await chPage.route("**/anonscore-relay.netassetpremium.workers.dev/**", (route) => {
+    const url = route.request().url();
+    if (url.includes("/channels")) {
+      return route.fulfill({ status: 404, contentType: "application/json", body: JSON.stringify({ error: "not found" }) });
+    }
+    if (url.includes("/nodes/")) {
+      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ alias: "half", public: true, addresses: [] }) });
+    }
+    return route.fulfill({ status: 404, contentType: "application/json", body: JSON.stringify({ error: "unexpected" }) });
+  });
+  try {
+    await chPage.goto(`http://127.0.0.1:${PORT}/`, { waitUntil: "load" });
+    await chPage.waitForFunction(() => document.getElementById("root")?.childElementCount > 0, { timeout: 15000 });
+    const input = chPage.locator('input[aria-label="Paste a Bitcoin address, Lightning node pubkey, or silent payment address"]');
+    await input.fill(pub);
+    await chPage.getByRole("button", { name: "⚡ Audit →" }).click();
+    await chPage.waitForFunction(() => /privacy relay blocked this lookup/.test(document.body.innerText), { timeout: 8000 });
+    const scored = await chPage.evaluate(() => /Channel Diversity/.test(document.body.innerText));
+    if (scored) fail("lightning: a blocked channel list was scored as an empty channel set");
+    else pass("lightning: a blocked channel list fails the scan instead of scoring zero channels");
+  } catch (e) {
+    fail("lightning channels: " + e.message.slice(0, 180));
+  } finally {
+    await chPage.close();
+  }
+}
+
+// Wallet scan must not request the address summary twice for a used address.
+{
+  const walletPage = await ctx.newPage();
+  const counts = { summary: 0, utxo: 0, txs: 0 };
+  const used = "bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu";
+  await walletPage.route("**/anonscore-relay.netassetpremium.workers.dev/**", (route) => {
+    const url = route.request().url().split("?")[0];
+    const json = (body) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
+    if (url.endsWith("/utxo")) { counts.utxo++; return json([]); }
+    if (url.includes("/txs")) { counts.txs++; return json([]); }
+    if (url.includes("/address/")) {
+      counts.summary++;
+      const txCount = url.endsWith("/" + used) ? 1 : 0;
+      return json({ chain_stats: { tx_count: txCount, funded_txo_count: txCount, spent_txo_count: 0 } });
+    }
+    return route.fulfill({ status: 404, contentType: "application/json", body: JSON.stringify({ error: "unexpected" }) });
+  });
+  try {
+    await walletPage.goto(`http://127.0.0.1:${PORT}/`, { waitUntil: "load" });
+    await walletPage.waitForFunction(() => document.getElementById("root")?.childElementCount > 0, { timeout: 15000 });
+    const zpub = "zpub6rFR7y4Q2AijBEqTUquhVz398htDFrtymD9xYYfG1m4wAcvPhXNfE3EfH1r1ADqtfSdVCToUG868RvUUkgDKf31mGDtKsAYz2oz2AGutZYs";
+    const countsAfter = await walletPage.evaluate(async (key) => {
+      const E = window.__ANONSCORE_TEST__;
+      await E.scanXpub(key, { gap: 1, cap: 5 });
+      return true;
+    }, zpub);
+    if (!countsAfter) fail("xpub requests: scan did not finish");
+    else if (counts.summary !== 3 || counts.utxo !== 1 || counts.txs !== 1) {
+      fail(`xpub requests: expected 3 summaries, 1 utxo, 1 txs (used address not fetched twice); saw summary=${counts.summary} utxo=${counts.utxo} txs=${counts.txs}`);
+    } else pass(`xpub requests: 3 summaries + 1 utxo + 1 txs for gap 1 with one used address (summary not repeated; ${counts.summary} not 4)`);
+  } catch (e) {
+    fail("xpub requests: " + e.message.slice(0, 200));
+  } finally {
+    await walletPage.close();
+  }
+}
+
 // Item 5 — the Lightning dashboard is welded into the hub: its Fix-It plan uses
 // FixToolChips (affiliate disclosure + directory 'review' jumps) and a NEXT MOVES
 // card that reaches the Inspector and Methodology (the mobile methodology path).
@@ -1430,6 +1572,23 @@ const unit = await page.evaluate(() => {
       E.isValidBitcoinAddress("1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa") === true &&
       E.isValidBitcoinAddress("not-an-address") === false &&
       E.detectInputType("02".padEnd(66, "ab")) === "ln_pubkey");
+    t("address: checksum accepts p2pkh, p2sh, p2wpkh, p2wsh, p2tr, and uppercase bech32",
+      E.isValidBitcoinAddress("1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa") === true &&
+      E.isValidBitcoinAddress("3EktnHQD7RiAE6uzMj2ZifT9YgRrkSgzQX") === true &&
+      E.isValidBitcoinAddress("bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4") === true &&
+      E.isValidBitcoinAddress("BC1QW508D6QEJXTDG4Y5R3ZARVARY0C5XW7KV8F3T4") === true &&
+      E.isValidBitcoinAddress("bc1qrp33g0q5c5txsp9arysrx4k6zdkfs4nce4xj0gdcccefvpysxf3qccfmv3") === true &&
+      E.isValidBitcoinAddress("bc1p0xlxvlhemja6c4dqv22uapctqupfhlxm9h8z3k2e72q4k9hcz7vqzk5jj0") === true &&
+      E.decodeBitcoinAddress("bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4").type === "p2wpkh");
+    t("address: a one-character typo or mixed case fails the checksum and is named as such",
+      E.isValidBitcoinAddress("1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNb") === false &&
+      E.isValidBitcoinAddress("bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t5") === false &&
+      E.isValidBitcoinAddress("bc1qW508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4") === false &&
+      E.addressChecksumIssue("1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNb") === "checksum" &&
+      E.addressChecksumIssue("not-an-address") === null &&
+      E.addressChecksumIssue("1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa") === null);
+    t("address: case-file addresses still verify",
+      ["bc1qazcm763858nkj2dj986etajv6wquslv8uxwczt", "34xp4vRoCGJym3xR7yCVPFHoCNxv4Twseo", "1HQ3Go3ggs8pFnXuHVHRytPCq5fGG8Hbhx", "bc1qmxjefnuy06v345v6vhwpwt05dztztmx4g3y7wp", "1FeexV6bAHb8ybZjqQMjJrcCrHGW9sb6uF"].every(a => E.isValidBitcoinAddress(a)));
   }
 
   // — Transaction Inspector: parser + analysis (validated against BIP174/173/350) —
@@ -2263,10 +2422,13 @@ await axeRun("Landing (after demo)", page);
     await swPage.evaluate(() => navigator.serviceWorker.ready);
     await swPage.waitForFunction(() => navigator.serviceWorker.controller !== null, { timeout: 8000 });
     serverHits.length = 0;
-    await swPage.goto(`http://127.0.0.1:${PORT}/?scan=bc1qleakcheck000000000000000000000000000`, { waitUntil: "load" });
+    // A real checksummed address. A shape-only fixture used to open the dialog
+    // and is now rejected before a lookup, which is a different check.
+    const scanAddr = "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4";
+    await swPage.goto(`http://127.0.0.1:${PORT}/?scan=${scanAddr}`, { waitUntil: "load" });
     await swPage.waitForTimeout(500);
     const dialog = await swPage.getByRole("dialog", { name: /Confirm shared scan link/i }).count();
-    const leaked = serverHits.filter(u => u.includes("bc1qleak"));
+    const leaked = serverHits.filter(u => u.includes(scanAddr));
     if (leaked.length) fail("service worker forwarded a scan address to the host: " + leaked[0]);
     else if (!dialog) fail("service worker stripped ?scan= from the page URL — the confirm dialog never opened");
     else pass("service worker serves ?scan= without sending the address to the host");

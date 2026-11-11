@@ -341,6 +341,8 @@ const STRINGS = {
     "recent.title": "RECENT SCANS",
     "err.empty": "Please enter a Bitcoin address or Lightning node pubkey.",
     "err.invalid": "That isn't a Bitcoin address or a Lightning node pubkey.",
+    "err.checksum": "That looks like a Bitcoin address, but the checksum doesn't match. Check it for a typo — nothing was looked up.",
+    "err.clipboard": "Couldn't read the clipboard. Paste with the keyboard instead.",
     "err.lnaddress": "Lightning addresses can't be audited yet — paste your node's 66-character pubkey instead.",
     "finalcta.h2.a": "A typical wallet scores ~38/100.",
     "finalcta.h2.b": "Where does yours land?",
@@ -351,7 +353,8 @@ const STRINGS = {
     "scanning.ln.title": "Auditing your node…",
     "scanning.btc.checks": "RUNNING 11 CHECKS",
     "scanning.ln.checks": "⚡ RUNNING 8 LIGHTNING CHECKS",
-    "scanning.didyouknow": "DID YOU KNOW"
+    "scanning.didyouknow": "DID YOU KNOW",
+    "scanning.cancel": "Cancel"
   },
   es: {
     "nav.free": "Gratis",
@@ -403,6 +406,8 @@ const STRINGS = {
     "recent.title": "ESCANEOS RECIENTES",
     "err.empty": "Ingresa una dirección de Bitcoin o la clave pública de un nodo Lightning.",
     "err.invalid": "Eso no es una dirección de Bitcoin ni la clave pública de un nodo Lightning.",
+    "err.checksum": "Parece una dirección de Bitcoin, pero la suma de verificación no coincide. Revísala por un error de tipeo — no se consultó nada.",
+    "err.clipboard": "No se pudo leer el portapapeles. Pega con el teclado.",
     "err.lnaddress": "Las direcciones Lightning aún no se pueden auditar — pega la clave pública (66 caracteres hex) de tu nodo.",
     "finalcta.h2.a": "Una billetera típica puntúa ~38/100.",
     "finalcta.h2.b": "¿Dónde queda la tuya?",
@@ -413,7 +418,8 @@ const STRINGS = {
     "scanning.ln.title": "Auditando tu nodo…",
     "scanning.btc.checks": "EJECUTANDO 11 VERIFICACIONES",
     "scanning.ln.checks": "⚡ EJECUTANDO 8 VERIFICACIONES LIGHTNING",
-    "scanning.didyouknow": "¿SABÍAS QUE?"
+    "scanning.didyouknow": "¿SABÍAS QUE?",
+    "scanning.cancel": "Cancelar"
   }
 };
 const SUPPORTED_LANGS = Object.keys(STRINGS);
@@ -2814,6 +2820,50 @@ function txLookupTimeoutMs() {
   } catch {}
   return TX_LOOKUP_TIMEOUT_MS;
 }
+function scanTimeoutMs() {
+  try {
+    const override = typeof window !== "undefined" && window.__SCAN_TIMEOUT_MS;
+    if (Number.isFinite(override) && override > 0) return override;
+  } catch {}
+  return TX_LOOKUP_TIMEOUT_MS;
+}
+function fetchLimited(url, parent) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort("timeout"), scanTimeoutMs());
+  let onParent = null;
+  if (parent) {
+    onParent = () => ctrl.abort(parent.reason || "cancel");
+    if (parent.aborted) ctrl.abort(parent.reason || "cancel");else parent.addEventListener("abort", onParent, {
+      once: true
+    });
+  }
+  const finish = () => {
+    clearTimeout(timer);
+    if (parent && onParent) parent.removeEventListener("abort", onParent);
+  };
+  return fetch(url, {
+    signal: ctrl.signal
+  }).then(res => {
+    finish();
+    return res;
+  }, () => {
+    finish();
+    const reason = ctrl.signal.reason;
+    if (reason === "timeout") {
+      const err = new Error(upstreamTxMessage(null, relayOn(), "timeout"));
+      err.kind = "timeout";
+      throw err;
+    }
+    if (reason === "cancel" || parent && parent.aborted) {
+      const err = new Error("cancelled");
+      err.kind = "cancelled";
+      throw err;
+    }
+    const err = new Error(upstreamTxMessage(null, relayOn(), "network"));
+    err.kind = "upstream";
+    throw err;
+  });
+}
 function blockedTxMessage(status) {
   return `The privacy relay blocked this lookup (HTTP ${status}) before any explorer saw it. The txid is validly formed, so this is a relay allowlist problem, not a missing transaction. Turn the relay off to ask the explorer directly — it will then see your IP — or retry after the relay is updated.`;
 }
@@ -4085,18 +4135,25 @@ function detectXpub(v) {
   const s = (v || "").trim();
   return /^(xpub|ypub|zpub)[1-9A-HJ-NP-Za-km-z]{100,116}$/.test(s) ? "xpub" : null;
 }
-async function fetchAddrInfo(addr) {
+async function fetchAddrInfo(addr, opts = {}) {
   const exp = explorer();
-  const base = relayOn() ? RELAY_URL + exp.relayPath : exp.api;
-  const r = await fetch(`${base}/address/${encodeURIComponent(addr)}`);
-  if (!r.ok) throw new Error("Address lookup failed");
-  return r.json();
+  const viaRelay = relayOn();
+  const base = viaRelay ? RELAY_URL + exp.relayPath : exp.api;
+  const r = await fetchLimited(`${base}/address/${encodeURIComponent(addr)}`, opts.signal);
+  const info = await readExplorerJson(r, "address summary", viaRelay);
+  if (!info || typeof info !== "object" || Array.isArray(info)) {
+    const err = new Error("The explorer returned an address summary this page couldn't read.");
+    err.kind = "upstream";
+    throw err;
+  }
+  return info;
 }
 async function scanXpub(xpub, opts = {}) {
   const onProgress = opts.onProgress || (() => {});
   const node = decodeXpub(xpub);
-  const GAP = 20,
-    CAP = 100;
+  const GAP = opts.gap || 20,
+    CAP = opts.cap || 100;
+  const signal = opts.signal;
   const addresses = [];
   let derived = 0,
     capHit = false;
@@ -4118,13 +4175,17 @@ async function scanXpub(xpub, opts = {}) {
         branch,
         used: addresses.length
       });
-      const info = await fetchAddrInfo(address);
+      const info = await fetchAddrInfo(address, {
+        signal
+      });
       const cs = info.chain_stats || {};
       if ((cs.tx_count || 0) > 0) {
         gap = 0;
         const full = await fetchAddress(address, {
           pageCap: 1,
-          txCap: 30
+          txCap: 30,
+          addrInfo: info,
+          signal
         });
         (full.utxos || []).forEach(u => {
           u.address = address;
@@ -4722,6 +4783,24 @@ function runEngine(utxos = [], txs = [], txCount = 0, receiveCount = null) {
 const TX_PAGE_SIZE = 25;
 const TX_PAGE_CAP = 10;
 const TX_HISTORY_CAP = 250;
+const UTXO_LIST_CAP = 30;
+async function readExplorerJson(res, label, viaRelay) {
+  const bodyText = await res.text().catch(() => "");
+  if (!res.ok) {
+    const failure = txLookupFailure(res.status, res.headers.get("content-type"), bodyText, viaRelay);
+    const err = new Error(failure.kind === "unknown" ? `The explorer has no ${label} for that lookup.` : failure.message);
+    err.kind = failure.kind === "unknown" ? "unknown" : failure.kind;
+    err.status = res.status;
+    throw err;
+  }
+  try {
+    return JSON.parse(bodyText);
+  } catch {
+    const err = new Error(`The explorer returned a ${label} this page couldn't read.`);
+    err.kind = "upstream";
+    throw err;
+  }
+}
 function confirmedOnPage(list) {
   const out = [];
   for (const tx of list || []) if (tx && tx.status && tx.status.confirmed && tx.txid) out.push(tx.txid);
@@ -4730,16 +4809,29 @@ function confirmedOnPage(list) {
 async function fetchAddress(addr, opts = {}) {
   const pageCap = opts.pageCap || TX_PAGE_CAP;
   const txCap = opts.txCap || TX_HISTORY_CAP;
+  const signal = opts.signal;
   const exp = explorer();
-  const base = relayOn() ? `${RELAY_URL}${exp.relayPath}` : exp.api;
+  const viaRelay = relayOn();
+  const base = viaRelay ? `${RELAY_URL}${exp.relayPath}` : exp.api;
   const safe = encodeURIComponent(addr);
-  const [info, utxos, firstPage] = await Promise.all([fetch(`${base}/address/${safe}`).then(r => {
-    if (!r.ok) throw new Error("Not found");
-    return r.json();
-  }), fetch(`${base}/address/${safe}/utxo`).then(r => r.json()), fetch(`${base}/address/${safe}/txs`).then(r => r.json())]);
-  if (!info || typeof info !== "object") throw new Error("Invalid API response");
-  if (!Array.isArray(utxos)) throw new Error("Invalid UTXO response");
-  if (!Array.isArray(firstPage)) throw new Error("Invalid TX response");
+  const summaryUrl = `${base}/address/${safe}`;
+  const infoP = opts.addrInfo ? Promise.resolve(opts.addrInfo) : fetchLimited(summaryUrl, signal).then(r => readExplorerJson(r, "address summary", viaRelay));
+  const [info, utxos, firstPage] = await Promise.all([infoP, fetchLimited(`${summaryUrl}/utxo`, signal).then(r => readExplorerJson(r, "unspent-output list", viaRelay)), fetchLimited(`${summaryUrl}/txs`, signal).then(r => readExplorerJson(r, "transaction page", viaRelay))]);
+  if (!info || typeof info !== "object" || Array.isArray(info)) {
+    const err = new Error("The explorer returned an address summary this page couldn't read.");
+    err.kind = "upstream";
+    throw err;
+  }
+  if (!Array.isArray(utxos)) {
+    const err = new Error("The explorer returned an unspent-output list this page couldn't read.");
+    err.kind = "upstream";
+    throw err;
+  }
+  if (!Array.isArray(firstPage)) {
+    const err = new Error("The explorer returned a transaction page this page couldn't read.");
+    err.kind = "upstream";
+    throw err;
+  }
   const txs = [];
   const seen = new Set();
   const pushPage = page => {
@@ -4759,11 +4851,11 @@ async function fetchAddress(addr, opts = {}) {
   let cursor = confirmedOnPage(firstPage).slice(-1)[0] || null;
   let more = confirmedOnPage(firstPage).length >= TX_PAGE_SIZE;
   while (more && cursor && pages < pageCap && txs.length < txCap && (chainCount == null || confirmedOnPage(txs).length < chainCount)) {
-    const res = await fetch(`${base}/address/${safe}/txs/chain/${encodeURIComponent(cursor)}`);
+    const res = await fetchLimited(`${base}/address/${safe}/txs/chain/${encodeURIComponent(cursor)}`, signal);
     if (!res.ok) {
       const bodyText = await res.text().catch(() => "");
       const failure = txLookupFailure(res.status, res.headers.get("content-type"), bodyText, relayOn());
-      const err = new Error(failure.kind === "blocked" ? failure.message : "Invalid TX response");
+      const err = new Error(failure.message);
       err.kind = failure.kind;
       throw err;
     }
@@ -4782,7 +4874,12 @@ async function fetchAddress(addr, opts = {}) {
   const capped = chainCount != null && confirmedFetched < chainCount && hitCap;
   return {
     addrInfo: info,
-    utxos: utxos.slice(0, 30),
+    utxos: utxos.slice(0, UTXO_LIST_CAP),
+    utxoSample: {
+      fetched: Math.min(utxos.length, UTXO_LIST_CAP),
+      total: utxos.length,
+      capped: utxos.length > UTXO_LIST_CAP
+    },
     txs,
     txSample: {
       fetched: txs.length,
@@ -5143,19 +5240,58 @@ const DEMO = {
   }]
 };
 const LN_API = "https://mempool.space/api/v1/lightning";
-async function fetchLightningNode(pubkey) {
-  const base = relayOn() ? `${RELAY_URL}/ln` : LN_API;
+async function fetchLightningNode(pubkey, opts = {}) {
+  const viaRelay = relayOn();
+  const base = viaRelay ? `${RELAY_URL}/ln` : LN_API;
   const safe = encodeURIComponent(pubkey);
-  const [node, channels] = await Promise.all([fetch(`${base}/nodes/${safe}`).then(r => {
-    if (!r.ok) throw new Error("Node not found");
-    return r.json();
-  }), fetch(`${base}/nodes/${safe}/channels?status=open`).then(r => r.json()).catch(() => ({
-    channels: []
-  }))]);
-  if (!node || typeof node !== "object") throw new Error("Invalid node response");
+  const signal = opts.signal;
+  const [nodeRes, chRes] = await Promise.all([fetchLimited(`${base}/nodes/${safe}`, signal), fetchLimited(`${base}/nodes/${safe}/channels?status=open`, signal)]);
+  if (!nodeRes.ok) {
+    const bodyText = await nodeRes.text().catch(() => "");
+    const failure = txLookupFailure(nodeRes.status, nodeRes.headers.get("content-type"), bodyText, viaRelay);
+    const err = new Error(failure.kind === "blocked" ? failure.message : nodeRes.status === 404 ? "No Lightning node is published under that pubkey. It may be unannounced, or the pubkey has a typo." : failure.message);
+    err.kind = failure.kind === "blocked" ? "blocked" : nodeRes.status === 404 ? "unknown" : failure.kind;
+    err.status = nodeRes.status;
+    throw err;
+  }
+  let node;
+  try {
+    node = await nodeRes.json();
+  } catch {
+    const err = new Error("The explorer returned a node record this page couldn't read.");
+    err.kind = "upstream";
+    throw err;
+  }
+  if (!node || typeof node !== "object" || Array.isArray(node)) {
+    const err = new Error("The explorer returned a node record this page couldn't read.");
+    err.kind = "upstream";
+    throw err;
+  }
+  if (!chRes.ok) {
+    const bodyText = await chRes.text().catch(() => "");
+    const failure = txLookupFailure(chRes.status, chRes.headers.get("content-type"), bodyText, viaRelay);
+    const err = new Error(failure.kind === "blocked" ? failure.message : "Couldn't read this node's open channels, so the score would skip the peer, capacity, and KYC checks. Nothing was scored. Try again.");
+    err.kind = failure.kind === "blocked" ? "blocked" : "channels";
+    err.status = chRes.status;
+    throw err;
+  }
+  let channelsBody;
+  try {
+    channelsBody = await chRes.json();
+  } catch {
+    const err = new Error("The channel list came back in a form this page couldn't read.");
+    err.kind = "channels";
+    throw err;
+  }
+  const list = Array.isArray(channelsBody) ? channelsBody : channelsBody && Array.isArray(channelsBody.channels) ? channelsBody.channels : null;
+  if (!list) {
+    const err = new Error("The channel list came back in a form this page couldn't read.");
+    err.kind = "channels";
+    throw err;
+  }
   return {
     node,
-    channels: (Array.isArray(channels.channels) ? channels.channels : []).slice(0, 30)
+    channels: list.slice(0, 30)
   };
 }
 const KYC_NODES = new Set(["033d8656219478701227199cbd6f670335c8d408a92ae88b176cad16f71555e072", "02f1a8c87607f415c8f22c00593002775941dea48869ce23096af27b0cfdcc0b69", "03037dc08e9ac63b82581f79b662a4d0ceca8a8ca162b1af3551595b8f2d97b70a", "035e4ff418fc8b5554c5d9eea66396c227bd429a3251c8cbc711002ba215bfc226", "0279c22ed7a068d10dc1a38ae66d2d6461e269226c60258c021b1ddcdfe4b00bc4", "03cde60a6323f7122d5178255766e38114b4722ede08f7c9e0c5df9b912cc201d6"]);
@@ -5464,9 +5600,72 @@ const SIMPLE = {
     F: "Fully Traceable"
   }
 };
+function _witnessProgram(data5) {
+  if (!data5 || !data5.length) return null;
+  const version = data5[0];
+  if (version < 0 || version > 16) return null;
+  let acc = 0,
+    bits = 0;
+  const program = [];
+  for (const v of data5.slice(1)) {
+    acc = acc << 5 | v;
+    bits += 5;
+    if (bits >= 8) {
+      bits -= 8;
+      program.push(acc >> bits & 0xff);
+    }
+  }
+  if (bits >= 5) return null;
+  if (bits > 0 && (acc & (1 << bits) - 1) !== 0) return null;
+  if (program.length < 2 || program.length > 40) return null;
+  return {
+    version,
+    program
+  };
+}
+function decodeBitcoinAddress(addr) {
+  const s = (addr || "").trim();
+  if (!s) return null;
+  if (s[0] === "1" || s[0] === "3") {
+    let body;
+    try {
+      body = _base58checkDecode(s);
+    } catch {
+      return null;
+    }
+    if (body.length !== 21) return null;
+    if (s[0] === "1" && body[0] === 0x00) return {
+      type: "p2pkh"
+    };
+    if (s[0] === "3" && body[0] === 0x05) return {
+      type: "p2sh"
+    };
+    return null;
+  }
+  const d = _bech32Decode(s);
+  if (!d || d.hrp !== "bc") return null;
+  const prog = _witnessProgram(d.data);
+  if (!prog) return null;
+  if (prog.version === 0) {
+    if (d.spec !== "bech32") return null;
+    if (prog.program.length !== 20 && prog.program.length !== 32) return null;
+    return {
+      type: prog.program.length === 20 ? "p2wpkh" : "p2wsh"
+    };
+  }
+  if (d.spec !== "bech32m") return null;
+  return {
+    type: prog.version === 1 && prog.program.length === 32 ? "p2tr" : "witness"
+  };
+}
 function isValidBitcoinAddress(addr) {
-  if (!addr || addr.length < 26 || addr.length > 90) return false;
-  return /^(bc1|[13])[a-zA-HJ-NP-Z0-9]{25,87}$/.test(addr);
+  return !!decodeBitcoinAddress(addr);
+}
+function addressChecksumIssue(addr) {
+  const s = (addr || "").trim();
+  if (!s || isValidBitcoinAddress(s)) return null;
+  if (/^(bc1|[13])[a-zA-HJ-NP-Z0-9]{20,120}$/i.test(s)) return "checksum";
+  return null;
 }
 function isValidLightningPubkey(str) {
   return /^[0-9a-fA-F]{66}$/.test(str.trim());
@@ -8629,6 +8828,10 @@ function Landing({
           return;
         } catch {}
       }
+      if (addressChecksumIssue(v)) {
+        setError(t("err.checksum"));
+        return;
+      }
       setFormatsOpen(true);
       setError(t("err.invalid"));
       return;
@@ -9139,7 +9342,9 @@ function Landing({
         const t = await navigator.clipboard.readText();
         setInput(t.trim());
         setError("");
-      } catch {}
+      } catch {
+        setError(t("err.clipboard"));
+      }
     },
     style: {
       ...ui.ghost,
@@ -9311,6 +9516,7 @@ function Landing({
       textAlign: "left"
     }
   }, "\u26A1 Node pubkeys only work if you run your own node \u2014 Umbrel, Start9, Citadel, RaspiBlitz, etc."), error && React.createElement("div", {
+    role: "alert",
     style: {
       fontSize: 12,
       color: T.red,
@@ -10542,7 +10748,8 @@ function Landing({
 function Scanning({
   address,
   isLightning,
-  dataReady
+  dataReady,
+  onCancel
 }) {
   useLang();
   const [step, setStep] = useState(0);
@@ -10880,7 +11087,20 @@ function Scanning({
       color: T.textMid,
       lineHeight: 1.65
     }
-  }, currentFact)));
+  }, currentFact)), onCancel && React.createElement("button", {
+    type: "button",
+    onClick: onCancel,
+    style: {
+      background: "transparent",
+      border: `1px solid ${T.border}`,
+      borderRadius: 10,
+      padding: "10px 18px",
+      color: T.text,
+      fontFamily: T.sans,
+      fontSize: 14,
+      cursor: "pointer"
+    }
+  }, t("scanning.cancel")));
 }
 function Sparkline({
   history,
@@ -12132,7 +12352,17 @@ function TransactionInspector({
         color: T.textDim,
         marginLeft: "auto"
       }
-    }, "on-chain forever \u2014 every reading below is public")), tx.outspends && tx.outspends.length === (tx.vout || []).length && (() => {
+    }, "on-chain forever \u2014 every reading below is public")), tx.confirmed && !(tx.outspends && tx.outspends.length === (tx.vout || []).length) && React.createElement("div", {
+      style: {
+        background: T.surface,
+        border: `1px solid ${T.borderLo}`,
+        borderRadius: 12,
+        padding: "12px 16px",
+        fontSize: 12.5,
+        color: T.textMid,
+        lineHeight: 1.6
+      }
+    }, "The transaction loaded. Which outputs were spent later did not, so that part of the trail is missing from this lookup."), tx.outspends && tx.outspends.length === (tx.vout || []).length && (() => {
       const spentIn = {};
       tx.outspends.forEach((o, i) => {
         if (o && o.spent && o.txid) (spentIn[o.txid] = spentIn[o.txid] || []).push(i);
@@ -12941,6 +13171,7 @@ function XpubScan({
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
   const [shareOpen, setShareOpen] = useState(false);
+  const scanAbort = useRef(null);
   const detected = detectXpub(raw);
   const walletPart = result && !result.isEmpty ? snapshotPart({
     kind: "wallet",
@@ -12964,6 +13195,9 @@ function XpubScan({
     };
   }, []);
   const runScan = async () => {
+    if (scanAbort.current) scanAbort.current.abort("cancel");
+    const ctrl = new AbortController();
+    scanAbort.current = ctrl;
     setError("");
     setResult(null);
     setProgress({
@@ -12973,6 +13207,7 @@ function XpubScan({
     setBusy(true);
     try {
       const scan = await scanXpub(raw.trim(), {
+        signal: ctrl.signal,
         onProgress: p => setProgress({
           derived: p.derived,
           used: p.used
@@ -12998,11 +13233,20 @@ function XpubScan({
       }
       setResult(rep);
     } catch (e) {
+      if (ctrl.signal.aborted || e && e.kind === "cancelled") return;
       setError(e && e.message ? e.message : "Couldn't scan that key.");
     } finally {
-      setBusy(false);
-      setProgress(null);
+      if (scanAbort.current === ctrl) {
+        scanAbort.current = null;
+        setBusy(false);
+        setProgress(null);
+      }
     }
+  };
+  const cancelScan = () => {
+    if (scanAbort.current) scanAbort.current.abort("cancel");
+    setBusy(false);
+    setProgress(null);
   };
   const loadDemo = () => {
     setError("");
@@ -13435,7 +13679,20 @@ function XpubScan({
       cursor: detected && !busy ? "pointer" : "default",
       transition: "all .15s"
     }
-  }, busy ? "Scanning…" : "Scan wallet →"), React.createElement("button", {
+  }, busy ? "Scanning…" : "Scan wallet →"), busy && React.createElement("button", {
+    type: "button",
+    onClick: cancelScan,
+    style: {
+      background: "transparent",
+      border: `1px solid ${T.border}`,
+      borderRadius: 10,
+      padding: "12px 16px",
+      color: T.text,
+      fontFamily: T.sans,
+      fontSize: 13,
+      cursor: "pointer"
+    }
+  }, "Cancel"), React.createElement("button", {
     onClick: loadDemo,
     disabled: busy,
     style: {
@@ -18278,6 +18535,7 @@ function Dashboard({
   utxos,
   txs,
   txSample,
+  utxoSample,
   isMobile,
   onBack,
   onRescan,
@@ -18740,7 +18998,15 @@ function Dashboard({
       margin: "-4px 4px 12px",
       lineHeight: 1.5
     }
-  }, "Based on the latest ", txSample.fetched, " of ", txSample.total, " transactions."), React.createElement(PrivacyPlanCard, {
+  }, "Based on the latest ", txSample.fetched, " of ", txSample.total, " transactions."), utxoSample?.capped && React.createElement("div", {
+    style: {
+      fontFamily: T.mono,
+      fontSize: 11,
+      color: T.textDim,
+      margin: "-4px 4px 12px",
+      lineHeight: 1.5
+    }
+  }, "Showing ", utxoSample.fetched, " of ", utxoSample.total, " unspent outputs. The balance is the full total. The score uses these ", utxoSample.fetched, "."), React.createElement(PrivacyPlanCard, {
     parts: planList,
     onShare: () => setShareOpen(true)
   }), poison.lookalikes.length > 0 && React.createElement("div", {
@@ -21412,6 +21678,35 @@ function AmbientBackground({
     className: "bg-noise"
   }));
 }
+function sleepAbortable(ms, signal) {
+  return new Promise((resolve, reject) => {
+    if (signal && signal.aborted) {
+      const err = new Error("cancelled");
+      err.kind = "cancelled";
+      reject(err);
+      return;
+    }
+    const t = setTimeout(() => {
+      if (signal) signal.removeEventListener("abort", onAbort);
+      resolve();
+    }, ms);
+    if (!signal) return;
+    const onAbort = () => {
+      clearTimeout(t);
+      const err = new Error("cancelled");
+      err.kind = "cancelled";
+      reject(err);
+    };
+    signal.addEventListener("abort", onAbort, {
+      once: true
+    });
+  });
+}
+function scanFailureMessage(e, fallback) {
+  if (!e || e.kind === "cancelled") return null;
+  if (e.message && (e.kind === "blocked" || e.kind === "timeout" || e.kind === "upstream" || e.kind === "unknown" || e.kind === "channels")) return e.message;
+  return fallback;
+}
 function App() {
   const [page, setPage] = useState("landing");
   const [activeCaseFile, setActiveCaseFile] = useState(null);
@@ -21489,6 +21784,14 @@ function App() {
   }, []);
   const _skipPush = useRef(false);
   const _firstSync = useRef(true);
+  const scanGen = useRef(0);
+  const scanAbort = useRef(null);
+  const invalidateScan = () => {
+    scanGen.current += 1;
+    const prev = scanAbort.current;
+    scanAbort.current = null;
+    if (prev) prev.abort("cancel");
+  };
   const pageUrl = useCallback((pg, cf) => {
     if (pg === "report") {
       const tok = reportToken || readReportHash();
@@ -21502,6 +21805,7 @@ function App() {
   useEffect(() => {
     const onPop = () => {
       _skipPush.current = true;
+      invalidateScan();
       try {
         const params = new URLSearchParams(window.location.search);
         const caseSlug = params.get("case");
@@ -21551,6 +21855,7 @@ function App() {
   const [utxos, setUtxos] = useState([]);
   const [txs, setTxs] = useState([]);
   const [txSample, setTxSample] = useState(null);
+  const [utxoSample, setUtxoSample] = useState(null);
   const [autoShare, setAutoShare] = useState(false);
   const [scanAt, setScanAt] = useState(null);
   const [defaultSimple, setDefaultSimple] = useState(false);
@@ -21576,6 +21881,11 @@ function App() {
       });
       return;
     }
+    invalidateScan();
+    const gen = scanGen.current;
+    const ctrl = new AbortController();
+    scanAbort.current = ctrl;
+    const live = () => scanGen.current === gen;
     const isLn = inputType === "ln_pubkey";
     setScanDataReady(false);
     if (isLn) {
@@ -21584,12 +21894,14 @@ function App() {
       setPage("scanning");
       try {
         if (addr === "DEMO_LN") {
-          await new Promise(r => setTimeout(r, 1400));
+          await sleepAbortable(1400, ctrl.signal);
+          if (!live()) return;
           setLnNodeData(DEMO_LN.node);
           setLnChannels(DEMO_LN.channels);
           setScoreTint(scoreColor(runLightningEngine(DEMO_LN.node, DEMO_LN.channels).score));
           setScanDataReady(true);
-          await new Promise(r => setTimeout(r, 300));
+          await sleepAbortable(300, ctrl.signal);
+          if (!live()) return;
           setPage("ln_dashboard");
           toast.show("Lightning demo loaded", {
             icon: "⚡",
@@ -21598,7 +21910,10 @@ function App() {
           });
           return;
         }
-        const data = await fetchLightningNode(addr);
+        const data = await fetchLightningNode(addr, {
+          signal: ctrl.signal
+        });
+        if (!live()) return;
         const result = runLightningEngine(data.node, data.channels);
         const prevLn = getHistory().find(e => e.addr === addr);
         const lnDelta = prevLn ? result.score - prevLn.score : null;
@@ -21615,22 +21930,26 @@ function App() {
         });
         setScoreTint(scoreColor(result.score));
         setScanDataReady(true);
-        await new Promise(r => setTimeout(r, 300));
+        await sleepAbortable(300, ctrl.signal);
+        if (!live()) return;
         setPage("ln_dashboard");
         toast.show(lnDelta > 0 ? "Node score improved" : "Node scan complete", {
           icon: lnDelta > 0 ? "📈" : "⚡",
           color: T.ln,
           msg: `Lightning privacy score: ${result.score}/100${lnDelta != null && lnDelta !== 0 ? ` (${lnDelta > 0 ? "+" : ""}${lnDelta} since your last scan)` : ""}`
         });
-      } catch {
-        await new Promise(r => setTimeout(r, 700));
+      } catch (e) {
+        if (!live() || e && e.kind === "cancelled") return;
+        await sleepAbortable(700, ctrl.signal).catch(() => {});
+        if (!live()) return;
         setScanDataReady(false);
         setIsScanningLightning(false);
         setPage("landing");
-        toast.show("Node scan couldn't complete", {
+        const msg = scanFailureMessage(e, relayOn() ? "Couldn't reach the API via the privacy relay — try again, or switch the relay off to query the API directly (it will then see your IP)." : "Couldn't reach the Lightning API — check your connection and try again.");
+        if (msg) toast.show("Node scan couldn't complete", {
           icon: "⚠️",
           color: T.red,
-          msg: relayOn() ? "Couldn't reach the API via the privacy relay — try again, or switch the relay off to query the API directly (it will then see your IP)." : "Couldn't reach the Lightning API — check your connection and try again."
+          msg
         });
       }
       return;
@@ -21641,11 +21960,13 @@ function App() {
     setAutoShare(false);
     setDefaultSimple(plain);
     setTxSample(null);
+    setUtxoSample(null);
     try {
       if (addr === "DEMO" || addr === "DEMO_A") {
         const demoData = addr === "DEMO_A" ? DEMO_A : DEMO;
         const isPristine = addr === "DEMO_A";
-        await new Promise(r => setTimeout(r, 1400));
+        await sleepAbortable(1400, ctrl.signal);
+        if (!live()) return;
         setAddrInfo(demoData.addrInfo);
         setUtxos(demoData.utxos);
         setTxs(demoData.txs);
@@ -21653,7 +21974,8 @@ function App() {
         setScoreDelta(null);
         setScoreTint(scoreColor(runEngine(demoData.utxos, demoData.txs, demoData.addrInfo?.chain_stats?.tx_count || demoData.txs.length, demoData.addrInfo?.chain_stats?.funded_txo_count ?? null).score));
         setScanDataReady(true);
-        await new Promise(r => setTimeout(r, 300));
+        await sleepAbortable(300, ctrl.signal);
+        if (!live()) return;
         if (plain) setSimpleMode(prev => prev == null ? true : prev);
         setPage("dashboard");
         toast.show("Demo loaded", {
@@ -21663,7 +21985,10 @@ function App() {
         });
         return;
       }
-      const data = await fetchAddress(addr);
+      const data = await fetchAddress(addr, {
+        signal: ctrl.signal
+      });
+      if (!live()) return;
       const analysis = runEngine(data.utxos, data.txs, data.addrInfo?.chain_stats?.tx_count || data.txs.length, data.addrInfo?.chain_stats?.funded_txo_count ?? null);
       const prevEntry = getHistory().find(e => e.addr === addr);
       const delta = prevEntry ? analysis.score - prevEntry.score : null;
@@ -21672,6 +21997,7 @@ function App() {
       setUtxos(data.utxos);
       setTxs(data.txs);
       setTxSample(data.txSample || null);
+      setUtxoSample(data.utxoSample || null);
       setScanAt(Date.now());
       addToHistory({
         addr,
@@ -21683,7 +22009,8 @@ function App() {
       });
       setScoreTint(scoreColor(analysis.score));
       setScanDataReady(true);
-      await new Promise(r => setTimeout(r, 300));
+      await sleepAbortable(300, ctrl.signal);
+      if (!live()) return;
       if (plain) setSimpleMode(prev => prev == null ? true : prev);
       setPage("dashboard");
       setAutoShare(true);
@@ -21693,14 +22020,16 @@ function App() {
         msg: `Privacy score: ${analysis.score}/100${delta != null && delta !== 0 ? ` (${delta > 0 ? "+" : ""}${delta} since your last scan)` : ""}`
       });
     } catch (e) {
-      await new Promise(r => setTimeout(r, 700));
+      if (!live() || e && e.kind === "cancelled") return;
+      await sleepAbortable(700, ctrl.signal).catch(() => {});
+      if (!live()) return;
       setScanDataReady(false);
       setPage("landing");
-      const blocked = e && e.kind === "blocked" && e.message;
-      toast.show("Scan couldn't complete", {
+      const msg = scanFailureMessage(e, relayOn() ? "Couldn't reach the explorer via the privacy relay — try again, or switch the relay off to query the explorer directly (it will then see your IP)." : "Couldn't reach the blockchain API — check your connection and try again.");
+      if (msg) toast.show("Scan couldn't complete", {
         icon: "⚠️",
         color: T.red,
-        msg: blocked || (relayOn() ? "Couldn't reach the explorer via the privacy relay — try again, or switch the relay off to query the explorer directly (it will then see your IP)." : "Couldn't reach the blockchain API — check your connection and try again.")
+        msg
       });
     }
   }, [toast]);
@@ -21757,13 +22086,19 @@ function App() {
   }), page === "scanning" && React.createElement(Scanning, {
     address: address || lnNodeId,
     isLightning: isScanningLightning,
-    dataReady: scanDataReady
+    dataReady: scanDataReady,
+    onCancel: () => {
+      invalidateScan();
+      setScanDataReady(false);
+      setPage("landing");
+    }
   }), page === "dashboard" && React.createElement(Dashboard, {
     address: address,
     addrInfo: addrInfo,
     utxos: utxos,
     txs: txs,
     txSample: txSample,
+    utxoSample: utxoSample,
     isMobile: isMobile,
     onBack: () => setPage("landing"),
     onRescan: analyze,
@@ -21867,8 +22202,12 @@ window.__ANONSCORE_TEST__ = Object.freeze({
   computeActivityClock,
   buildLinkageMap,
   isValidBitcoinAddress,
+  decodeBitcoinAddress,
+  addressChecksumIssue,
   isValidLightningPubkey,
   detectInputType,
+  scanXpub,
+  fetchAddress,
   parsePsbt,
   parseRawTx,
   classifyScript,

@@ -60,6 +60,8 @@ const STRINGS = {
     "recent.title": "RECENT SCANS",
     "err.empty": "Please enter a Bitcoin address or Lightning node pubkey.",
     "err.invalid": "That isn't a Bitcoin address or a Lightning node pubkey.",
+    "err.checksum": "That looks like a Bitcoin address, but the checksum doesn't match. Check it for a typo — nothing was looked up.",
+    "err.clipboard": "Couldn't read the clipboard. Paste with the keyboard instead.",
     "err.lnaddress": "Lightning addresses can't be audited yet — paste your node's 66-character pubkey instead.",
     "finalcta.h2.a": "A typical wallet scores ~38/100.",
     "finalcta.h2.b": "Where does yours land?",
@@ -71,6 +73,7 @@ const STRINGS = {
     "scanning.btc.checks": "RUNNING 11 CHECKS",
     "scanning.ln.checks": "⚡ RUNNING 8 LIGHTNING CHECKS",
     "scanning.didyouknow": "DID YOU KNOW",
+    "scanning.cancel": "Cancel",
   },
   es: {
     "nav.free": "Gratis",
@@ -122,6 +125,8 @@ const STRINGS = {
     "recent.title": "ESCANEOS RECIENTES",
     "err.empty": "Ingresa una dirección de Bitcoin o la clave pública de un nodo Lightning.",
     "err.invalid": "Eso no es una dirección de Bitcoin ni la clave pública de un nodo Lightning.",
+    "err.checksum": "Parece una dirección de Bitcoin, pero la suma de verificación no coincide. Revísala por un error de tipeo — no se consultó nada.",
+    "err.clipboard": "No se pudo leer el portapapeles. Pega con el teclado.",
     "err.lnaddress": "Las direcciones Lightning aún no se pueden auditar — pega la clave pública (66 caracteres hex) de tu nodo.",
     "finalcta.h2.a": "Una billetera típica puntúa ~38/100.",
     "finalcta.h2.b": "¿Dónde queda la tuya?",
@@ -133,6 +138,7 @@ const STRINGS = {
     "scanning.btc.checks": "EJECUTANDO 11 VERIFICACIONES",
     "scanning.ln.checks": "⚡ EJECUTANDO 8 VERIFICACIONES LIGHTNING",
     "scanning.didyouknow": "¿SABÍAS QUE?",
+    "scanning.cancel": "Cancelar",
   },
 };
 const SUPPORTED_LANGS = Object.keys(STRINGS);
